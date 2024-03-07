@@ -1,7 +1,7 @@
 {
     "bot": {
-        "name": "My Bot",
-        "author": "My Name"
+        "name": "Markov",
+        "author": "mja00"
     },
     "emojis": {
         "yes": "✅",

@@ -20,10 +20,6 @@ export class HelpCommand implements Command {
 
         let embed: EmbedBuilder;
         switch (args.option) {
-            case HelpOption.CONTACT_SUPPORT: {
-                embed = Lang.getEmbed('displayEmbeds.helpContactSupport', data.lang);
-                break;
-            }
             case HelpOption.COMMANDS: {
                 embed = Lang.getEmbed('displayEmbeds.helpCommands', data.lang, {
                     CMD_LINK_TEST: FormatUtils.commandMention(

@@ -27,11 +27,6 @@ export class Args {
         type: ApplicationCommandOptionType.String,
         choices: [
             {
-                name: Lang.getRef('helpOptionDescs.contactSupport', Language.Default),
-                name_localizations: Lang.getRefLocalizationMap('helpOptionDescs.contactSupport'),
-                value: HelpOption.CONTACT_SUPPORT,
-            },
-            {
                 name: Lang.getRef('helpOptionDescs.commands', Language.Default),
                 name_localizations: Lang.getRefLocalizationMap('helpOptionDescs.commands'),
                 value: HelpOption.COMMANDS,
