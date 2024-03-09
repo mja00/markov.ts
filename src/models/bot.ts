@@ -90,6 +90,7 @@ export class Bot {
 
         this.ready = true;
         Logger.info(Logs.info.clientReady);
+        console.log('INFO: Client is ready!');
     }
 
     private onShardReady(shardId: number, _unavailableGuilds: Set<string>): void {
