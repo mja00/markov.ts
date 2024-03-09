@@ -57,7 +57,6 @@ export class FishCommand implements Command {
 
     public async execute(intr: ChatInputCommandInteraction, data: EventData): Promise<void> {
         const user = await ensureUserExists(intr.user.id);
-        Logger.info(user.id);
         if (!user) {
             Logger.error(`User not found: ${intr.user.id}`);
             await InteractionUtils.send(intr, Lang.getEmbed('displayEmbeds.fishError', data.lang));
