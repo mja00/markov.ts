@@ -1,5 +1,4 @@
 import { Message } from 'discord.js';
-import { open } from 'node:fs';
 
 import { EventHandler, TriggerHandler } from './index.js';
 import { Logger } from '../services/logger.js';

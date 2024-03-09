@@ -125,6 +125,9 @@
                         ]
                     }
                 ]
+            },
+            "fishError": {
+                "description": "Your rod broke while fishing!! (There was an issue contacting our fishing DB)"
             }
         },
         "validationEmbeds": {
@@ -189,7 +192,8 @@
             "help": "help",
             "info": "info",
             "test": "test",
-            "generateImage": "generate_image"
+            "generateImage": "generate_image",
+            "fish": "fish"
         },
         "userCommands": {
             "viewDateJoined": "View Date Joined"
@@ -207,7 +211,8 @@
             "help": "Find help or contact support.",
             "info": "View bot info.",
             "test": "Run the test command.",
-            "generateImage": "Generate an image."
+            "generateImage": "Generate an image.",
+            "fish": "Go fishing!"
         },
         "argDescs": {
             "devCommand": "Command.",

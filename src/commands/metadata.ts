@@ -84,6 +84,15 @@ export const ChatCommandMetadata: {
             },
         ],
     },
+    FISH: {
+        type: ApplicationCommandType.ChatInput,
+        name: Lang.getRef('chatCommands.fish', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('chatCommands.fish'),
+        description: Lang.getRef('commandDescs.fish', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('commandDescs.fish'),
+        dm_permission: true,
+        default_member_permissions: undefined,
+    },
 };
 
 export const MessageCommandMetadata: {

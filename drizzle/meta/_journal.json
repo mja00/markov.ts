@@ -1,0 +1,20 @@
+{
+  "version": "5",
+  "dialect": "pg",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1710013654591,
+      "tag": "0000_numerous_ultragirl",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1710019223903,
+      "tag": "0001_slow_fat_cobra",
+      "breakpoints": true
+    }
+  ]
+}
