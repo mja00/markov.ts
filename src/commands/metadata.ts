@@ -69,6 +69,21 @@ export const ChatCommandMetadata: {
         dm_permission: true,
         default_member_permissions: undefined,
     },
+    GENERATE_IMAGE: {
+        type: ApplicationCommandType.ChatInput,
+        name: Lang.getRef('chatCommands.generateImage', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('chatCommands.generateImage'),
+        description: Lang.getRef('commandDescs.generateImage', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('commandDescs.generateImage'),
+        dm_permission: true,
+        default_member_permissions: undefined,
+        options: [
+            {
+                ...Args.GENERATE_IMAGE,
+                required: true,
+            },
+        ],
+    },
 };
 
 export const MessageCommandMetadata: {

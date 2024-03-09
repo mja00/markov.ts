@@ -1,6 +1,9 @@
 import { Message } from 'discord.js';
+import { open } from 'node:fs';
 
 import { EventHandler, TriggerHandler } from './index.js';
+import { Logger } from '../services/logger.js';
+import { OpenAIService } from '../services/openai.js';
 
 export class MessageHandler implements EventHandler {
     constructor(private triggerHandler: TriggerHandler) {}
@@ -9,6 +12,43 @@ export class MessageHandler implements EventHandler {
         // Don't respond to system messages or self
         if (msg.system || msg.author.id === msg.client.user?.id) {
             return;
+        }
+
+        // Log the server + channel + message
+        const serverName = msg.guild?.name ?? 'DM';
+        const serverID = msg.guild?.id ?? 'DM';
+        const channelID = msg.channel.id;
+        const userTag = msg.author.tag;
+        const userID = msg.author.id;
+        const message = msg.content;
+        Logger.info(
+            `[Message]: ${serverName} (${serverID}) - ${channelID} - ${userTag} (${userID}) - ${message}`
+        );
+
+        // Check if the message has mentions
+        if (msg.mentions.has(msg.client.user?.id)) {
+            // Filter out the bot's mention and any whitespace
+            const botMention = `<@${msg.client.user?.id}>`;
+            const message = msg.content.replace(botMention, '').trim();
+            const openAI = OpenAIService.getInstance();
+            const thread = await openAI.createThread(channelID);
+            await openAI.addThreadMessage(thread, message, userTag);
+            const run = await openAI.createThreadRun(thread);
+            await openAI.waitOnRun(run, thread);
+            const messages = await openAI.getThreadMessages(thread);
+            // Print the messages
+            for (const message of messages.data) {
+                if (message.role !== 'assistant') {
+                    continue;
+                }
+                if (message.content[0].type === 'text') {
+                    Logger.info(`[OpenAI]: ${message.role} - ${message.content[0].text.value}`);
+                    // We now need to send that message to the channel
+                    // We can use the message.reply method to do this
+                    await msg.reply(message.content[0].text.value);
+                    break;
+                }
+            }
         }
 
         // Process trigger

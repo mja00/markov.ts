@@ -160,10 +160,6 @@
                     {
                         "name": "Shard ID",
                         "value": "{{SHARD_ID}}"
-                    },
-                    {
-                        "name": "Contact support",
-                        "value": "{{COM:links.support}}"
                     }
                 ],
                 "color": "{{COM:colors.error}}"
@@ -192,7 +188,8 @@
             "dev": "dev",
             "help": "help",
             "info": "info",
-            "test": "test"
+            "test": "test",
+            "generateImage": "generate_image"
         },
         "userCommands": {
             "viewDateJoined": "View Date Joined"
@@ -202,18 +199,21 @@
         },
         "arguments": {
             "command": "command",
-            "option": "option"
+            "option": "option",
+            "prompt": "prompt"
         },
         "commandDescs": {
             "dev": "Developer use only.",
             "help": "Find help or contact support.",
             "info": "View bot info.",
-            "test": "Run the test command."
+            "test": "Run the test command.",
+            "generateImage": "Generate an image."
         },
         "argDescs": {
             "devCommand": "Command.",
             "helpOption": "Option.",
-            "infoOption": "Option."
+            "infoOption": "Option.",
+            "generateImagePrompt": "Prompt for the image command."
         },
         "fields": {
             "commands": "Commands",

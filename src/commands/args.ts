@@ -45,11 +45,14 @@ export class Args {
                 name_localizations: Lang.getRefLocalizationMap('infoOptions.about'),
                 value: InfoOption.ABOUT,
             },
-            {
-                name: Lang.getRef('infoOptions.translate', Language.Default),
-                name_localizations: Lang.getRefLocalizationMap('infoOptions.translate'),
-                value: InfoOption.TRANSLATE,
-            },
         ],
+    };
+    public static readonly GENERATE_IMAGE: APIApplicationCommandBasicOption = {
+        name: Lang.getRef('arguments.prompt', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('arguments.prompt'),
+        description: Lang.getRef('argDescs.generateImagePrompt', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('argDescs.generateImagePrompt'),
+        type: ApplicationCommandOptionType.String,
+        required: true,
     };
 }
