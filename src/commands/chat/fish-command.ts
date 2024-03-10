@@ -1,4 +1,5 @@
 import { ChatInputCommandInteraction, PermissionsString } from 'discord.js';
+import { RateLimiter } from 'discord.js-rate-limiter';
 
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
@@ -16,6 +17,7 @@ import { Command, CommandDeferType } from '../index.js';
 
 export class FishCommand implements Command {
     public names = [Lang.getRef('chatCommands.fish', Language.Default)];
+    public cooldown = new RateLimiter(4, 60000);
     public deferType = CommandDeferType.PUBLIC;
     public requireClientPerms: PermissionsString[] = [];
 
@@ -31,6 +33,8 @@ export class FishCommand implements Command {
 
     private rarityToName(rarity: number): string {
         switch (rarity) {
+            case 0:
+                return 'Trash';
             case 1:
                 return 'Common';
             case 2:
@@ -44,6 +48,8 @@ export class FishCommand implements Command {
 
     private rarityToEmoji(rarity: number): string {
         switch (rarity) {
+            case 0:
+                return '🟧';
             case 1:
                 return '🟦';
             case 2:
@@ -65,8 +71,9 @@ export class FishCommand implements Command {
         // We need to pick a rarity, there's common, uncommon, rare, and legendary. Which equate to 1-4
         // We want common to be the most common, and legendary to be the least common
         const spec = {
-            1: 0.6,
-            2: 0.3,
+            0: 0.5,
+            1: 0.3,
+            2: 0.1,
             3: 0.08,
             4: 0.02,
         };
