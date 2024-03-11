@@ -9,7 +9,6 @@ import {
     addWorthToUser,
     ensureUserExists,
     firstCatch,
-    getDb,
     pickCatchableByRarity,
 } from '../../utils/db-utils.js';
 import { InteractionUtils } from '../../utils/index.js';
@@ -61,8 +60,21 @@ export class FishCommand implements Command {
         }
     }
 
+    private getWeightSpec(baitType: string): { [key: number]: number } {
+        switch (baitType) {
+            default:
+                return {
+                    0: 0.5,
+                    1: 0.3,
+                    2: 0.1,
+                    3: 0.08,
+                    4: 0.02,
+                };
+        }
+    }
+
     public async execute(intr: ChatInputCommandInteraction, data: EventData): Promise<void> {
-        const user = await ensureUserExists(intr.user.id);
+        const user = await ensureUserExists(intr.user.id, intr.user.tag);
         if (!user) {
             Logger.error(`User not found: ${intr.user.id}`);
             await InteractionUtils.send(intr, Lang.getEmbed('displayEmbeds.fishError', data.lang));
@@ -70,13 +82,8 @@ export class FishCommand implements Command {
         }
         // We need to pick a rarity, there's common, uncommon, rare, and legendary. Which equate to 1-4
         // We want common to be the most common, and legendary to be the least common
-        const spec = {
-            0: 0.5,
-            1: 0.3,
-            2: 0.1,
-            3: 0.08,
-            4: 0.02,
-        };
+        // TODO: Bait system
+        const spec = this.getWeightSpec('none');
         const rarity = this.weightedRandom(spec);
         Logger.info(`Picked rarity: ${rarity} for ${intr.user.tag}`);
         const caught = await pickCatchableByRarity(rarity);

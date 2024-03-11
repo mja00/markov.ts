@@ -16,20 +16,29 @@ export function getDb(): ReturnType<typeof drizzle> {
     return db;
 }
 
-export async function ensureUserExists(discordId: string): Promise<User> {
+export async function ensureUserExists(discordId: string, discordTag?: string): Promise<User> {
     let user = (await db
         .select()
         .from(users)
         .where(eq(users.discordSnowflake, discordId))) as User[];
     if (user.length === 0) {
         Logger.info(`Creating user for ${discordId}`);
-        const newUser = await db.insert(users).values({ discordSnowflake: discordId }).returning();
+        const newUser = await db
+            .insert(users)
+            .values({ discordSnowflake: discordId, discordTag: discordTag })
+            .returning();
         return newUser[0];
+    }
+    // If we get a tag lets update their tag
+    if (discordTag && user[0].discordTag !== discordTag) {
+        Logger.info(`Updating user tag for ${discordId}`);
+        await db.update(users).set({ discordTag: discordTag }).where(eq(users.id, user[0].id));
+        user[0].discordTag = discordTag;
     }
     return user[0];
 }
 
-export async function pickCatchableByRarity(rarity: number): Promise<Catachable | null> {
+export async function pickCatchableByRarity(rarity: number): Promise<any> {
     const catchable = (await db
         .select()
         .from(catchables)

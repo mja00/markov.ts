@@ -93,6 +93,21 @@ export const ChatCommandMetadata: {
         dm_permission: true,
         default_member_permissions: undefined,
     },
+    FISHING: {
+        type: ApplicationCommandType.ChatInput,
+        name: Lang.getRef('chatCommands.fishing', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('chatCommands.fishing'),
+        description: Lang.getRef('commandDescs.fishing', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('commandDescs.fishing'),
+        dm_permission: true,
+        default_member_permissions: undefined,
+        options: [
+            {
+                ...Args.FISHING,
+                required: true,
+            },
+        ],
+    },
 };
 
 export const MessageCommandMetadata: {

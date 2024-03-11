@@ -55,4 +55,12 @@ export class Args {
         type: ApplicationCommandOptionType.String,
         required: true,
     };
+    public static readonly FISHING: APIApplicationCommandBasicOption = {
+        name: Lang.getRef('arguments.fishing', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('arguments.fishing'),
+        description: Lang.getRef('argDescs.fishing', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('argDescs.fishing'),
+        type: ApplicationCommandOptionType.String,
+        choices: [],
+    };
 }

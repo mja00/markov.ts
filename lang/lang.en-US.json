@@ -193,7 +193,8 @@
             "info": "info",
             "test": "test",
             "generateImage": "generate_image",
-            "fish": "fish"
+            "fish": "fish",
+            "fishing": "fishing"
         },
         "userCommands": {
             "viewDateJoined": "View Date Joined"
@@ -204,7 +205,8 @@
         "arguments": {
             "command": "command",
             "option": "option",
-            "prompt": "prompt"
+            "prompt": "prompt",
+            "fishing": "fishing"
         },
         "commandDescs": {
             "dev": "Developer use only.",
@@ -212,13 +214,15 @@
             "info": "View bot info.",
             "test": "Run the test command.",
             "generateImage": "Generate an image.",
-            "fish": "Go fishing!"
+            "fish": "Go fishing!",
+            "fishing": "Manage fishing."
         },
         "argDescs": {
             "devCommand": "Command.",
             "helpOption": "Option.",
             "infoOption": "Option.",
-            "generateImagePrompt": "Prompt for the image command."
+            "generateImagePrompt": "Prompt for the image command.",
+            "fishing": "Choose a subcommand"
         },
         "fields": {
             "commands": "Commands",
