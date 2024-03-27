@@ -47,7 +47,8 @@ export class CommandUtils {
                     Lang.getEmbed('validationEmbeds.cooldownHit', data.lang, {
                         AMOUNT: command.cooldown.amount.toLocaleString(data.lang),
                         INTERVAL: FormatUtils.duration(command.cooldown.interval, data.lang),
-                    })
+                    }),
+                    true
                 );
                 return false;
             }
