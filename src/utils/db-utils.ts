@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { createRequire } from 'node:module';
 import postgres from 'postgres';
 
-import { Catachable, catchables, catches, User, users } from '../db/schema.js';
+import { Catchable, catchables, catches, User, users } from '../db/schema.js';
 import { Logger } from '../services/logger.js';
 
 const require = createRequire(import.meta.url);
@@ -44,7 +44,7 @@ export async function pickCatchableByRarity(rarity: number): Promise<any> {
         .from(catchables)
         .where(eq(catchables.rarity, rarity))
         .orderBy(sql`random()`)
-        .limit(1)) as Catachable[];
+        .limit(1)) as Catchable[];
     // Ensure we have a catchable
     if (catchable.length === 0) {
         Logger.error(`No catchable found for rarity: ${rarity}`);
@@ -60,13 +60,13 @@ export async function addWorthToUser(user: User, worth: number): Promise<void> {
         .where(eq(users.id, user.id));
 }
 
-export async function firstCatch(user: User, catchable: Catachable): Promise<void> {
+export async function firstCatch(user: User, catchable: Catchable): Promise<void> {
     await db
         .update(catchables)
         .set({ firstCaughtBy: user.id })
         .where(eq(catchables.id, catchable.id));
 }
 
-export async function addCatch(user: User, catchable: Catachable): Promise<void> {
+export async function addCatch(user: User, catchable: Catchable): Promise<void> {
     await db.insert(catches).values({ catchableId: catchable.id, caughtBy: user.id });
 }

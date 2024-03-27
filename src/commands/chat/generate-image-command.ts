@@ -18,8 +18,13 @@ export class GenerateImageCommand implements Command {
 
         // Generate an image using the prompt
         const openai = OpenAIService.getInstance();
-        const image = await openai.generateImage(args.prompt);
+        // If there's an error here, it's most likely due to OpenAI being done with us
+        try {
+            const image = await openai.generateImage(args.prompt);
 
-        await InteractionUtils.send(intr, `**${args.prompt}**\n${image}`);
+            await InteractionUtils.send(intr, `**${args.prompt}**\n${image}`);
+        } catch (error) {
+            await InteractionUtils.send(intr, `${error}`);
+        }
     }
 }

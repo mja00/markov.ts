@@ -1,6 +1,8 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import { createRequire } from 'node:module';
+import { type } from 'node:os';
 import OpenAI from 'openai';
+import { BadRequestError } from 'openai/error.js';
 import { Thread } from 'openai/resources/beta/threads/threads.js';
 
 import { ImageUpload } from './image-upload.js';
@@ -80,15 +82,20 @@ export class OpenAIService {
     }
 
     public async generateImage(prompt: string): Promise<string> {
-        const response = await openai.images.generate({
-            model: 'dall-e-3',
-            prompt: `I NEED to test how the tool works with extremely simple prompts. DO NOT add any detail, just use it AS-IS: ${prompt}`,
-            size: '1024x1024',
-            quality: 'standard',
-            n: 1,
-        });
-        const image_url = response.data[0].url;
-        const uploadedUrl = await this.imageUploadInstance.uploadImage(image_url);
-        return uploadedUrl;
+        try {
+            const response = await openai.images.generate({
+                model: 'dall-e-3',
+                prompt: `I NEED to test how the tool works with extremely simple prompts. DO NOT add any detail, just use it AS-IS: ${prompt}`,
+                size: '1024x1024',
+                quality: 'standard',
+                n: 1,
+            });
+            const image_url = response.data[0].url;
+            const uploadedUrl = await this.imageUploadInstance.uploadImage(image_url);
+            return uploadedUrl;
+        } catch (error) {
+            console.error(error);
+            throw new Error(error.error.message);
+        }
     }
 }
