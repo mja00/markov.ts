@@ -1,8 +1,6 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import { createRequire } from 'node:module';
-import { type } from 'node:os';
 import OpenAI from 'openai';
-import { BadRequestError } from 'openai/error.js';
 import { Thread } from 'openai/resources/beta/threads/threads.js';
 
 import { ImageUpload } from './image-upload.js';
@@ -42,7 +40,7 @@ export class OpenAIService {
         thread: OpenAI.Beta.Threads.Thread,
         message: string,
         username: string
-    ): Promise<OpenAI.Beta.Threads.ThreadMessage> {
+    ): Promise<OpenAI.Beta.Threads.Messages.Message> {
         return await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
             content: `${username}: ${message}`,
@@ -51,7 +49,7 @@ export class OpenAIService {
 
     public async getThreadMessages(
         thread: OpenAI.Beta.Threads.Thread
-    ): Promise<OpenAI.Beta.Threads.ThreadMessagesPage> {
+    ): Promise<OpenAI.Beta.Threads.Messages.MessagesPage> {
         return await openai.beta.threads.messages.list(thread.id);
     }
 

@@ -29,6 +29,8 @@ export class MessageHandler implements EventHandler {
             // Filter out the bot's mention and any whitespace
             const botMention = `<@${msg.client.user?.id}>`;
             const message = msg.content.replace(botMention, '').trim();
+            // Trigger the bot to start typing in that channel
+            await msg.channel.sendTyping();
             const openAI = OpenAIService.getInstance();
             const thread = await openAI.createThread(channelID);
             await openAI.addThreadMessage(thread, message, userTag);
