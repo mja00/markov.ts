@@ -1,6 +1,7 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import { createRequire } from 'node:module';
 import OpenAI from 'openai';
+import { ImageURL } from 'openai/resources/beta/threads/messages.js';
 import { Thread } from 'openai/resources/beta/threads/threads.js';
 
 import { ImageUpload } from './image-upload.js';
@@ -44,6 +45,29 @@ export class OpenAIService {
         return await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
             content: `${username}: ${message}`,
+        });
+    }
+
+    public async addThreadMessageWithImage(
+        thread: OpenAI.Beta.Threads.Thread,
+        message: string,
+        imageUrl: string,
+        username: string
+    ): Promise<OpenAI.Beta.Threads.Messages.Message> {
+        return await openai.beta.threads.messages.create(thread.id, {
+            role: 'user',
+            content: [
+                {
+                    text: `${username}: ${message}`,
+                    type: 'text',
+                },
+                {
+                    image_url: {
+                        url: imageUrl,
+                    } as ImageURL,
+                    type: 'image_url',
+                },
+            ],
         });
     }
 

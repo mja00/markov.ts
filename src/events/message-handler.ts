@@ -33,7 +33,19 @@ export class MessageHandler implements EventHandler {
             await msg.channel.sendTyping();
             const openAI = OpenAIService.getInstance();
             const thread = await openAI.createThread(channelID);
-            await openAI.addThreadMessage(thread, message, userTag);
+            // If there's attachments on the message, grab the first image and add it to the thread
+            if (msg.attachments.size > 0) {
+                let imageUrl: string;
+                for (const attachment of msg.attachments.values()) {
+                    if (attachment.contentType.startsWith('image/')) {
+                        imageUrl = attachment.url;
+                        break;
+                    }
+                }
+                await openAI.addThreadMessageWithImage(thread, message, imageUrl, userTag);
+            } else {
+                await openAI.addThreadMessage(thread, message, userTag);
+            }
             const run = await openAI.createThreadRun(thread);
             await openAI.waitOnRun(run, thread);
             const messages = await openAI.getThreadMessages(thread);
