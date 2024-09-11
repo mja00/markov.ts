@@ -47,6 +47,7 @@ export class GenerateImageCommand implements Command {
                     prompt: args.prompt,
                     image_size: 'landscape_4_3',
                     num_images: 1,
+                    enable_safety_checker: true,
                 },
                 logs: true,
                 onQueueUpdate: update => {
@@ -59,6 +60,16 @@ export class GenerateImageCommand implements Command {
                     }
                 },
             });
+
+            // If any of them have nsfw concepts, we should NOT send the image
+            if (results.has_nsfw_concepts.some(has_nsfw_concept => has_nsfw_concept)) {
+                await InteractionUtils.send(
+                    intr,
+                    'We generated an image. It has nsfw concepts! The URL has been logged in the console. MJ can look at it.'
+                );
+                Logger.info(`NSFW image generated: ${results.images[0].url}`);
+                return;
+            }
 
             const imageUrl = results.images[0].url;
 
