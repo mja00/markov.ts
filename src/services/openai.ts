@@ -1,16 +1,37 @@
 /* eslint-disable import/no-extraneous-dependencies */
+import * as fal from '@fal-ai/serverless-client';
 import { createRequire } from 'node:module';
 import OpenAI from 'openai';
 import { ImageURL } from 'openai/resources/beta/threads/messages.js';
 import { Thread } from 'openai/resources/beta/threads/threads.js';
 
 import { ImageUpload } from './image-upload.js';
+import { Logger } from './logger.js';
 
 const require = createRequire(import.meta.url);
 let Config = require('../../config/config.json');
 const openai = new OpenAI({
     apiKey: Config.openai.apiKey,
 });
+
+fal.config({
+    credentials: Config.fal.apiKey,
+});
+
+type FalResponse = {
+    images: Array<{
+        url: string;
+        width: number;
+        height: number;
+        content_type: string;
+    }>;
+    timings: {
+        inference: number;
+    };
+    seed: number;
+    has_nsfw_concepts: Array<boolean>;
+    prompt: string;
+};
 
 export class OpenAIService {
     // We want to store some state in the service
@@ -80,8 +101,8 @@ export class OpenAIService {
     public async createThreadRun(
         thread: OpenAI.Beta.Threads.Thread
     ): Promise<OpenAI.Beta.Threads.Runs.Run> {
-        const run = await openai.beta.threads.runs.create(thread.id, {
-            assistant_id: 'asst_JIWy13MvoTpNw8SvqdhfKSAD',
+        const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
+            assistant_id: Config.openai.assistantId ?? 'asst_JIWy13MvoTpNw8SvqdhfKSAD',
         });
         return run;
     }
@@ -96,6 +117,62 @@ export class OpenAIService {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
         return run;
+    }
+
+    public async handleRequiresAction(
+        run: OpenAI.Beta.Threads.Runs.Run,
+        thread: OpenAI.Beta.Threads.Thread
+    ): Promise<OpenAI.Beta.Threads.Messages.MessagesPage> {
+        if (
+            run.required_action &&
+            run.required_action.submit_tool_outputs &&
+            run.required_action.submit_tool_outputs.tool_calls
+        ) {
+            const toolOutputs = await Promise.all(
+                run.required_action.submit_tool_outputs.tool_calls.map(async tool => {
+                    console.log(tool.function.arguments);
+                    if (tool.function.name === 'get_generated_image') {
+                        const args = JSON.parse(tool.function.arguments);
+                        const prompt = args['prompt'];
+                        if (!prompt) {
+                            Logger.error('prompt is empty');
+                            return {
+                                tool_call_id: tool.id,
+                                output: 'failed do not retry',
+                            };
+                        }
+                        const imageUrl = await this.generateImageWithFlux(prompt);
+                        return {
+                            tool_call_id: tool.id,
+                            output: imageUrl,
+                        };
+                    }
+                })
+            );
+
+            // Submit them
+            if (toolOutputs.length > 0) {
+                run = await openai.beta.threads.runs.submitToolOutputsAndPoll(thread.id, run.id, {
+                    tool_outputs: toolOutputs,
+                });
+            }
+
+            return await this.handleRun(run, thread);
+        }
+    }
+
+    public async handleRun(
+        run: OpenAI.Beta.Threads.Runs.Run,
+        thread: OpenAI.Beta.Threads.Thread
+    ): Promise<OpenAI.Beta.Threads.Messages.MessagesPage> {
+        if (run.status === 'completed') {
+            return await this.getThreadMessages(thread);
+        } else if (run.status === 'requires_action') {
+            return await this.handleRequiresAction(run, thread);
+        } else {
+            console.error(`Unexpected run status: ${run.status}`);
+            return;
+        }
     }
 
     public async deleteThread(thread: OpenAI.Beta.Threads.Thread): Promise<void> {
@@ -118,6 +195,47 @@ export class OpenAIService {
         } catch (error) {
             console.error(error);
             throw new Error(error.error.message);
+        }
+    }
+
+    async generateImageWithFlux(prompt: string): Promise<string> {
+        if (!prompt) {
+            return 'failed do not retry';
+        }
+        try {
+            const results: FalResponse = await fal.subscribe('fal-ai/flux/schnell', {
+                input: {
+                    prompt: prompt,
+                    image_size: 'landscape_4_3',
+                    num_images: 1,
+                    enable_safety_checker: false,
+                },
+                logs: true,
+                onQueueUpdate: update => {
+                    if (update.status === 'IN_PROGRESS') {
+                        update.logs
+                            .map(log => log.message)
+                            .forEach(message => Logger.info(message));
+                    } else {
+                        Logger.info(update.status);
+                    }
+                },
+            });
+
+            // If any of them have nsfw concepts, we should NOT send the image
+            if (results.has_nsfw_concepts.some(has_nsfw_concept => has_nsfw_concept)) {
+                Logger.info(`NSFW image generated: ${results.images[0].url}`);
+                console.log(`NSFW image generated: ${results.images[0].url}`);
+                return;
+            }
+
+            const imageUrl = results.images[0].url;
+
+            // Just reply to the interaction
+            return imageUrl;
+        } catch (error) {
+            Logger.error(error);
+            return 'failed do not retry';
         }
     }
 }

@@ -5,7 +5,8 @@ import { createRequire } from 'node:module';
 
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
-import { Lang, Logger } from '../../services/index.js';
+import { Lang } from '../../services/index.js';
+import { Logger } from '../../services/logger.js';
 import { InteractionUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
 
@@ -68,7 +69,6 @@ export class GenerateImageCommand implements Command {
                     'We generated an image. It has nsfw concepts! The URL has been logged in the console. MJ can look at it.'
                 );
                 Logger.info(`NSFW image generated: ${results.images[0].url}`);
-                console.log(`NSFW image generated: ${results.images[0].url}`);
                 return;
             }
 

@@ -47,8 +47,7 @@ export class MessageHandler implements EventHandler {
                 await openAI.addThreadMessage(thread, message, userTag);
             }
             const run = await openAI.createThreadRun(thread);
-            await openAI.waitOnRun(run, thread);
-            const messages = await openAI.getThreadMessages(thread);
+            const messages = await openAI.handleRun(run, thread);
             // Print the messages
             for (const message of messages.data) {
                 if (message.role !== 'assistant') {
