@@ -169,6 +169,12 @@ export class OpenAIService {
             return await this.getThreadMessages(thread);
         } else if (run.status === 'requires_action') {
             return await this.handleRequiresAction(run, thread);
+        } else if (run.status === 'failed') {
+            const runFailedAt = run.failed_at ?? run.created_at;
+            const errorCode = run.last_error?.code ?? 'unknown';
+            const error = run.last_error?.message ?? 'unknown';
+            Logger.error(`OpenAI run failed: ${errorCode} - ${error} (${new Date(runFailedAt).toLocaleString()})`);
+            return;
         } else {
             console.error(`Unexpected run status: ${run.status}`);
             return;

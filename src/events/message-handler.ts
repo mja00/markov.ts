@@ -48,6 +48,12 @@ export class MessageHandler implements EventHandler {
             }
             const run = await openAI.createThreadRun(thread);
             const messages = await openAI.handleRun(run, thread);
+            // Occurs during a failed run. Info will be logged in the console.
+            if (!messages) {
+                Logger.error('No messages returned');
+                await msg.reply('An error occurred while processing your request. Please try again later.');
+                return;
+            }
             // Print the messages
             for (const message of messages.data) {
                 if (message.role !== 'assistant') {
