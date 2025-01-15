@@ -1,9 +1,6 @@
 import { REST } from '@discordjs/rest';
 import { Options, Partials } from 'discord.js';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { createRequire } from 'node:module';
-import postgres from 'postgres';
 
 import { Button } from './buttons/index.js';
 import {

@@ -6,3 +6,5 @@
 /misc
 /node_modules
 /temp
+/src/db/schema.js
+/src/db/schema.d.ts
