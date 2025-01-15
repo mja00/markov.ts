@@ -1,4 +1,4 @@
-import { Message } from 'discord.js';
+import { Message, PartialGroupDMChannel } from 'discord.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
 import { Logger } from '../services/logger.js';
@@ -23,6 +23,11 @@ export class MessageHandler implements EventHandler {
         Logger.info(
             `[Message]: ${serverName} (${serverID}) - ${channelID} - ${userTag} (${userID}) - ${message}`
         );
+
+        // If this is a PartialGroupDMChannel, just pass
+        if (msg.channel instanceof PartialGroupDMChannel) {
+            return await this.triggerHandler.process(msg);
+        }
 
         // Check if the message has mentions
         if (msg.mentions.has(msg.client.user?.id)) {
