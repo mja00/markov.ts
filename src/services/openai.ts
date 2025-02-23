@@ -1,5 +1,6 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import * as fal from '@fal-ai/serverless-client';
+import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import OpenAI from 'openai';
 import { ImageURL } from 'openai/resources/beta/threads/messages.js';
@@ -33,6 +34,11 @@ type FalResponse = {
     prompt: string;
 };
 
+type DumpedThreads = {
+    channelId: string;
+    thread: Thread;
+}
+
 export class OpenAIService {
     // We want to store some state in the service
     private static instance: OpenAIService;
@@ -40,22 +46,64 @@ export class OpenAIService {
     private threads: Map<string, Thread> = new Map();
     private imageUploadInstance: ImageUpload = ImageUpload.getInstance();
 
-    public static getInstance(): OpenAIService {
+    public static async getInstance(): Promise<OpenAIService> {
         if (!OpenAIService.instance) {
             OpenAIService.instance = new OpenAIService();
+            // Then we need to load the threads from the file 
+            // If the file doesn't exist, we don't need to do anything
+            if (!fs.existsSync('threads.json')) {
+                return OpenAIService.instance;
+            }
+            const threads: DumpedThreads[] = JSON.parse(fs.readFileSync('threads.json', 'utf8'));
+            for (const thread of threads) {
+                // Get the thread from the thread id
+                const threadId = thread.thread.id;
+                const threadFromId = await openai.beta.threads.retrieve(threadId);
+                if (!threadFromId) {
+                    Logger.error(`Could not find thread with id ${threadId}`);
+                    continue;
+                }
+                Logger.info(`Found thread with id ${threadId}`);
+                OpenAIService.instance.threads.set(thread.channelId, threadFromId);
+            }
         }
         return OpenAIService.instance;
+    }
+
+    // On shutdown, dump all threads to the console
+    public async onShutdown(): Promise<void> {
+        Logger.info('Dumping all threads to the console');
+        const threads = [];
+        for (const [channelId, thread] of this.threads.entries()) {
+            threads.push({
+                channelId,
+                thread,
+            });
+        }
+        if (threads.length === 0) {
+            Logger.info('No threads to dump');
+            return;
+        }
+        // Dump into a json file in the root of the project
+        fs.writeFileSync('threads.json', JSON.stringify(threads, null, 2));
     }
 
     public async createThread(channelId: string): Promise<OpenAI.Beta.Threads.Thread> {
         // If a thread already exists for this channel ID, return it
         const existingThread = this.threads.get(channelId);
         if (existingThread) {
-            return existingThread;
+            // Do a new thread lookup to get the latest thread info
+            const thread = await openai.beta.threads.retrieve(existingThread.id);
+            this.threads.set(channelId, thread);
+            return thread;
         }
         const thread = await openai.beta.threads.create();
         this.threads.set(channelId, thread);
         return thread;
+    }
+
+    public async getThreadRuns(threadId: string): Promise<OpenAI.Beta.Threads.Runs.RunsPage> {
+        return await openai.beta.threads.runs.list(threadId);
     }
 
     public async addThreadMessage(

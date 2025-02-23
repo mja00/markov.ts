@@ -37,6 +37,7 @@ import {
     EventDataService,
     JobService,
     Logger,
+    OpenAIService,
 } from './services/index.js';
 import { Trigger } from './triggers/index.js';
 
@@ -140,11 +141,24 @@ async function start(): Promise<void> {
         process.exit();
     }
 
+    // Start an OpenAI service
+    await OpenAIService.getInstance();
+
     await bot.start();
 }
 
 process.on('unhandledRejection', (reason, _promise) => {
     Logger.error(Logs.error.unhandledRejection, reason);
+});
+
+process.on('SIGINT', async () => {
+    process.exit(0);
+});
+
+process.on('exit', async () => {
+    console.log('Bot shutting down...');
+    const openAI = await OpenAIService.getInstance();
+    await openAI.onShutdown();
 });
 
 start().catch(error => {
