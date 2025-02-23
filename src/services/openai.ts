@@ -106,6 +106,17 @@ export class OpenAIService {
         return await openai.beta.threads.runs.list(threadId);
     }
 
+    public async addThreadReplyContext(
+        thread: OpenAI.Beta.Threads.Thread,
+        message: string,
+        from: string,
+    ): Promise<OpenAI.Beta.Threads.Messages.Message> {
+        return await openai.beta.threads.messages.create(thread.id, {
+            role: 'user',
+            content: `I am replying to ${from}'s message: ${message}`,
+        });
+    }
+
     public async addThreadMessage(
         thread: OpenAI.Beta.Threads.Thread,
         message: string,

@@ -1,4 +1,4 @@
-import { Message, PartialGroupDMChannel } from 'discord.js';
+import { Message, MessageReferenceType, PartialGroupDMChannel } from 'discord.js';
 import { BadRequestError } from 'openai';
 
 import { EventHandler, TriggerHandler } from './index.js';
@@ -32,7 +32,7 @@ export class MessageHandler implements EventHandler {
         const serverName = msg.guild?.name ?? 'DM';
         const serverID = msg.guild?.id ?? 'DM';
         const channelID = msg.channel.id;
-        const userTag = msg.author.tag;
+        const userTag = msg.author.displayName;
         const userID = msg.author.id;
         const message = msg.content;
         Logger.info(
@@ -71,6 +71,16 @@ export class MessageHandler implements EventHandler {
                 }
             }
             try {
+                // Check if the message has any referenced messages
+                if (msg.reference?.type === MessageReferenceType.Default) {
+                    // Acquire the referenced message
+                    const referencedMessage = await msg.channel.messages.fetch(msg.reference.messageId);
+                    if (referencedMessage) {
+                        Logger.info(`Referenced message found: ${referencedMessage.id}`);
+                        // Add the referenced message to the thread
+                        await openAI.addThreadReplyContext(thread, referencedMessage.content, referencedMessage.author.displayName);
+                    }
+                }
                 // If there's attachments on the message, grab the first image and add it to the thread
                 if (msg.attachments.size > 0) {
                     let imageUrl: string;
