@@ -4,6 +4,20 @@ import { EventHandler, TriggerHandler } from './index.js';
 import { Logger } from '../services/logger.js';
 import { OpenAIService } from '../services/openai.js';
 
+function prettyMs(ms: number): string {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+        return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`;
+    } else {
+        return `${seconds}s`;
+    }
+}
+
 export class MessageHandler implements EventHandler {
     constructor(private triggerHandler: TriggerHandler) {}
 
@@ -36,6 +50,10 @@ export class MessageHandler implements EventHandler {
             const message = msg.content.replace(botMention, '').trim();
             // Trigger the bot to start typing in that channel
             await msg.channel.sendTyping();
+            const typingInterval = setInterval(() => {
+                // @ts-expect-error - the channel is already validated to be able to be typed in
+                msg.channel.sendTyping();
+            }, 5000);
             const openAI = OpenAIService.getInstance();
             const thread = await openAI.createThread(channelID);
             // If there's attachments on the message, grab the first image and add it to the thread
@@ -51,8 +69,12 @@ export class MessageHandler implements EventHandler {
             } else {
                 await openAI.addThreadMessage(thread, message, userTag);
             }
+            const startTime = Date.now();
             const run = await openAI.createThreadRun(thread);
             const messages = await openAI.handleRun(run, thread);
+            clearInterval(typingInterval);
+            const endTime = Date.now();
+            const computationTime = endTime - startTime;
             // Occurs during a failed run. Info will be logged in the console.
             if (!messages) {
                 Logger.error('No messages returned');
@@ -66,9 +88,12 @@ export class MessageHandler implements EventHandler {
                 }
                 if (message.content[0].type === 'text') {
                     Logger.info(`[OpenAI]: ${message.role} - ${message.content[0].text.value}`);
+                    // console.log(JSON.stringify(message, null, 2));
                     // We now need to send that message to the channel
                     // We can use the message.reply method to do this
-                    await msg.reply(message.content[0].text.value);
+                    let replyMessage = message.content[0].text.value;
+                    replyMessage += `\n-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
+                    await msg.reply(replyMessage);
                     break;
                 }
             }

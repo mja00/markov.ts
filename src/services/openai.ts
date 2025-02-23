@@ -103,6 +103,9 @@ export class OpenAIService {
     ): Promise<OpenAI.Beta.Threads.Runs.Run> {
         const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
             assistant_id: Config.openai.assistantId ?? 'asst_JIWy13MvoTpNw8SvqdhfKSAD',
+            reasoning_effort: 'low',
+        }, {
+            pollIntervalMs: 500,
         });
         return run;
     }
