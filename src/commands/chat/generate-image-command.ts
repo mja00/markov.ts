@@ -77,8 +77,14 @@ export class GenerateImageCommand implements Command {
             // Just reply to the interaction
             await InteractionUtils.send(intr, `**${args.prompt}**\n${imageUrl}`);
         } catch (error) {
-            await InteractionUtils.send(intr, 'Something went wrong!');
-            Logger.error(error);
+            // Check the error's body
+            if (error.status === 403 && error.body?.detail?.includes('Exhausted balance')) {
+                await InteractionUtils.send(intr, 'Sorry, we\'ve run out of image generation credits. Please try again later!');
+                Logger.error('FAL API credits exhausted:', error);
+            } else {
+                await InteractionUtils.send(intr, 'Something went wrong!');
+                Logger.error(error);
+            }
         }
     }
 }
