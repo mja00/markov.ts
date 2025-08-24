@@ -56,81 +56,79 @@ export class MessageHandler implements EventHandler {
                 msg.channel.sendTyping();
             }, 5000);
             const openAI = await OpenAIService.getInstance();
-            const thread = await openAI.createThread(channelID);
-            // Check to see if the thread is actively being ran, in which we can't add messages to the thread yet.
-            const runs = await openAI.getThreadRuns(thread.id);
-            if (runs.data.length > 0) {
-                // Get the latest run
-                const latestRun = runs.data[0];
-                if (latestRun.status !== 'completed') {
-                    // If the run is not completed, we can't add messages to the thread yet
-                    Logger.info(`Thread ${thread.id} is not ready to accept messages yet`);
-                    clearInterval(typingInterval);
-                    await msg.reply('-# This thread is not ready to accept messages yet.');
-                    return;
-                }
-            }
+            
             try {
+                const startTime = Date.now();
+                let response;
+
                 // Check if the message has any referenced messages
                 if (msg.reference?.type === MessageReferenceType.Default) {
                     // Acquire the referenced message
                     const referencedMessage = await msg.channel.messages.fetch(msg.reference.messageId);
                     if (referencedMessage) {
                         Logger.info(`Referenced message found: ${referencedMessage.id}`);
-                        // Add the referenced message to the thread
-                        await openAI.addThreadReplyContext(thread, referencedMessage.content, referencedMessage.author.displayName);
+                        // Send message with reply context using the new API
+                        response = await openAI.sendMessageWithReplyContext(
+                            channelID, 
+                            message, 
+                            referencedMessage.author.displayName,
+                            userTag
+                        );
+                    } else {
+                        // Fallback to regular message if referenced message not found
+                        response = await openAI.sendMessage(channelID, message, userTag);
                     }
-                }
-                // If there's attachments on the message, grab the first image and add it to the thread
-                if (msg.attachments.size > 0) {
+                } else if (msg.attachments.size > 0) {
+                    // If there's attachments on the message, grab the first image and add it to the thread
                     let imageUrl: string;
                     for (const attachment of msg.attachments.values()) {
-                        if (attachment.contentType.startsWith('image/')) {
+                        if (attachment.contentType?.startsWith('image/')) {
                             imageUrl = attachment.url;
                             break;
                         }
                     }
-                    await openAI.addThreadMessageWithImage(thread, message, imageUrl, userTag);
+                    if (imageUrl) {
+                        response = await openAI.sendMessageWithImage(channelID, message, imageUrl, userTag);
+                    } else {
+                        response = await openAI.sendMessage(channelID, message, userTag);
+                    }
                 } else {
-                    await openAI.addThreadMessage(thread, message, userTag);
+                    // Regular message without attachments or replies
+                    response = await openAI.sendMessage(channelID, message, userTag);
                 }
-                const startTime = Date.now();
-                const run = await openAI.createThreadRun(thread);
-                const messages = await openAI.handleRun(run, thread);
+
                 clearInterval(typingInterval);
                 const endTime = Date.now();
                 const computationTime = endTime - startTime;
-                // Occurs during a failed run. Info will be logged in the console.
-                if (!messages) {
-                    Logger.error('No messages returned');
+
+                // Get the response content
+                const responseContent = openAI.getResponseContent(response);
+                
+                // Handle any tool calls (like image generation)
+                const imageUrls = await openAI.handleToolCalls(response);
+
+                if (!responseContent && imageUrls.length === 0) {
+                    Logger.error('No response content or images generated');
                     await msg.reply('An error occurred while processing your request. Please try again later.');
                     return;
                 }
-                // Print the messages
-                for (const message of messages.data) {
-                    if (message.role !== 'assistant') {
-                        continue;
-                    }
-                    if (message.content[0].type === 'text') {
-                        Logger.info(`[OpenAI]: ${message.role} - ${message.content[0].text.value}`);
-                        // console.log(JSON.stringify(message, null, 2));
-                        // We now need to send that message to the channel
-                        // We can use the message.reply method to do this
-                        let replyMessage = message.content[0].text.value;
-                        replyMessage += `\n-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
-                        await msg.reply(replyMessage);
-                        break;
-                    }
+
+                // Send the response
+                Logger.info(`[OpenAI Response]: ${responseContent}`);
+                let replyMessage = responseContent;
+                replyMessage += `\n-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
+                
+                await msg.reply(replyMessage);
+
+                // Send any generated images
+                for (const imageUrl of imageUrls) {
+                    await msg.channel.send(imageUrl);
                 }
+
             } catch (err) {
-                // If it's a BadRequestError, it means the thread is not ready to accept messages yet
-                if (err instanceof BadRequestError) {
-                    Logger.info(`Thread ${thread.id} is not ready to accept messages yet`);
-                    clearInterval(typingInterval);
-                    await msg.reply('-# This thread is not ready to accept messages yet.');
-                    return;
-                }
-                // Throw the error
+                clearInterval(typingInterval);
+                Logger.error('Error processing message:', err);
+                await msg.reply('An error occurred while processing your request. Please try again later.');
                 throw err;
             }
         }
