@@ -209,7 +209,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         
         const promptConfig = this.getPromptConfig(channelId, username, {
             message: message,
-            has_image: true,
+            has_image: 'true',
             image_url: imageUrl
         });
         
