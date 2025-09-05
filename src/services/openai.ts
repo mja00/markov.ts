@@ -48,6 +48,34 @@ export class OpenAIService {
     private conversations: Map<string, ConversationState> = new Map();
     private imageUploadInstance: ImageUpload = ImageUpload.getInstance();
     
+    // Function implementations for tool calls
+    private randomNumberGenerator(args: { min: number; max: number }): number {
+        const { min, max } = args;
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+    
+    private callFunction(name: string, args: any): string {
+        switch (name) {
+            case 'random_number_generator': {
+                const result = this.randomNumberGenerator(args);
+                return result.toString();
+            }
+            default:
+                Logger.warn(`Unknown function called: ${name}`);
+                return 'Function not found';
+        }
+    }
+    
+    // Helper method to process a response and handle any function calls
+    private async processResponseWithFunctionCalls(
+        initialResponse: OpenAI.Responses.Response
+    ): Promise<OpenAI.Responses.Response> {
+        const followUpResponse = await this.handleToolCalls(initialResponse);
+        
+        // If we got a follow-up response, use that; otherwise use the original
+        return followUpResponse || initialResponse;
+    }
+    
     // Bot instructions - replaces the assistant (fallback if no prompt ID configured)
     private readonly botInstructions = `You are a friendly Discord bot assistant. You can:
 - Have conversations with users in Discord channels
@@ -56,6 +84,31 @@ export class OpenAIService {
 - Help with various tasks and questions
 
 Each Discord channel maintains its own conversation context. Always be helpful, friendly, and engaging.`;
+
+    // Tool definitions - Using built-in function format for OpenAI Responses API
+    private readonly tools: OpenAI.Responses.Tool[] = [
+        {
+            name: 'random_number_generator',
+            type: 'function',
+            strict: true,
+            description: 'Generates a truly random number within a specified range. Use this whenever the user asks for a random number, dice roll, or any form of randomization.',
+            parameters: {
+                type: 'object',
+                required: ['min', 'max'],
+                properties: {
+                    min: {
+                        type: 'number',
+                        description: 'The minimum value (inclusive) of the random number range'
+                    },
+                    max: {
+                        type: 'number',
+                        description: 'The maximum value (inclusive) of the random number range'
+                    }
+                },
+                additionalProperties: false
+            }
+        }
+    ];
 
     // Reusable prompt configuration
     private getPromptConfig(channelId: string, username: string, additionalVariables: Record<string, any> = {}): OpenAI.Responses.ResponseCreateParams {
@@ -157,12 +210,16 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             original_message: message
         });
 
-        const response = await openai.responses.create({
+        const initialResponse = await openai.responses.create({
             model: 'gpt-5-nano',
             input: userInput,
+            tools: this.tools,
             ...promptConfig,
             previous_response_id: conversation.lastResponseId,
         }) as OpenAI.Responses.Response;
+        
+        // Process any function calls and get the final response
+        const response = await this.processResponseWithFunctionCalls(initialResponse);
         
         // Update conversation state
         conversation.lastResponseId = response.id;
@@ -184,12 +241,16 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             message: message
         });
         
-        const response = await openai.responses.create({
+        const initialResponse = await openai.responses.create({
             model: 'gpt-5-nano',
             input: userInput,
+            tools: this.tools,
             ...promptConfig,
             previous_response_id: conversation.lastResponseId,
         }) as OpenAI.Responses.Response;
+        
+        // Process any function calls and get the final response
+        const response = await this.processResponseWithFunctionCalls(initialResponse);
         
         // Update conversation state
         conversation.lastResponseId = response.id;
@@ -213,7 +274,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             image_url: imageUrl
         });
         
-        const response = await openai.responses.create({
+        const initialResponse = await openai.responses.create({
             model: 'gpt-5-nano',
             input: [
                 {
@@ -231,9 +292,13 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                     ]
                 }
             ],
+            tools: this.tools,
             ...promptConfig,
             previous_response_id: conversation.lastResponseId,
         }) as OpenAI.Responses.Response;
+        
+        // Process any function calls and get the final response
+        const response = await this.processResponseWithFunctionCalls(initialResponse);
         
         // Update conversation state
         conversation.lastResponseId = response.id;
@@ -243,7 +308,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         return response;
     }
 
-    // Get response content from Responses API
+    // Get response content from Responses API, handling function calls
     public getResponseContent(response: OpenAI.Responses.Response): string {
         // Responses API uses output_text for the main text response
         if (response.output_text) {
@@ -252,15 +317,22 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         
         // Fallback: check if there are output items with message content
         if (response.output && Array.isArray(response.output)) {
+            let textContent = '';
+            
             for (const outputItem of response.output) {
+                // Handle message content
                 if (outputItem.type === 'message' && outputItem.content) {
                     for (const contentPart of outputItem.content) {
                         if (contentPart.type === 'output_text') {
-                            return contentPart.text;
+                            textContent += contentPart.text;
                         }
                     }
                 }
+                // Note: function_call_output is not part of the response output items
+                // Function call outputs are handled in the handleToolCalls method
             }
+            
+            return textContent;
         }
         
         return '';
@@ -280,16 +352,48 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         return run;
     }
 
-    // Tool calling is now handled automatically by Responses API
-    // Image generation will be handled by the built-in image_generation tool
-    public async handleToolCalls(response: OpenAI.Responses.Response): Promise<string[]> {
+    // Handle function calls in the response and execute them
+    public async handleToolCalls(response: OpenAI.Responses.Response): Promise<OpenAI.Responses.Response | null> {
         const imageUrls: string[] = [];
+        let hasFunctionCalls = false;
+        const inputMessages: any[] = [...(response.output || [])];
         
-        // Check if there are any tool calls in the response output
+        // Check if there are any function calls in the response output
         if (response.output && Array.isArray(response.output)) {
             for (const outputItem of response.output) {
+                // Handle function calls according to the OpenAI docs
+                if (outputItem.type === 'function_call') {
+                    hasFunctionCalls = true;
+                    const name = outputItem.name;
+                    const args = JSON.parse(outputItem.arguments);
+                    const callId = outputItem.call_id;
+                    
+                    Logger.info(`Executing function call: ${name} with args:`, args);
+                    
+                    try {
+                        const result = this.callFunction(name, args);
+                        
+                        // Append the function call result to input messages
+                        inputMessages.push({
+                            type: 'function_call_output',
+                            call_id: callId,
+                            output: result
+                        });
+                        
+                        Logger.info(`Function ${name} executed successfully with result: ${result}`);
+                    } catch (error) {
+                        Logger.error(`Error executing function ${name}:`, error);
+                        
+                        // Append error result
+                        inputMessages.push({
+                            type: 'function_call_output',
+                            call_id: callId,
+                            output: `Error: ${error.message || 'Function execution failed'}`
+                        });
+                    }
+                }
                 // Check for image generation tool calls or direct image outputs
-                if (outputItem.type === 'message' && 'content' in outputItem && outputItem.content) {
+                else if (outputItem.type === 'message' && 'content' in outputItem && outputItem.content) {
                     for (const contentPart of outputItem.content) {
                         // Look for image outputs - this would depend on the actual response structure
                         if ('type' in contentPart && 'url' in contentPart) {
@@ -298,19 +402,28 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                         }
                     }
                 }
-                // Handle tool call outputs that might contain images
-                else if (outputItem.type === 'function_call' && 'output' in outputItem) {
-                    // Tool call outputs might contain image URLs
-                    const output = outputItem.output as any;
-                    if (typeof output === 'string' && output.startsWith('http')) {
-                        imageUrls.push(output);
-                        Logger.info('Found tool-generated image URL');
-                    }
-                }
             }
         }
         
-        return imageUrls;
+        // If we had function calls, make a second request to get the final response
+        if (hasFunctionCalls) {
+            try {
+                Logger.info('Making second request with function call results');
+                const followUpResponse = await openai.responses.create({
+                    model: 'gpt-5-nano',
+                    input: inputMessages,
+                    tools: this.tools,
+                }) as OpenAI.Responses.Response;
+                
+                return followUpResponse;
+            } catch (error) {
+                Logger.error('Error making follow-up request:', error);
+                return null;
+            }
+        }
+        
+        // No function calls, return null to indicate no follow-up needed
+        return null;
     }
 
     // No longer needed - Responses API handles everything in one call

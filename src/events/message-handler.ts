@@ -1,5 +1,4 @@
 import { Message, MessageReferenceType, PartialGroupDMChannel } from 'discord.js';
-import { BadRequestError } from 'openai';
 
 import { EventHandler, TriggerHandler } from './index.js';
 import { Logger } from '../services/logger.js';
@@ -101,14 +100,11 @@ export class MessageHandler implements EventHandler {
                 const endTime = Date.now();
                 const computationTime = endTime - startTime;
 
-                // Get the response content
+                // Get the response content (function calls are already handled in the service)
                 const responseContent = openAI.getResponseContent(response);
-                
-                // Handle any tool calls (like image generation)
-                const imageUrls = await openAI.handleToolCalls(response);
 
-                if (!responseContent && imageUrls.length === 0) {
-                    Logger.error('No response content or images generated');
+                if (!responseContent) {
+                    Logger.error('No response content generated');
                     await msg.reply('An error occurred while processing your request. Please try again later.');
                     return;
                 }
@@ -119,11 +115,6 @@ export class MessageHandler implements EventHandler {
                 replyMessage += `\n-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
                 
                 await msg.reply(replyMessage);
-
-                // Send any generated images
-                for (const imageUrl of imageUrls) {
-                    await msg.channel.send(imageUrl);
-                }
 
             } catch (err) {
                 clearInterval(typingInterval);

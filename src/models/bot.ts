@@ -2,7 +2,6 @@ import {
     AutocompleteInteraction,
     ButtonInteraction,
     Client,
-    CloseEvent,
     CommandInteraction,
     Events,
     Guild,

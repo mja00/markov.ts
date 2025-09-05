@@ -37,6 +37,10 @@ export class Logger {
         obj ? logger.warn(obj, message) : logger.warn(message);
     }
 
+    public static debug(message: string, obj?: any): void {
+        obj ? logger.debug(obj, message) : logger.debug(message);
+    }
+
     public static async error(message: string, obj?: any): Promise<void> {
         // Log just a message if no error object
         if (!obj) {
