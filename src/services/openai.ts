@@ -107,6 +107,11 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                 },
                 additionalProperties: false
             }
+        },
+        {
+            type: 'image_generation',
+            background: 'opaque',
+            input_fidelity: 'high',
         }
     ];
 
@@ -211,7 +216,6 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         });
 
         const initialResponse = await openai.responses.create({
-            model: 'gpt-5-nano',
             input: userInput,
             tools: this.tools,
             ...promptConfig,
@@ -242,7 +246,6 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         });
         
         const initialResponse = await openai.responses.create({
-            model: 'gpt-5-nano',
             input: userInput,
             tools: this.tools,
             ...promptConfig,
@@ -275,7 +278,6 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         });
         
         const initialResponse = await openai.responses.create({
-            model: 'gpt-5-nano',
             input: [
                 {
                     role: 'user',
@@ -410,7 +412,6 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             try {
                 Logger.info('Making second request with function call results');
                 const followUpResponse = await openai.responses.create({
-                    model: 'gpt-5-nano',
                     input: inputMessages,
                     tools: this.tools,
                 }) as OpenAI.Responses.Response;
