@@ -49,9 +49,9 @@ export class GenerateImageCommand implements Command {
 
         // Try OpenAI first
         try {
-            Logger.info(`Attempting to generate image with OpenAI for prompt: ${args.prompt}`);
+            Logger.debug(`Attempting to generate image with OpenAI for prompt: ${args.prompt}`);
             imageInfo = await openAIService.generateImageForPrompt(args.prompt);
-            Logger.info(`Successfully generated image with OpenAI: ${imageInfo.filePath}`);
+            Logger.info(`Successfully generated image with OpenAI`);
         } catch (openAIError) {
             Logger.warn('OpenAI image generation failed, falling back to Fal.ai:', openAIError);
 
@@ -69,9 +69,9 @@ export class GenerateImageCommand implements Command {
                         if (update.status === 'IN_PROGRESS') {
                             update.logs
                                 .map(log => log.message)
-                                .forEach(message => Logger.info(message));
+                                .forEach(message => Logger.debug(message));
                         } else {
-                            Logger.info(update.status);
+                            Logger.debug(update.status);
                         }
                     },
                 });
@@ -120,7 +120,7 @@ export class GenerateImageCommand implements Command {
                     files: [attachment]
                 });
 
-                Logger.info(`Sent image to Discord: ${imageInfo.filename}`);
+                Logger.info(`Sent generated image to Discord`);
 
                 // Backup to Zipline and cleanup local file
                 await openAIService.backupAndCleanupImages([imageInfo]);

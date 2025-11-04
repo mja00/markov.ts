@@ -156,7 +156,7 @@ process.on('SIGINT', async () => {
 });
 
 process.on('exit', async () => {
-    console.log('Bot shutting down...');
+    Logger.info('Bot shutting down...');
     const openAI = await OpenAIService.getInstance();
     await openAI.onShutdown();
 });

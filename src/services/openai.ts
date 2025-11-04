@@ -95,7 +95,7 @@ export class OpenAIService {
         const tempDir = path.join(os.tmpdir(), 'markov-images');
         if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, { recursive: true });
-            Logger.info(`Created temp directory: ${tempDir}`);
+            Logger.debug(`Created temp directory: ${tempDir}`);
         }
         
         // Generate unique filename with timestamp
@@ -109,8 +109,8 @@ export class OpenAIService {
 
             // Save image to temp directory
             fs.writeFileSync(tempFilePath, imageBuffer);
-            Logger.info(`Image saved to disk: ${tempFilePath}`);
-            Logger.info(`Image size: ${imageBuffer.length} bytes`);
+            Logger.debug(`Image saved to disk: ${tempFilePath}`);
+            Logger.debug(`Image size: ${imageBuffer.length} bytes`);
 
             // Prepare data URL for OpenAI follow-up requests
             const dataUrl = `data:image/png;base64,${base64Data}`;
@@ -204,7 +204,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             try {
                 const conversations: DumpedConversations = JSON.parse(fs.readFileSync('conversations.json', 'utf8'));
                 for (const conversation of conversations) {
-                    Logger.info(`Loaded conversation for channel ${conversation.channelId}`);
+                    Logger.debug(`Loaded conversation for channel ${conversation.channelId}`);
                     OpenAIService.instance.conversations.set(conversation.channelId, conversation);
                 }
             } catch (error) {
@@ -219,7 +219,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         Logger.info('Dumping all conversations to file');
         const conversations = Array.from(this.conversations.values());
         if (conversations.length === 0) {
-            Logger.info('No conversations to dump');
+            Logger.debug('No conversations to dump');
             return;
         }
         // Dump into a json file in the root of the project
@@ -376,9 +376,9 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 
     // Get response content from Responses API, handling function calls and image generation
     public async getResponseContent(response: OpenAI.Responses.Response): Promise<string> {
-        Logger.info('Processing OpenAI response...');
-        Logger.info('Response has output_text:', !!response.output_text);
-        Logger.info('Response output array length:', response.output?.length || 0);
+        Logger.debug('Processing OpenAI response...');
+        Logger.debug('Response has output_text:', !!response.output_text);
+        Logger.debug('Response output array length:', response.output?.length || 0);
         
         // Process the response output array to handle text content
         if (response.output && Array.isArray(response.output)) {
@@ -386,7 +386,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             
             for (const outputItem of response.output) {
                 const status = 'status' in outputItem ? outputItem.status : 'N/A';
-                Logger.info(`Processing output item type: ${outputItem.type}, status: ${status}`);
+                Logger.trace(`Processing output item type: ${outputItem.type}, status: ${status}`);
                 
                 // Handle message content (text responses)
                 if (outputItem.type === 'message' && outputItem.content) {
@@ -400,13 +400,13 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                 // This allows the AI to provide a proper response after seeing the uploaded URL
             }
             
-            Logger.info(`Final text content length: ${textContent.length}`);
+            Logger.debug(`Final text content length: ${textContent.length}`);
             return textContent;
         }
         
         // Fallback to output_text if no output array
         if (response.output_text) {
-            Logger.info('Using fallback output_text');
+            Logger.debug('Using fallback output_text');
             return response.output_text;
         }
         
@@ -416,9 +416,9 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 
     // Get response content with images extracted from response outputs
     public getResponseContentWithImages(response: OpenAI.Responses.Response): { text: string; images: GeneratedImageInfo[] } {
-        Logger.info('Processing OpenAI response with images...');
-        Logger.info('Response has output_text:', !!response.output_text);
-        Logger.info('Response output array length:', response.output?.length || 0);
+        Logger.trace('Processing OpenAI response with images...');
+        Logger.trace('Response has output_text:', !!response.output_text);
+        Logger.trace('Response output array length:', response.output?.length || 0);
         
         let textContent = '';
         const images: GeneratedImageInfo[] = [];
@@ -428,14 +428,14 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         if (trackedImages) {
             images.push(...trackedImages);
             this.imageDataByResponseId.delete(response.id);
-            Logger.info(`Found ${trackedImages.length} generated image(s) for response ${response.id}`);
+            Logger.trace(`Found ${trackedImages.length} generated image(s) for response ${response.id}`);
         }
         
         // Process the response output array to handle text content
         if (response.output && Array.isArray(response.output)) {
             for (const outputItem of response.output) {
                 const status = 'status' in outputItem ? outputItem.status : 'N/A';
-                Logger.info(`Processing output item type: ${outputItem.type}, status: ${status}`);
+                Logger.trace(`Processing output item type: ${outputItem.type}, status: ${status}`);
                 
                 // Handle message content (text responses)
                 if (outputItem.type === 'message' && outputItem.content) {
@@ -451,7 +451,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                     if ('status' in outputItem && outputItem.status === 'completed' && 'result' in outputItem && outputItem.result) {
                         // This is a base64 image, but we've already uploaded it
                         // The URL should be in trackedUrls, but if not, we can try to extract from the response
-                        Logger.info('Found image_generation_call in response output');
+                        Logger.trace('Found image_generation_call in response output');
                     }
                 }
             }
@@ -459,11 +459,11 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         
         // Fallback to output_text if no output array
         if (!textContent && response.output_text) {
-            Logger.info('Using fallback output_text');
+            Logger.trace('Using fallback output_text');
             textContent = response.output_text;
         }
         
-        Logger.info(`Final text content length: ${textContent.length}, generated images: ${images.length}`);
+        Logger.trace(`Final text content length: ${textContent.length}, generated images: ${images.length}`);
         return { text: textContent, images };
     }
 
@@ -488,12 +488,12 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         const generatedImages: GeneratedImageInfo[] = [];
         const conversation = await this.getOrCreateConversation(channelId);
         
-        Logger.info('handleToolCalls - Processing response with output length:', response.output?.length || 0);
+        Logger.trace('handleToolCalls - Processing response with output length:', response.output?.length || 0);
         
         // Check if there are any tool calls in the response output
         if (response.output && Array.isArray(response.output)) {
             for (const outputItem of response.output) {
-                Logger.info(`handleToolCalls - Processing output item type: ${outputItem.type}`);
+                Logger.trace(`handleToolCalls - Processing output item type: ${outputItem.type}`);
                 // Handle function calls according to the OpenAI docs
                 if (outputItem.type === 'function_call') {
                     hasToolCalls = true;
@@ -501,7 +501,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                     const args = JSON.parse(outputItem.arguments);
                     const callId = outputItem.call_id;
                     
-                    Logger.info(`Executing function call: ${name} with args:`, args);
+                    Logger.trace(`Executing function call: ${name} with args:`, args);
                     
                     try {
                         const result = this.callFunction(name, args);
@@ -513,7 +513,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                             output: result
                         });
                         
-                        Logger.info(`Function ${name} executed successfully with result: ${result}`);
+                        Logger.trace(`Function ${name} executed successfully with result: ${result}`);
                     } catch (error) {
                         Logger.error(`Error executing function ${name}:`, error);
                         
@@ -527,10 +527,10 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                 }
                 // Handle image generation calls
                 else if (outputItem.type === 'image_generation_call') {
-                    Logger.info('handleToolCalls - Found image_generation_call');
+                    Logger.trace('handleToolCalls - Found image_generation_call');
                     if ('status' in outputItem && outputItem.status === 'completed' && 'result' in outputItem && outputItem.result) {
                         hasToolCalls = true;
-                        Logger.info('handleToolCalls - Processing completed image generation call');
+                        Logger.trace('handleToolCalls - Processing completed image generation call');
                         
                         try {
                             // Save the generated image locally and prepare metadata
@@ -555,7 +555,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                                 ]
                             });
                             
-                            Logger.info(`Image generated and stored locally: ${generatedImage.filePath}`);
+                            Logger.trace(`Image generated and stored locally: ${generatedImage.filePath}`);
                         } catch (error) {
                             Logger.error('Error processing image generation:', error);
                             
@@ -585,7 +585,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         // If we had tool calls (functions or images), make a second request to get the final response
         if (hasToolCalls) {
             try {
-                Logger.info('Making second request with function call results');
+                Logger.trace('Making second request with function call results');
                 const followUpResponse = await openai.responses.create({
                     input: inputMessages,
                     tools: this.tools,
@@ -625,10 +625,10 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             try {
                 const imageBuffer = await fs.promises.readFile(image.filePath);
                 const backupUrl = await this.imageUploadInstance.uploadImageBuffer(imageBuffer);
-                Logger.info(`Backed up generated image to Zipline: ${backupUrl}`);
+                Logger.debug(`Backed up generated image to Zipline: ${backupUrl}`);
 
                 await fs.promises.unlink(image.filePath);
-                Logger.info(`Removed local generated image file: ${image.filePath}`);
+                Logger.debug(`Removed local generated image file: ${image.filePath}`);
             } catch (error) {
                 Logger.error(`Failed to backup or cleanup generated image ${image.filePath}:`, error);
             }
@@ -638,7 +638,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
     // Generate image using OpenAI DALL-E and return GeneratedImageInfo for Discord upload
     public async generateImageForPrompt(prompt: string): Promise<GeneratedImageInfo> {
         try {
-            Logger.info(`Generating image with OpenAI for prompt: ${prompt}`);
+            Logger.debug(`Generating image with OpenAI for prompt: ${prompt}`);
             const response = await openai.images.generate({
                 model: 'dall-e-3',
                 prompt: prompt,
@@ -652,7 +652,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                 throw new Error('No image URL returned from OpenAI');
             }
             
-            Logger.info(`OpenAI generated image URL: ${imageUrl}`);
+            Logger.debug(`OpenAI generated image URL: ${imageUrl}`);
             
             // Download the image from OpenAI's URL
             const imageResponse = await fetch(imageUrl);
@@ -668,7 +668,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             
             // Save locally and get GeneratedImageInfo
             const imageInfo = await this.saveGeneratedImage(base64Data);
-            Logger.info(`Image saved locally: ${imageInfo.filePath}`);
+            Logger.debug(`Image saved locally: ${imageInfo.filePath}`);
             
             return imageInfo;
         } catch (error) {
@@ -791,7 +791,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             const uploadedUrl = await this.imageUploadInstance.uploadImage(image_url);
             return uploadedUrl;
         } catch (error) {
-            console.error(error);
+            Logger.error('Error generating image:', error);
             throw new Error(error.error.message);
         }
     }
@@ -813,9 +813,9 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                     if (update.status === 'IN_PROGRESS') {
                         update.logs
                             .map(log => log.message)
-                            .forEach(message => Logger.info(message));
+                            .forEach(message => Logger.debug(message));
                     } else {
-                        Logger.info(update.status);
+                        Logger.debug(update.status);
                     }
                 },
             });
@@ -823,7 +823,6 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             // If any of them have nsfw concepts, we should NOT send the image
             if (results.has_nsfw_concepts.some(has_nsfw_concept => has_nsfw_concept)) {
                 Logger.info(`NSFW image generated: ${results.images[0].url}`);
-                console.log(`NSFW image generated: ${results.images[0].url}`);
                 return;
             }
 

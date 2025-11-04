@@ -56,7 +56,7 @@ export class ImageUpload {
             password: Config.imageUpload.password,
         };
         // v4 API uses /api/auth/login for authentication
-        Logger.info('Authenticating with Zipline v4 API...');
+        Logger.trace('Authenticating with Zipline v4 API...');
 
         const response = await fetch(Config.imageUpload.baseUrl + '/auth/login', {
             method: 'POST',
@@ -67,8 +67,8 @@ export class ImageUpload {
         });
 
         const responseText = await response.text();
-        Logger.info(`Zipline auth response - Status: ${response.status}`);
-        Logger.info(`Zipline auth response - Body: ${responseText}`);
+        Logger.trace(`Zipline auth response - Status: ${response.status}`);
+        Logger.trace(`Zipline auth response - Body: ${responseText}`);
 
         if (response.status !== 200) {
             Logger.error('Failed to authenticate with Zipline v4:', responseText);
@@ -77,7 +77,7 @@ export class ImageUpload {
 
         // v4 uses 'zipline_session' cookie instead of 'user'
         const cookies = response.headers.get('set-cookie');
-        Logger.info('Set-Cookie header:', cookies);
+        Logger.trace('Set-Cookie header:', cookies);
         
         if (!cookies) {
             throw new Error('No cookies returned from Zipline login');
@@ -93,7 +93,7 @@ export class ImageUpload {
             throw new Error('Failed to get zipline session cookie');
         }
         
-        Logger.info('Successfully obtained Zipline session cookie');
+        Logger.trace('Successfully obtained Zipline session cookie');
         this.ziplineCookie = sessionCookie.trim();
         return this.ziplineCookie;
     }
@@ -105,7 +105,7 @@ export class ImageUpload {
             await this.getZiplineCookie();
         }
         // v4 API: Token comes from /user/token endpoint
-        Logger.info('Getting token from Zipline v4 API...');
+        Logger.trace('Getting token from Zipline v4 API...');
         
         const response = await fetch(Config.imageUpload.baseUrl + '/user/token', {
             headers: {
@@ -114,8 +114,8 @@ export class ImageUpload {
         });
         
         const responseText = await response.text();
-        Logger.info(`Token response - Status: ${response.status}`);
-        Logger.info(`Token response - Body: ${responseText}`);
+        Logger.trace(`Token response - Status: ${response.status}`);
+        Logger.trace(`Token response - Body: ${responseText}`);
         
         if (response.status !== 200) {
             Logger.error('Failed to get zipline token:', responseText);
@@ -126,7 +126,7 @@ export class ImageUpload {
             const json = JSON.parse(responseText);
             if (json.token) {
                 this.ziplineToken = json.token;
-                Logger.info('Successfully obtained Zipline API token');
+                Logger.trace('Successfully obtained Zipline API token');
                 return json.token;
             } else {
                 Logger.error('No token in response:', json);
@@ -153,7 +153,7 @@ export class ImageUpload {
         // First we need to download the image into a buffer, we'll use this to upload later
         const imageResponse = await fetch(imageUrl);
         const imageBuffer = await imageResponse.arrayBuffer();
-        Logger.info('Image downloaded');
+        Logger.trace('Image downloaded');
         // Now we need to upload the image
         // This is a multipart form request
         const formData = new FormData();
@@ -170,7 +170,7 @@ export class ImageUpload {
             body: formData,
         });
         if (response.status === 200) {
-            Logger.info('Image uploaded');
+            Logger.trace('Image uploaded');
             const json = await response.json();
             return json['files'][0];
         } else {
@@ -209,7 +209,7 @@ export class ImageUpload {
              'x-zipline-folder': 'cm793lcei0gtjo201lxjmy9zz',
          };
          
-         Logger.info('Uploading generated image to Zipline v4...');
+         Logger.trace('Uploading generated image to Zipline v4...');
          
          // Upload the image using v4 API endpoint
          const response = await fetch(Config.imageUpload.baseUrl + '/upload', {
@@ -219,33 +219,33 @@ export class ImageUpload {
          });
          
          const responseText = await response.text();
-         Logger.info(`Zipline upload response - Status: ${response.status}`);
-         Logger.info(`Zipline upload response - Headers:`, Object.fromEntries(response.headers.entries()));
-         Logger.info(`Zipline upload response - Body: ${responseText}`);
+         Logger.trace(`Zipline upload response - Status: ${response.status}`);
+         Logger.trace(`Zipline upload response - Headers:`, Object.fromEntries(response.headers.entries()));
+         Logger.trace(`Zipline upload response - Body: ${responseText}`);
          
          if (response.status === 200) {
              try {
                  const json = JSON.parse(responseText);
-                 Logger.info('Parsed JSON response:', json);
+                 Logger.trace('Parsed JSON response:', json);
                  
                  // v4 response structure: { "files": [{ "id": "...", "type": "...", "url": "..." }] }
                  if (json.files && json.files.length > 0) {
                      const fileUrl = json.files[0].url;
-                     Logger.info(`Image uploaded successfully: ${fileUrl}`);
+                     Logger.trace(`Image uploaded successfully: ${fileUrl}`);
                      return fileUrl;
                  } else {
-                     Logger.error('No files in response - Full JSON:', json);
+                     Logger.trace('No files in response - Full JSON:', json);
                      throw new Error('No files returned in upload response');
                  }
              } catch (parseError) {
-                 Logger.error('Failed to parse upload response as JSON:', parseError);
+                 Logger.trace('Failed to parse upload response as JSON:', parseError);
                  Logger.error('Raw response text:', responseText);
                  throw new Error('Failed to parse upload response');
              }
          } else {
              Logger.error(`Upload failed with status ${response.status}`);
-             Logger.error('Response headers:', Object.fromEntries(response.headers.entries()));
-             Logger.error('Response body:', responseText);
+             Logger.trace('Response headers:', Object.fromEntries(response.headers.entries()));
+             Logger.trace('Response body:', responseText);
              throw new Error(`Failed to upload image. Status: ${response.status} - ${responseText}`);
          }
     }

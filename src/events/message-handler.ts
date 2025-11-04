@@ -67,7 +67,7 @@ export class MessageHandler implements EventHandler {
                     // Acquire the referenced message
                     const referencedMessage = await msg.channel.messages.fetch(msg.reference.messageId);
                     if (referencedMessage) {
-                        Logger.info(`Referenced message found: ${referencedMessage.id}`);
+                        Logger.debug(`Referenced message found: ${referencedMessage.id}`);
                         // Send message with reply context using the new API
                         response = await openAI.sendMessageWithReplyContext(
                             channelID, 
@@ -114,8 +114,8 @@ export class MessageHandler implements EventHandler {
                 }
 
                 // Send the response
-                Logger.info(`[OpenAI Response]: ${responseContent}`);
-                Logger.info(`[OpenAI Images]: ${images.length} image(s) to send`);
+                Logger.debug(`[OpenAI Response]: ${responseContent}`);
+                Logger.debug(`[OpenAI Images]: ${images.length} image(s) to send`);
                 
                 let replyMessage = responseContent || '';
                 if (replyMessage) {
@@ -129,7 +129,7 @@ export class MessageHandler implements EventHandler {
                 if (images.length > 0) {
                     for (let i = 0; i < images.length; i++) {
                         const imageInfo = images[i];
-                        Logger.info(`Loading image ${i + 1}/${images.length} from disk: ${imageInfo.filePath}`);
+                        Logger.debug(`Loading image ${i + 1}/${images.length} from disk: ${imageInfo.filePath}`);
 
                         try {
                             const imageBuffer = await readFile(imageInfo.filePath);
@@ -138,7 +138,7 @@ export class MessageHandler implements EventHandler {
                                 description: `AI generated image ${i + 1}`
                             });
                             attachments.push(attachment);
-                            Logger.info(`Image ${i + 1} prepared for Discord attachment`);
+                            Logger.debug(`Image ${i + 1} prepared for Discord attachment`);
                         } catch (error) {
                             Logger.error(`Failed to prepare image ${imageInfo.filePath} for Discord`, error);
                         }
