@@ -1,4 +1,6 @@
-import { Message, MessageReferenceType, PartialGroupDMChannel } from 'discord.js';
+import { readFile } from 'node:fs/promises';
+
+import { AttachmentBuilder, Message, MessageReferenceType, PartialGroupDMChannel } from 'discord.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
 import { Logger } from '../services/logger.js';
@@ -100,21 +102,68 @@ export class MessageHandler implements EventHandler {
                 const endTime = Date.now();
                 const computationTime = endTime - startTime;
 
-                // Get the response content (function calls are already handled in the service)
-                const responseContent = await openAI.getResponseContent(response);
+                // Get the response content with images (function calls are already handled in the service)
+                const responseData = openAI.getResponseContentWithImages(response);
+                const responseContent = responseData.text;
+                const images = responseData.images;
 
-                if (!responseContent) {
-                    Logger.error('No response content generated');
+                if (!responseContent && images.length === 0) {
+                    Logger.error('No response content or images generated');
                     await msg.reply('An error occurred while processing your request. Please try again later.');
                     return;
                 }
 
                 // Send the response
                 Logger.info(`[OpenAI Response]: ${responseContent}`);
-                let replyMessage = responseContent;
-                replyMessage += `\n-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
+                Logger.info(`[OpenAI Images]: ${images.length} image(s) to send`);
                 
-                await msg.reply(replyMessage);
+                let replyMessage = responseContent || '';
+                if (replyMessage) {
+                    replyMessage += `\n-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
+                } else {
+                    replyMessage = `-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
+                }
+                
+                // Prepare attachments for images
+                const attachments: AttachmentBuilder[] = [];
+                if (images.length > 0) {
+                    for (let i = 0; i < images.length; i++) {
+                        const imageInfo = images[i];
+                        Logger.info(`Loading image ${i + 1}/${images.length} from disk: ${imageInfo.filePath}`);
+
+                        try {
+                            const imageBuffer = await readFile(imageInfo.filePath);
+                            const attachment = new AttachmentBuilder(imageBuffer, {
+                                name: imageInfo.filename ?? `generated-image-${i + 1}.png`,
+                                description: `AI generated image ${i + 1}`
+                            });
+                            attachments.push(attachment);
+                            Logger.info(`Image ${i + 1} prepared for Discord attachment`);
+                        } catch (error) {
+                            Logger.error(`Failed to prepare image ${imageInfo.filePath} for Discord`, error);
+                        }
+                    }
+                }
+                
+                // Send the response with images if any
+                if (attachments.length > 0) {
+                    await msg.reply({
+                        content: replyMessage,
+                        files: attachments
+                    });
+                    Logger.info(`Sent response with ${attachments.length} image(s) to Discord`);
+                } else {
+                    await msg.reply(replyMessage);
+                }
+
+                if (images.length > 0) {
+                    Logger.info('Backing up generated images to Zipline and cleaning up local files');
+                    try {
+                        await openAI.backupAndCleanupImages(images);
+                    } catch (error) {
+                        Logger.error('Failed to backup or cleanup generated images:', error);
+                    }
+                }
 
             } catch (err) {
                 clearInterval(typingInterval);

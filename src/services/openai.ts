@@ -43,12 +43,20 @@ type ConversationState = {
 
 type DumpedConversations = ConversationState[]
 
+export type GeneratedImageInfo = {
+    filePath: string;
+    filename: string;
+    dataUrl: string;
+};
+
 export class OpenAIService {
     // We want to store some state in the service
     private static instance: OpenAIService;
     private constructor() {}
     private conversations: Map<string, ConversationState> = new Map();
     private imageUploadInstance: ImageUpload = ImageUpload.getInstance();
+    // Track generated image info by response ID for later extraction
+    private imageDataByResponseId: Map<string, GeneratedImageInfo[]> = new Map();
     
     // Function implementations for tool calls
     private randomNumberGenerator(args: { min: number; max: number }): number {
@@ -71,23 +79,17 @@ export class OpenAIService {
     // Helper method to process a response and handle any function calls
     private async processResponseWithFunctionCalls(
         initialResponse: OpenAI.Responses.Response,
-        promptConfig: OpenAI.Responses.ResponseCreateParams
+        promptConfig: OpenAI.Responses.ResponseCreateParams,
+        channelId: string
     ): Promise<OpenAI.Responses.Response> {
-        const followUpResponse = await this.handleToolCalls(initialResponse, promptConfig);
+        const followUpResponse = await this.handleToolCalls(initialResponse, promptConfig, channelId);
         
         // If we got a follow-up response, use that; otherwise use the original
         return followUpResponse || initialResponse;
     }
     
-    // Save base64 image data and upload to Discord via existing upload service
-    private async saveAndUploadGeneratedImage(base64Data: string): Promise<string> {
-        // Create a data URL from the base64 data
-        const dataUrl = `data:image/png;base64,${base64Data}`;
-        
-        // We need to convert this to a blob URL or use a different approach
-        // Since the ImageUpload service expects a URL, let's create a temporary server endpoint
-        // or modify the service. For now, let's save to temp file and create a local URL approach
-        
+    // Save base64 image data locally and prepare for Discord upload
+    private async saveGeneratedImage(base64Data: string): Promise<GeneratedImageInfo> {
         // Create temp directory if it doesn't exist
         const tempDir = path.join(os.tmpdir(), 'markov-images');
         if (!fs.existsSync(tempDir)) {
@@ -103,36 +105,24 @@ export class OpenAIService {
         try {
             // Convert base64 to buffer
             const imageBuffer = Buffer.from(base64Data, 'base64');
-            
+
             // Save image to temp directory
             fs.writeFileSync(tempFilePath, imageBuffer);
             Logger.info(`Image saved to disk: ${tempFilePath}`);
             Logger.info(`Image size: ${imageBuffer.length} bytes`);
-            
-            // Upload to Zipline
-            const uploadedUrl = await this.uploadImageBuffer(imageBuffer);
-            Logger.info(`Image uploaded successfully: ${uploadedUrl}`);
-            
-            // Keep the temp file for debugging/backup - don't delete it
-            Logger.info(`Image kept on disk at: ${tempFilePath}`);
-            
-            return uploadedUrl;
+
+            // Prepare data URL for OpenAI follow-up requests
+            const dataUrl = `data:image/png;base64,${base64Data}`;
+
+            return {
+                filePath: tempFilePath,
+                filename: filename,
+                dataUrl,
+            };
         } catch (error) {
-            Logger.error('Failed to upload generated image:', error);
-            
-            // If upload failed but we saved to disk, return the local path
-            if (fs.existsSync(tempFilePath)) {
-                Logger.info(`Image was saved locally but upload failed: ${tempFilePath}`);
-                return `[Image saved locally: ${tempFilePath}]`;
-            }
-            
+            Logger.error('Failed to save generated image locally:', error);
             throw error;
         }
-    }
-    
-    // Upload image buffer directly using Zipline v4 API
-    private async uploadImageBuffer(imageBuffer: Buffer): Promise<string> {
-        return await this.imageUploadInstance.uploadImageBuffer(imageBuffer);
     }
     
     // Bot instructions - replaces the assistant (fallback if no prompt ID configured)
@@ -284,7 +274,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         }) as OpenAI.Responses.Response;
         
         // Process any function calls and get the final response
-        const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig);
+        const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, channelId);
         
         // Update conversation state
         conversation.lastResponseId = response.id;
@@ -305,29 +295,29 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         const promptConfig = this.getPromptConfig(channelId, username, {
             message: message
         });
-        
+
         const initialResponse = await openai.responses.create({
             input: userInput,
             tools: this.tools,
             ...promptConfig,
             previous_response_id: conversation.lastResponseId,
         }) as OpenAI.Responses.Response;
-        
+
         // Logger.info('Initial OpenAI response from sendMessage:', JSON.stringify({
         //     id: initialResponse.id,
         //     output_text: initialResponse.output_text,
         //     output: initialResponse.output,
         // }, null, 2));
-        
+
         // Process any function calls and get the final response
-        const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig);
-        
+        const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, channelId);
+
         // Logger.info('Final processed response from sendMessage:', JSON.stringify({
         //     id: response.id,
         //     output_text: response.output_text,
         //     output: response.output,
         // }, null, 2));
-        
+
         // Update conversation state
         conversation.lastResponseId = response.id;
         conversation.messageCount++;
@@ -349,7 +339,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             has_image: 'true',
             image_url: imageUrl
         });
-        
+
         const initialResponse = await openai.responses.create({
             input: [
                 {
@@ -371,9 +361,9 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             ...promptConfig,
             previous_response_id: conversation.lastResponseId,
         }) as OpenAI.Responses.Response;
-        
+
         // Process any function calls and get the final response
-        const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig);
+        const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, channelId);
         
         // Update conversation state
         conversation.lastResponseId = response.id;
@@ -423,6 +413,59 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         return '';
     }
 
+    // Get response content with images extracted from response outputs
+    public getResponseContentWithImages(response: OpenAI.Responses.Response): { text: string; images: GeneratedImageInfo[] } {
+        Logger.info('Processing OpenAI response with images...');
+        Logger.info('Response has output_text:', !!response.output_text);
+        Logger.info('Response output array length:', response.output?.length || 0);
+        
+        let textContent = '';
+        const images: GeneratedImageInfo[] = [];
+        
+        // Check if we have tracked image info for this response
+        const trackedImages = this.imageDataByResponseId.get(response.id);
+        if (trackedImages) {
+            images.push(...trackedImages);
+            this.imageDataByResponseId.delete(response.id);
+            Logger.info(`Found ${trackedImages.length} generated image(s) for response ${response.id}`);
+        }
+        
+        // Process the response output array to handle text content
+        if (response.output && Array.isArray(response.output)) {
+            for (const outputItem of response.output) {
+                const status = 'status' in outputItem ? outputItem.status : 'N/A';
+                Logger.info(`Processing output item type: ${outputItem.type}, status: ${status}`);
+                
+                // Handle message content (text responses)
+                if (outputItem.type === 'message' && outputItem.content) {
+                    for (const contentPart of outputItem.content) {
+                        if (contentPart.type === 'output_text') {
+                            textContent += contentPart.text;
+                        }
+                    }
+                }
+                
+                // Extract image URLs from image_generation_call outputs if they exist
+                if (outputItem.type === 'image_generation_call') {
+                    if ('status' in outputItem && outputItem.status === 'completed' && 'result' in outputItem && outputItem.result) {
+                        // This is a base64 image, but we've already uploaded it
+                        // The URL should be in trackedUrls, but if not, we can try to extract from the response
+                        Logger.info('Found image_generation_call in response output');
+                    }
+                }
+            }
+        }
+        
+        // Fallback to output_text if no output array
+        if (!textContent && response.output_text) {
+            Logger.info('Using fallback output_text');
+            textContent = response.output_text;
+        }
+        
+        Logger.info(`Final text content length: ${textContent.length}, generated images: ${images.length}`);
+        return { text: textContent, images };
+    }
+
     // No longer needed - Responses API handles execution automatically
     // Keeping for backwards compatibility during migration
     public async createThreadRun(_thread: any): Promise<any> {
@@ -438,9 +481,11 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
     }
 
     // Handle function calls and image generation in the response and execute them
-    public async handleToolCalls(response: OpenAI.Responses.Response, promptConfig: OpenAI.Responses.ResponseCreateParams): Promise<OpenAI.Responses.Response | null> {
+    public async handleToolCalls(response: OpenAI.Responses.Response, promptConfig: OpenAI.Responses.ResponseCreateParams, channelId: string): Promise<OpenAI.Responses.Response | null> {
         let hasToolCalls = false;
-        const inputMessages: any[] = [...(response.output || [])];
+        const inputMessages: any[] = []; // Don't copy output items - only include function call outputs and new messages
+        const generatedImages: GeneratedImageInfo[] = [];
+        const conversation = await this.getOrCreateConversation(channelId);
         
         Logger.info('handleToolCalls - Processing response with output length:', response.output?.length || 0);
         
@@ -487,22 +532,29 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                         Logger.info('handleToolCalls - Processing completed image generation call');
                         
                         try {
-                            // Upload the generated image
-                            const uploadedUrl = await this.saveAndUploadGeneratedImage(outputItem.result);
+                            // Save the generated image locally and prepare metadata
+                            const generatedImage = await this.saveGeneratedImage(outputItem.result);
+                            generatedImages.push(generatedImage);
                             
-                            // Add the image result as a message for the AI to reference
+                            // Include the generated image as an input_image using a data URL so the AI can see it
+                            // Also include text to inform the AI about the successful generation
                             inputMessages.push({
                                 type: 'message',
                                 role: 'user',
                                 content: [
                                     {
                                         type: 'input_text',
-                                        text: `Image successfully generated and uploaded: ${uploadedUrl}`
+                                        text: `I've generated the image you requested and attached it for your review.`
+                                    },
+                                    {
+                                        type: 'input_image',
+                                        image_url: generatedImage.dataUrl,
+                                        detail: 'auto'
                                     }
                                 ]
                             });
                             
-                            Logger.info(`Image generated and uploaded: ${uploadedUrl}`);
+                            Logger.info(`Image generated and stored locally: ${generatedImage.filePath}`);
                         } catch (error) {
                             Logger.error('Error processing image generation:', error);
                             
@@ -523,6 +575,12 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             }
         }
         
+        // Track generated images for the original response BEFORE making follow-up request
+        // This ensures we have them even if the follow-up fails
+        if (generatedImages.length > 0) {
+            this.imageDataByResponseId.set(response.id, generatedImages);
+        }
+        
         // If we had tool calls (functions or images), make a second request to get the final response
         if (hasToolCalls) {
             try {
@@ -531,17 +589,49 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
                     input: inputMessages,
                     tools: this.tools,
                     ...promptConfig,
+                    previous_response_id: response.id, // Maintain conversation context
                 }) as OpenAI.Responses.Response;
+                
+                // Track generated images for this follow-up response as well
+                if (generatedImages.length > 0) {
+                    this.imageDataByResponseId.set(followUpResponse.id, generatedImages);
+                    this.imageDataByResponseId.delete(response.id);
+                }
+                
+                // Update conversation state with the follow-up response ID
+                conversation.lastResponseId = followUpResponse.id;
+                this.conversations.set(channelId, conversation);
                 
                 return followUpResponse;
             } catch (error) {
                 Logger.error('Error making follow-up request:', error);
+                // Even if follow-up fails, we've already tracked the image URLs for the original response
+                // Return null so the original response is used, which will have the tracked URLs
                 return null;
             }
         }
         
         // No function calls, return null to indicate no follow-up needed
         return null;
+    }
+
+    public async backupAndCleanupImages(images: GeneratedImageInfo[]): Promise<void> {
+        if (!images || images.length === 0) {
+            return;
+        }
+
+        for (const image of images) {
+            try {
+                const imageBuffer = await fs.promises.readFile(image.filePath);
+                const backupUrl = await this.imageUploadInstance.uploadImageBuffer(imageBuffer);
+                Logger.info(`Backed up generated image to Zipline: ${backupUrl}`);
+
+                await fs.promises.unlink(image.filePath);
+                Logger.info(`Removed local generated image file: ${image.filePath}`);
+            } catch (error) {
+                Logger.error(`Failed to backup or cleanup generated image ${image.filePath}:`, error);
+            }
+        }
     }
 
     // No longer needed - Responses API handles everything in one call

@@ -54,9 +54,6 @@ export class Bot {
 
     private registerListeners(): void {
         this.client.on(Events.ClientReady, () => this.onReady());
-        this.client.on(Events.ShardReady, (shardId: number, unavailableGuilds: Set<string>) =>
-            this.onShardReady(shardId, unavailableGuilds)
-        );
         this.client.on(Events.GuildCreate, (guild: Guild) => this.onGuildJoin(guild));
         this.client.on(Events.GuildDelete, (guild: Guild) => this.onGuildLeave(guild));
         this.client.on(Events.MessageCreate, (msg: Message) => this.onMessage(msg));
@@ -91,10 +88,6 @@ export class Bot {
         this.ready = true;
         Logger.info(Logs.info.clientReady);
         console.log('INFO: Client is ready!');
-    }
-
-    private onShardReady(shardId: number, _unavailableGuilds: Set<string>): void {
-        Logger.setShardId(shardId);
     }
 
     private async onGuildJoin(guild: Guild): Promise<void> {
