@@ -1,5 +1,6 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import * as fal from '@fal-ai/serverless-client';
+import fetch from 'node-fetch';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as os from 'node:os';
@@ -631,6 +632,48 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             } catch (error) {
                 Logger.error(`Failed to backup or cleanup generated image ${image.filePath}:`, error);
             }
+        }
+    }
+
+    // Generate image using OpenAI DALL-E and return GeneratedImageInfo for Discord upload
+    public async generateImageForPrompt(prompt: string): Promise<GeneratedImageInfo> {
+        try {
+            Logger.info(`Generating image with OpenAI for prompt: ${prompt}`);
+            const response = await openai.images.generate({
+                model: 'dall-e-3',
+                prompt: prompt,
+                size: '1024x1024',
+                quality: 'standard',
+                n: 1,
+            });
+            
+            const imageUrl = response.data[0].url;
+            if (!imageUrl) {
+                throw new Error('No image URL returned from OpenAI');
+            }
+            
+            Logger.info(`OpenAI generated image URL: ${imageUrl}`);
+            
+            // Download the image from OpenAI's URL
+            const imageResponse = await fetch(imageUrl);
+            if (!imageResponse.ok) {
+                throw new Error(`Failed to download image from OpenAI: ${imageResponse.statusText}`);
+            }
+            
+            const imageArrayBuffer = await imageResponse.arrayBuffer();
+            const imageBuffer = Buffer.from(imageArrayBuffer);
+            
+            // Convert to base64 for saveGeneratedImage
+            const base64Data = imageBuffer.toString('base64');
+            
+            // Save locally and get GeneratedImageInfo
+            const imageInfo = await this.saveGeneratedImage(base64Data);
+            Logger.info(`Image saved locally: ${imageInfo.filePath}`);
+            
+            return imageInfo;
+        } catch (error) {
+            Logger.error('Error generating image with OpenAI:', error);
+            throw error;
         }
     }
 
