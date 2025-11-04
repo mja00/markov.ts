@@ -101,7 +101,7 @@ export class MessageHandler implements EventHandler {
                 const computationTime = endTime - startTime;
 
                 // Get the response content (function calls are already handled in the service)
-                const responseContent = openAI.getResponseContent(response);
+                const responseContent = await openAI.getResponseContent(response);
 
                 if (!responseContent) {
                     Logger.error('No response content generated');

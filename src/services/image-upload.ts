@@ -1,6 +1,8 @@
+import FormData from 'form-data';
 import fetch from 'node-fetch';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
+import * as stream from 'node:stream';
 
 import { Logger } from './logger.js';
 
@@ -53,7 +55,8 @@ export class ImageUpload {
             username: Config.imageUpload.username,
             password: Config.imageUpload.password,
         };
-        // We need to post /auth/login with the body to get the cookie
+        // v4 API uses /api/auth/login for authentication
+        Logger.info('Authenticating with Zipline v4 API...');
 
         const response = await fetch(Config.imageUpload.baseUrl + '/auth/login', {
             method: 'POST',
@@ -63,20 +66,36 @@ export class ImageUpload {
             body: JSON.stringify(body),
         });
 
+        const responseText = await response.text();
+        Logger.info(`Zipline auth response - Status: ${response.status}`);
+        Logger.info(`Zipline auth response - Body: ${responseText}`);
+
         if (response.status !== 200) {
-            Logger.error('Failed to get zipline cookie', await response.text());
+            Logger.error('Failed to authenticate with Zipline v4:', responseText);
             throw new Error('Failed to get zipline cookie');
         }
-        // We need to get the user cookie from the cookies
+
+        // v4 uses 'zipline_session' cookie instead of 'user'
         const cookies = response.headers.get('set-cookie');
-        // find the user cookie
-        const userCookie = cookies?.split(';').find(cookie => cookie.startsWith('user'));
-        if (!userCookie) {
-            throw new Error('Failed to get zipline cookie');
+        Logger.info('Set-Cookie header:', cookies);
+        
+        if (!cookies) {
+            throw new Error('No cookies returned from Zipline login');
         }
-        // return the user cookie
-        this.ziplineCookie = userCookie;
-        return userCookie;
+
+        // Find the zipline_session cookie
+        const sessionCookie = cookies.split(';').find(cookie => 
+            cookie.trim().startsWith('zipline_session=')
+        );
+        
+        if (!sessionCookie) {
+            Logger.error('zipline_session cookie not found in:', cookies);
+            throw new Error('Failed to get zipline session cookie');
+        }
+        
+        Logger.info('Successfully obtained Zipline session cookie');
+        this.ziplineCookie = sessionCookie.trim();
+        return this.ziplineCookie;
     }
 
     public async getZiplineToken(): Promise<string> {
@@ -85,23 +104,38 @@ export class ImageUpload {
             Logger.warn('No zipline cookie, getting a new one');
             await this.getZiplineCookie();
         }
-        // Token comes from /user in the token field
-        const response = await fetch(Config.imageUpload.baseUrl + '/user', {
+        // v4 API: Token comes from /user/token endpoint
+        Logger.info('Getting token from Zipline v4 API...');
+        
+        const response = await fetch(Config.imageUpload.baseUrl + '/user/token', {
             headers: {
-                cookie: this.ziplineCookie,
+                'Cookie': this.ziplineCookie,
             },
         });
-        // If the response is not 200, throw an error
+        
+        const responseText = await response.text();
+        Logger.info(`Token response - Status: ${response.status}`);
+        Logger.info(`Token response - Body: ${responseText}`);
+        
         if (response.status !== 200) {
-            Logger.error('Failed to get zipline token', await response.text());
+            Logger.error('Failed to get zipline token:', responseText);
             throw new Error('Failed to get zipline token');
         }
-        const json = await response.json();
-        // Cast it to the user interface
-        const user = json as User;
-        // return the token
-        this.ziplineToken = user.token;
-        return user.token;
+        
+        try {
+            const json = JSON.parse(responseText);
+            if (json.token) {
+                this.ziplineToken = json.token;
+                Logger.info('Successfully obtained Zipline API token');
+                return json.token;
+            } else {
+                Logger.error('No token in response:', json);
+                throw new Error('No token returned from Zipline');
+            }
+        } catch (parseError) {
+            Logger.error('Failed to parse token response:', parseError);
+            throw new Error('Failed to parse token response');
+        }
     }
 
     public async uploadImage(imageUrl: string, attempt: number = 0): Promise<string> {
@@ -127,7 +161,7 @@ export class ImageUpload {
         formData.append('file', new Blob([Buffer.from(imageBuffer)]), `${hash}.png`);
         const headers = {
             Authorization: this.ziplineToken,
-            'x-zipline-folder': '2',
+            'x-zipline-folder': 'cm793lcei0gtjo201lxjmy9zz',
         };
         // Upload the image
         const response = await fetch(Config.imageUpload.baseUrl + '/upload', {
@@ -147,5 +181,72 @@ export class ImageUpload {
             );
             return await this.uploadImage(imageUrl, attempt + 1);
         }
+    }
+
+    public async uploadImageBuffer(imageBuffer: Buffer): Promise<string> {
+        // Ensure we have a token
+        if (!this.ziplineToken) {
+            Logger.warn('No zipline token, getting a new one');
+            await this.getZiplineToken();
+        }
+         // Create a hash off the image buffer for the filename
+         const hash = crypto.createHash('sha256').update(imageBuffer).digest('hex');
+        
+         const formData = new FormData();
+         
+         // Create a readable stream from the buffer
+         const bufferStream = new stream.PassThrough();
+         bufferStream.end(imageBuffer);
+         
+         formData.append('file', bufferStream, {
+             filename: `${hash}.png`,
+             contentType: 'image/png'
+         });
+         
+         const headers = {
+             ...formData.getHeaders(),
+             'Authorization': this.ziplineToken,
+             'x-zipline-folder': 'cm793lcei0gtjo201lxjmy9zz',
+         };
+         
+         Logger.info('Uploading generated image to Zipline v4...');
+         
+         // Upload the image using v4 API endpoint
+         const response = await fetch(Config.imageUpload.baseUrl + '/upload', {
+             method: 'POST',
+             headers: headers,
+             body: formData,
+         });
+         
+         const responseText = await response.text();
+         Logger.info(`Zipline upload response - Status: ${response.status}`);
+         Logger.info(`Zipline upload response - Headers:`, Object.fromEntries(response.headers.entries()));
+         Logger.info(`Zipline upload response - Body: ${responseText}`);
+         
+         if (response.status === 200) {
+             try {
+                 const json = JSON.parse(responseText);
+                 Logger.info('Parsed JSON response:', json);
+                 
+                 // v4 response structure: { "files": [{ "id": "...", "type": "...", "url": "..." }] }
+                 if (json.files && json.files.length > 0) {
+                     const fileUrl = json.files[0].url;
+                     Logger.info(`Image uploaded successfully: ${fileUrl}`);
+                     return fileUrl;
+                 } else {
+                     Logger.error('No files in response - Full JSON:', json);
+                     throw new Error('No files returned in upload response');
+                 }
+             } catch (parseError) {
+                 Logger.error('Failed to parse upload response as JSON:', parseError);
+                 Logger.error('Raw response text:', responseText);
+                 throw new Error('Failed to parse upload response');
+             }
+         } else {
+             Logger.error(`Upload failed with status ${response.status}`);
+             Logger.error('Response headers:', Object.fromEntries(response.headers.entries()));
+             Logger.error('Response body:', responseText);
+             throw new Error(`Failed to upload image. Status: ${response.status} - ${responseText}`);
+         }
     }
 }
