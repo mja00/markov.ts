@@ -1,6 +1,6 @@
+import { AttachmentBuilder, Message, MessageReferenceType, PartialGroupDMChannel } from 'discord.js';
 import { readFile } from 'node:fs/promises';
 
-import { AttachmentBuilder, Message, MessageReferenceType, PartialGroupDMChannel } from 'discord.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
 import { Logger } from '../services/logger.js';
@@ -70,13 +70,25 @@ export class MessageHandler implements EventHandler {
                         Logger.debug(`Referenced message found: ${referencedMessage.id}`);
                         // Extract the referenced message content
                         const referencedMessageContent = referencedMessage.content || '';
+                        // Check if the referenced message has image attachments
+                        let referencedImageUrl: string | undefined;
+                        if (referencedMessage.attachments.size > 0) {
+                            for (const attachment of referencedMessage.attachments.values()) {
+                                if (attachment.contentType?.startsWith('image/')) {
+                                    referencedImageUrl = attachment.url;
+                                    Logger.debug(`Found image attachment in referenced message: ${referencedImageUrl}`);
+                                    break;
+                                }
+                            }
+                        }
                         // Send message with reply context using the new API
                         response = await openAI.sendMessageWithReplyContext(
                             channelID, 
                             message, 
                             referencedMessage.author.displayName,
                             referencedMessageContent,
-                            userTag
+                            userTag,
+                            referencedImageUrl
                         );
                     } else {
                         // Fallback to regular message if referenced message not found

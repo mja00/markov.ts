@@ -257,20 +257,41 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         message: string,
         from: string,
         referencedMessageContent: string,
-        username: string
+        username: string,
+        referencedImageUrl?: string
     ): Promise<OpenAI.Responses.Response> {
         const conversation = await this.getOrCreateConversation(channelId);
-        const userInput = `${username} is replying to ${from}'s message "${referencedMessageContent}": ${message}`;
         
         const promptConfig = this.getPromptConfig(channelId, username, {
             message: message,
             reply_context: `replying to ${from}`,
             referenced_message: referencedMessageContent,
-            original_message: message
+            original_message: message,
+            ...(referencedImageUrl && { has_referenced_image: 'true', referenced_image_url: referencedImageUrl })
         });
 
+        // If there's an image from the referenced message, include it in the input
+        const input = referencedImageUrl
+            ? [
+                  {
+                      role: 'user' as const,
+                      content: [
+                          {
+                              type: 'input_text' as const,
+                              text: `${username} is replying to ${from}'s message "${referencedMessageContent}": ${message}`
+                          },
+                          {
+                              type: 'input_image' as const,
+                              image_url: referencedImageUrl,
+                              detail: 'auto' as const
+                          }
+                      ]
+                  }
+              ]
+            : `${username} is replying to ${from}'s message "${referencedMessageContent}": ${message}`;
+
         const initialResponse = await openai.responses.create({
-            input: userInput,
+            input: input,
             tools: this.tools,
             ...promptConfig,
             previous_response_id: conversation.lastResponseId,
