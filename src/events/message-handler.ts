@@ -68,11 +68,14 @@ export class MessageHandler implements EventHandler {
                     const referencedMessage = await msg.channel.messages.fetch(msg.reference.messageId);
                     if (referencedMessage) {
                         Logger.debug(`Referenced message found: ${referencedMessage.id}`);
+                        // Extract the referenced message content
+                        const referencedMessageContent = referencedMessage.content || '';
                         // Send message with reply context using the new API
                         response = await openAI.sendMessageWithReplyContext(
                             channelID, 
                             message, 
                             referencedMessage.author.displayName,
+                            referencedMessageContent,
                             userTag
                         );
                     } else {

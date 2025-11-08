@@ -256,14 +256,16 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
         channelId: string,
         message: string,
         from: string,
+        referencedMessageContent: string,
         username: string
     ): Promise<OpenAI.Responses.Response> {
         const conversation = await this.getOrCreateConversation(channelId);
-        const userInput = `${username} is replying to ${from}'s message: ${message}`;
+        const userInput = `${username} is replying to ${from}'s message "${referencedMessageContent}": ${message}`;
         
         const promptConfig = this.getPromptConfig(channelId, username, {
             message: message,
             reply_context: `replying to ${from}`,
+            referenced_message: referencedMessageContent,
             original_message: message
         });
 
