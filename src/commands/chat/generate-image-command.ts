@@ -1,7 +1,7 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import * as fal from '@fal-ai/serverless-client';
-import { readFile } from 'node:fs/promises';
 import { AttachmentBuilder, ChatInputCommandInteraction, PermissionsString } from 'discord.js';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 
 import { Language } from '../../models/enum-helpers/index.js';

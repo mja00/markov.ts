@@ -4,3 +4,7 @@ export { InfoCommand } from './info-command.js';
 export { TestCommand } from './test-command.js';
 export { GenerateImageCommand } from './generate-image-command.js';
 export { FishCommand } from './fish-command.js';
+export { FishingCommand } from './fishing-command.js';
+export { ShopCommand } from './shop-command.js';
+export { BuyCommand } from './buy-command.js';
+export { InventoryCommand } from './inventory-command.js';

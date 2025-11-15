@@ -22,6 +22,20 @@
       "when": 1710162254976,
       "tag": "0002_simple_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1763233988871,
+      "tag": "0003_lush_norrin_radd",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1763234725197,
+      "tag": "0004_gorgeous_leech",
+      "breakpoints": true
     }
   ]
 }

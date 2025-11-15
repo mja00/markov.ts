@@ -1,4 +1,6 @@
 {
+  "id": "59eb9eb5-346c-4f47-9b3c-de12adadbb84",
+  "prevId": "177d2d4f-c93c-40b2-a893-a880df9673be",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -65,22 +67,22 @@
         "catchables_first_caught_by_users_id_fk": {
           "name": "catchables_first_caught_by_users_id_fk",
           "tableFrom": "catchables",
+          "tableTo": "users",
           "columnsFrom": [
             "first_caught_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.catches": {
       "name": "catches",
@@ -125,35 +127,170 @@
         "catches_catchable_id_catchables_id_fk": {
           "name": "catches_catchable_id_catchables_id_fk",
           "tableFrom": "catches",
+          "tableTo": "catchables",
           "columnsFrom": [
             "catchable_id"
           ],
-          "tableTo": "catchables",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "catches_caught_by_users_id_fk": {
           "name": "catches_caught_by_users_id_fk",
           "tableFrom": "catches",
+          "tableTo": "users",
           "columnsFrom": [
             "caught_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fishing_attempts": {
+      "name": "fishing_attempts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempted_at": {
+          "name": "attempted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "fishing_attempts_user_id_users_id_fk": {
+          "name": "fishing_attempts_user_id_users_id_fk",
+          "tableFrom": "fishing_attempts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fishing_attempts_guild_id_guilds_id_fk": {
+          "name": "fishing_attempts_guild_id_guilds_id_fk",
+          "tableFrom": "fishing_attempts",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.guilds": {
+      "name": "guilds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "discord_snowflake": {
+          "name": "discord_snowflake",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fishing_cooldown_limit": {
+          "name": "fishing_cooldown_limit",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 10
+        },
+        "fishing_cooldown_window_seconds": {
+          "name": "fishing_cooldown_window_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 3600
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "guilds_discord_snowflake_unique": {
+          "name": "guilds_discord_snowflake_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "discord_snowflake"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.inventory": {
       "name": "inventory",
@@ -205,35 +342,35 @@
         "inventory_user_id_users_id_fk": {
           "name": "inventory_user_id_users_id_fk",
           "tableFrom": "inventory",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "inventory_item_id_items_id_fk": {
           "name": "inventory_item_id_items_id_fk",
           "tableFrom": "inventory",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.items": {
       "name": "items",
@@ -258,6 +395,33 @@
           "primaryKey": false,
           "notNull": false
         },
+        "effect_type": {
+          "name": "effect_type",
+          "type": "effect_type_enum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effect_value": {
+          "name": "effect_value",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_consumable": {
+          "name": "is_consumable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_passive": {
+          "name": "is_passive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -278,8 +442,8 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.purchases": {
       "name": "purchases",
@@ -330,48 +494,48 @@
         "purchases_user_id_users_id_fk": {
           "name": "purchases_user_id_users_id_fk",
           "tableFrom": "purchases",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "purchases_item_id_items_id_fk": {
           "name": "purchases_item_id_items_id_fk",
           "tableFrom": "purchases",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "purchases_shop_id_shop_id_fk": {
           "name": "purchases_shop_id_shop_id_fk",
           "tableFrom": "purchases",
+          "tableTo": "shop",
           "columnsFrom": [
             "shop_id"
           ],
-          "tableTo": "shop",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.shop": {
       "name": "shop",
@@ -417,22 +581,22 @@
         "shop_item_id_items_id_fk": {
           "name": "shop_item_id_items_id_fk",
           "tableFrom": "shop",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.users": {
       "name": "users",
@@ -492,28 +656,35 @@
       "uniqueConstraints": {
         "users_discord_snowflake_unique": {
           "name": "users_discord_snowflake_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "discord_snowflake"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
-  "enums": {},
-  "schemas": {},
-  "_meta": {
-    "schemas": {},
-    "tables": {},
-    "columns": {}
+  "enums": {
+    "public.effect_type_enum": {
+      "name": "effect_type_enum",
+      "schema": "public",
+      "values": [
+        "RARITY_BOOST",
+        "WORTH_MULTIPLIER"
+      ]
+    }
   },
-  "id": "b4f5cc90-6051-4a08-a071-49293d1b7e3e",
-  "prevId": "cc00339b-e652-4dcb-a816-fad4510eaeed",
+  "schemas": {},
   "sequences": {},
+  "roles": {},
   "policies": {},
   "views": {},
-  "roles": {}
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
 }

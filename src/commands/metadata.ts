@@ -108,6 +108,39 @@ export const ChatCommandMetadata: {
             },
         ],
     },
+    SHOP: {
+        type: ApplicationCommandType.ChatInput,
+        name: Lang.getRef('chatCommands.shop', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('chatCommands.shop'),
+        description: Lang.getRef('commandDescs.shop', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('commandDescs.shop'),
+        dm_permission: true,
+        default_member_permissions: undefined,
+    },
+    BUY: {
+        type: ApplicationCommandType.ChatInput,
+        name: Lang.getRef('chatCommands.buy', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('chatCommands.buy'),
+        description: Lang.getRef('commandDescs.buy', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('commandDescs.buy'),
+        dm_permission: true,
+        default_member_permissions: undefined,
+        options: [
+            {
+                ...Args.BUY,
+                required: true,
+            },
+        ],
+    },
+    INVENTORY: {
+        type: ApplicationCommandType.ChatInput,
+        name: Lang.getRef('chatCommands.inventory', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('chatCommands.inventory'),
+        description: Lang.getRef('commandDescs.inventory', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('commandDescs.inventory'),
+        dm_permission: true,
+        default_member_permissions: undefined,
+    },
 };
 
 export const MessageCommandMetadata: {

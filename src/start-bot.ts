@@ -1,14 +1,20 @@
+import 'dotenv/config';
+
 import { REST } from '@discordjs/rest';
 import { Options, Partials } from 'discord.js';
 import { createRequire } from 'node:module';
 
 import { Button } from './buttons/index.js';
 import {
+    BuyCommand,
     DevCommand,
     FishCommand,
+    FishingCommand,
     GenerateImageCommand,
     HelpCommand,
     InfoCommand,
+    InventoryCommand,
+    ShopCommand,
     TestCommand,
 } from './commands/chat/index.js';
 import {
@@ -34,6 +40,7 @@ import { Bot } from './models/bot.js';
 import { Reaction } from './reactions/index.js';
 import {
     CommandRegistrationService,
+    DatabaseService,
     EventDataService,
     JobService,
     Logger,
@@ -70,6 +77,10 @@ async function start(): Promise<void> {
         new TestCommand(),
         new GenerateImageCommand(),
         new FishCommand(),
+        new FishingCommand(),
+        new ShopCommand(),
+        new BuyCommand(),
+        new InventoryCommand(),
 
         // Message Context Commands
         new ViewDateSent(),
@@ -144,6 +155,14 @@ async function start(): Promise<void> {
     // Start an OpenAI service
     await OpenAIService.getInstance();
 
+    // Connect to database
+    try {
+        await DatabaseService.getInstance().connect();
+        Logger.info('Database connection established');
+    } catch (error) {
+        Logger.warn('Failed to connect to database - fishing features will be unavailable:', error);
+    }
+
     await bot.start();
 }
 
@@ -159,6 +178,9 @@ process.on('exit', async () => {
     Logger.info('Bot shutting down...');
     const openAI = await OpenAIService.getInstance();
     await openAI.onShutdown();
+
+    // Disconnect from database
+    await DatabaseService.getInstance().disconnect();
 });
 
 start().catch(error => {

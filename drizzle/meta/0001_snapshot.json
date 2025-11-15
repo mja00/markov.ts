@@ -1,10 +1,8 @@
 {
-  "id": "cc00339b-e652-4dcb-a816-fad4510eaeed",
-  "prevId": "65deda21-f590-4d5f-853b-0b783cc0721d",
-  "version": "5",
-  "dialect": "pg",
+  "version": "7",
+  "dialect": "postgresql",
   "tables": {
-    "catchables": {
+    "public.catchables": {
       "name": "catchables",
       "schema": "",
       "columns": {
@@ -67,21 +65,24 @@
         "catchables_first_caught_by_users_id_fk": {
           "name": "catchables_first_caught_by_users_id_fk",
           "tableFrom": "catchables",
-          "tableTo": "users",
           "columnsFrom": [
             "first_caught_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "catches": {
+    "public.catches": {
       "name": "catches",
       "schema": "",
       "columns": {
@@ -124,34 +125,37 @@
         "catches_catchable_id_catchables_id_fk": {
           "name": "catches_catchable_id_catchables_id_fk",
           "tableFrom": "catches",
-          "tableTo": "catchables",
           "columnsFrom": [
             "catchable_id"
           ],
+          "tableTo": "catchables",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "catches_caught_by_users_id_fk": {
           "name": "catches_caught_by_users_id_fk",
           "tableFrom": "catches",
-          "tableTo": "users",
           "columnsFrom": [
             "caught_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "users": {
+    "public.users": {
       "name": "users",
       "schema": "",
       "columns": {
@@ -196,19 +200,28 @@
       "uniqueConstraints": {
         "users_discord_snowflake_unique": {
           "name": "users_discord_snowflake_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "discord_snowflake"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     }
   },
   "enums": {},
   "schemas": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
-  }
+    "tables": {},
+    "columns": {}
+  },
+  "id": "cc00339b-e652-4dcb-a816-fad4510eaeed",
+  "prevId": "65deda21-f590-4d5f-853b-0b783cc0721d",
+  "sequences": {},
+  "policies": {},
+  "views": {},
+  "roles": {}
 }
