@@ -97,10 +97,24 @@ A welcome message is sent to the server and owner when the bot is added.
     - Navigate into the downloaded source files and type `npm install`.
 5. Register commands.
     - In order to use slash commands, they first [have to be registered](https://discordjs.guide/creating-your-bot/command-deployment.html).
-    - Type `npm run commands:register` to register the bot's commands.
+    - **Important:** Choose ONE approach (global OR guild-specific). Having both will show duplicate commands!
+    - **Global commands** (recommended for production):
+        - Type `npm run commands:register` to register commands globally.
+        - Commands will appear in all servers, but may take up to 1 hour to propagate.
         - Run this script any time you change a command name, structure, or add/remove commands.
-        - This is so Discord knows what your commands look like.
-        - It may take up to an hour for command changes to appear.
+        - To clear guild-specific commands: `npm run commands:clear <GUILD_ID>` for each guild
+    - **Guild-specific commands** (recommended for development/testing):
+        - Type `npm run commands:register <GUILD_ID>` to register commands to a specific server.
+        - Commands appear instantly in that server (no waiting period).
+        - Replace `<GUILD_ID>` with your Discord server's ID (right-click server → Copy Server ID).
+        - Example: `npm run commands:register 123456789012345678`
+        - To clear global commands: `npm run commands:clear` (no guild ID)
+    - **View registered commands:**
+        - `npm run commands:view` - View global commands
+        - `npm run commands:view <GUILD_ID>` - View guild-specific commands
+    - **Clear commands:**
+        - `npm run commands:clear` - Clear all global commands
+        - `npm run commands:clear <GUILD_ID>` - Clear all guild-specific commands for a server
 
 ## Start Scripts
 
