@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { getDb } from './database.service.js';
 import { Logger } from './logger.js';
@@ -110,18 +110,38 @@ export class ShopService {
 
             // Execute all operations in a transaction to ensure atomicity
             const result = await db.transaction(async (tx) => {
-                // Subtract money from user
+                // Subtract money from user with balance guard to prevent race conditions
+                // The WHERE clause ensures the balance is still sufficient at transaction time
                 const updatedUser = await tx
                     .update(users)
                     .set({
                         money: sql`${users.money} - ${shopItem.shop.cost}`,
                         updatedAt: new Date(),
                     })
-                    .where(eq(users.id, userId))
+                    .where(
+                        and(
+                            eq(users.id, userId),
+                            gte(users.money, shopItem.shop.cost),
+                        ),
+                    )
                     .returning();
 
                 if (updatedUser.length === 0) {
-                    throw new Error(`User ${userId} not found`);
+                    // Either user not found or insufficient funds (race condition detected)
+                    // Reload user to get current balance for error message
+                    const currentUser = await tx
+                        .select()
+                        .from(users)
+                        .where(eq(users.id, userId))
+                        .limit(1);
+
+                    if (currentUser.length === 0) {
+                        throw new Error(`User ${userId} not found`);
+                    }
+
+                    throw new Error(
+                        `Insufficient funds. Need ${shopItem.shop.cost} coins, have ${currentUser[0].money} coins`,
+                    );
                 }
 
                 // Create purchase record

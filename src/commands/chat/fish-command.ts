@@ -110,9 +110,17 @@ export class FishCommand implements Command {
             let firstTimeCaught = false;
 
             if (isFirstCatch) {
-                Logger.info(`[FishCommand] First time caught: ${caught.name} by ${intr.user.tag}`);
-                await this.fishingService.markFirstCatch(caught.id, user.id);
-                firstTimeCaught = true;
+                try {
+                    Logger.info(`[FishCommand] First time caught: ${caught.name} by ${intr.user.tag}`);
+                    await this.fishingService.markFirstCatch(caught.id, user.id);
+                    firstTimeCaught = true;
+                } catch (error) {
+                    // Race condition: another user marked first catch between check and update
+                    // Continue as normal catch without first catch flag - don't penalize user
+                    Logger.debug(
+                        `[FishCommand] Race condition detected for first catch of ${caught.name} by ${intr.user.tag}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    );
+                }
             }
 
             // Calculate final worth with item effects applied
