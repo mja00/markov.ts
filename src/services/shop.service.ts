@@ -3,7 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from './database.service.js';
 import { Logger } from './logger.js';
 import { UserService } from './user.service.js';
-import { Inventory, inventory, InventoryInsert, Item, items, PurchaseInsert, purchases, Shop, shop } from '../db/schema.js';
+import { Inventory, inventory, InventoryInsert, Item, items, PurchaseInsert, purchases, Shop, shop, users } from '../db/schema.js';
 
 /**
  * Service for managing shop and inventory operations
@@ -108,27 +108,74 @@ export class ShopService {
                 throw new Error(`Insufficient funds. Need ${shopItem.shop.cost} coins, have ${user.money} coins`);
             }
 
-            // Start transaction: subtract money, create purchase, update inventory
-            // Subtract money from user
-            await this.userService.addMoney(userId, -shopItem.shop.cost);
+            // Execute all operations in a transaction to ensure atomicity
+            const result = await db.transaction(async (tx) => {
+                // Subtract money from user
+                const updatedUser = await tx
+                    .update(users)
+                    .set({
+                        money: sql`${users.money} - ${shopItem.shop.cost}`,
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(users.id, userId))
+                    .returning();
 
-            // Create purchase record
-            const newPurchase: PurchaseInsert = {
-                userId: userId,
-                itemId: shopItem.item.id,
-                shopId: shopId,
-            };
+                if (updatedUser.length === 0) {
+                    throw new Error(`User ${userId} not found`);
+                }
 
-            const purchase = await db.insert(purchases).values(newPurchase).returning();
+                // Create purchase record
+                const newPurchase: PurchaseInsert = {
+                    userId: userId,
+                    itemId: shopItem.item.id,
+                    shopId: shopId,
+                };
 
-            // Update inventory
-            const inventoryItem = await this.addToInventory(userId, shopItem.item.id, 1);
+                const purchaseResult = await tx.insert(purchases).values(newPurchase).returning();
+
+                // Update or create inventory entry
+                const existingInventory = await tx
+                    .select()
+                    .from(inventory)
+                    .where(and(eq(inventory.userId, userId), eq(inventory.itemId, shopItem.item.id)))
+                    .limit(1);
+
+                let inventoryItem: Inventory;
+                if (existingInventory.length > 0) {
+                    // Update existing inventory
+                    const updated = await tx
+                        .update(inventory)
+                        .set({
+                            count: sql`${inventory.count} + 1`,
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(inventory.id, existingInventory[0].id))
+                        .returning();
+
+                    inventoryItem = updated[0];
+                } else {
+                    // Create new inventory entry
+                    const newInventory: InventoryInsert = {
+                        userId: userId,
+                        itemId: shopItem.item.id,
+                        count: 1,
+                    };
+
+                    const created = await tx.insert(inventory).values(newInventory).returning();
+                    inventoryItem = created[0];
+                }
+
+                return {
+                    purchase: purchaseResult[0],
+                    inventory: inventoryItem,
+                };
+            });
 
             Logger.info(`[ShopService] User ${userId} purchased item ${shopItem.item.name} for ${shopItem.shop.cost} coins`);
 
             return {
-                purchase: purchase[0],
-                inventory: inventoryItem,
+                purchase: result.purchase,
+                inventory: result.inventory,
             };
         } catch (error) {
             Logger.error(`[ShopService] Failed to purchase item for user ${userId}:`, error);

@@ -36,9 +36,21 @@ export class FishingCooldownService {
         const db = getDb();
 
         try {
+            // If in guild context, ensure guild exists before checking cooldown
+            // This prevents new guilds from sharing the DM cooldown bucket
+            let finalGuildId: string | null = null;
+            if (guildDiscordSnowflake) {
+                const guild = await this.guildService.ensureGuildExists(guildDiscordSnowflake);
+                finalGuildId = guild.id;
+            }
+
             // Get guild settings (with defaults)
             const settings = await this.guildService.getGuildSettings(guildDiscordSnowflake);
-            const { limit, windowSeconds, guildId } = settings;
+            const { limit, windowSeconds } = settings;
+            
+            // Use the ensured guildId instead of the one from settings
+            // This ensures new guilds have their own cooldown bucket
+            const guildId = finalGuildId;
 
             // Calculate the cutoff time for the rolling window
             const cutoffTime = new Date(Date.now() - windowSeconds * 1000);
