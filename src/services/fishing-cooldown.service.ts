@@ -1,9 +1,9 @@
-import { and, eq, gte, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from './database.service.js';
+import { GuildService } from './guild.service.js';
 import { Logger } from './logger.js';
-import { DEFAULT_FISHING_COOLDOWN_LIMIT, DEFAULT_FISHING_COOLDOWN_WINDOW_SECONDS, GuildService } from './guild.service.js';
-import { fishingAttempts, FishingAttemptInsert, users } from '../db/schema.js';
+import { FishingAttemptInsert, fishingAttempts } from '../db/schema.js';
 
 /**
  * Result of a cooldown check
@@ -110,10 +110,6 @@ export class FishingCooldownService {
         const db = getDb();
 
         try {
-            // Get guild settings to get the guild ID
-            const settings = await this.guildService.getGuildSettings(guildDiscordSnowflake);
-            const { guildId } = settings;
-
             // If in guild context, ensure guild exists
             let finalGuildId: string | null = null;
             if (guildDiscordSnowflake) {

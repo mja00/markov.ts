@@ -4,6 +4,7 @@ import { RateLimiter } from 'discord.js-rate-limiter';
 import { Rarity } from '../../enums/rarity.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
+import { FishingCooldownService } from '../../services/fishing-cooldown.service.js';
 import { FishingService } from '../../services/fishing.service.js';
 import { Lang, Logger } from '../../services/index.js';
 import { UserService } from '../../services/user.service.js';
@@ -18,6 +19,7 @@ export class FishCommand implements Command {
 
     private readonly userService = new UserService();
     private readonly fishingService = new FishingService();
+    private readonly cooldownService = new FishingCooldownService();
 
     /**
      * Execute the fish command
@@ -33,6 +35,37 @@ export class FishCommand implements Command {
             if (!user) {
                 Logger.error(`[FishCommand] Failed to create/get user: ${intr.user.id}`);
                 await InteractionUtils.send(intr, Lang.getEmbed('displayEmbeds.fishError', data.lang));
+                return;
+            }
+
+            // Check fishing cooldown
+            const guildDiscordSnowflake = intr.guild?.id || null;
+            const cooldownCheck = await this.cooldownService.checkCooldown(user.id, guildDiscordSnowflake);
+
+            if (!cooldownCheck.allowed) {
+                // Calculate time display
+                const minutes = Math.floor(cooldownCheck.timeUntilNextAttempt / 60);
+                const seconds = cooldownCheck.timeUntilNextAttempt % 60;
+                let timeDisplay = '';
+                if (minutes > 0) {
+                    timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+                    if (seconds > 0) {
+                        timeDisplay += ` and ${seconds} second${seconds !== 1 ? 's' : ''}`;
+                    }
+                } else {
+                    timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+                }
+
+                const errorEmbed = new EmbedBuilder()
+                    .setTitle('⏰ Fishing Cooldown')
+                    .setDescription(
+                        `You've reached your fishing limit!\n\n` +
+                        `**Limit:** ${cooldownCheck.limit} attempts per ${Math.floor(cooldownCheck.windowSeconds / 60)} minutes\n` +
+                        `**Time until next attempt:** ${timeDisplay}`
+                    )
+                    .setColor(0xff9900);
+
+                await InteractionUtils.send(intr, errorEmbed);
                 return;
             }
 
@@ -91,6 +124,12 @@ export class FishCommand implements Command {
             // Record the catch
             await this.fishingService.addCatch(user.id, caught.id);
 
+            // Record fishing attempt for cooldown tracking
+            await this.cooldownService.recordAttempt(user.id, guildDiscordSnowflake);
+
+            // Get updated remaining attempts after recording
+            const remainingAttempts = await this.cooldownService.getRemainingAttempts(user.id, guildDiscordSnowflake);
+
             // Build response embed
             const rarityName = this.fishingService.getRarityName(caught.rarity as Rarity);
             const rarityColor = this.fishingService.getRarityColor(caught.rarity as Rarity);
@@ -105,6 +144,11 @@ export class FishCommand implements Command {
             }
             if (usedConsumable) {
                 description += `\n\n🎣 Used **${usedConsumable.name}** (+${(usedConsumable.boost * 100).toFixed(0)}% rarity boost)`;
+            }
+
+            // Show remaining attempts if under limit
+            if (remainingAttempts > 0) {
+                description += `\n\n⏰ **${remainingAttempts} attempt${remainingAttempts !== 1 ? 's' : ''} remaining**`;
             }
 
             const embed = new EmbedBuilder()
