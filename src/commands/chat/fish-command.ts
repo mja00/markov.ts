@@ -13,7 +13,7 @@ import { Command, CommandDeferType } from '../index.js';
 
 export class FishCommand implements Command {
     public names = [Lang.getRef('chatCommands.fish', Language.Default)];
-    public cooldown = new RateLimiter(4, 60000);
+    public cooldown = new RateLimiter(10, 30000);
     public deferType = CommandDeferType.PUBLIC;
     public requireClientPerms: PermissionsString[] = [];
 
