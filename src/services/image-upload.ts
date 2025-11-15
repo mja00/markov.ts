@@ -9,34 +9,6 @@ import { Logger } from './logger.js';
 const require = createRequire(import.meta.url);
 let Config = require('../../config/config.json');
 
-interface OAuth {
-    id: number;
-    // Provider is an enum of DISCORD, GITHUB, or GOOGLE
-    provider: string;
-    userId: number;
-    oauthId: string;
-    username: string;
-    token: string;
-    refresh: string;
-}
-
-interface User {
-    id: number;
-    username: string;
-    avatar: string;
-    token: string;
-    administrator: boolean;
-    superAdmin: boolean;
-    systemTheme: string;
-    embedTitle: string;
-    embedColor: string;
-    embedSiteName: string;
-    ratelimit: Date;
-    totpSecret: string;
-    domains: string[];
-    oauth: OAuth[];
-}
-
 export class ImageUpload {
     private static instance: ImageUpload;
     private constructor() {}

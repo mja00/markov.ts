@@ -1,6 +1,6 @@
 import { APIApplicationCommandBasicOption, ApplicationCommandOptionType } from 'discord.js';
 
-import { DevCommandName, HelpOption, InfoOption } from '../enums/index.js';
+import { DevCommandName, FishingOption, HelpOption, InfoOption } from '../enums/index.js';
 import { Language } from '../models/enum-helpers/index.js';
 import { Lang } from '../services/index.js';
 
@@ -61,6 +61,23 @@ export class Args {
         description: Lang.getRef('argDescs.fishing', Language.Default),
         description_localizations: Lang.getRefLocalizationMap('argDescs.fishing'),
         type: ApplicationCommandOptionType.String,
-        choices: [],
+        choices: [
+            {
+                name: 'Stats',
+                value: FishingOption.STATS,
+            },
+            {
+                name: 'Leaderboard',
+                value: FishingOption.LEADERBOARD,
+            },
+        ],
+    };
+    public static readonly BUY: APIApplicationCommandBasicOption = {
+        name: Lang.getRef('arguments.buy', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('arguments.buy'),
+        description: Lang.getRef('argDescs.buy', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('argDescs.buy'),
+        type: ApplicationCommandOptionType.String,
+        required: true,
     };
 }

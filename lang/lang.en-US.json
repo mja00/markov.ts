@@ -194,7 +194,10 @@
             "test": "test",
             "generateImage": "generate_image",
             "fish": "fish",
-            "fishing": "fishing"
+            "fishing": "fishing",
+            "shop": "shop",
+            "buy": "buy",
+            "inventory": "inventory"
         },
         "userCommands": {
             "viewDateJoined": "View Date Joined"
@@ -206,7 +209,8 @@
             "command": "command",
             "option": "option",
             "prompt": "prompt",
-            "fishing": "fishing"
+            "fishing": "fishing",
+            "buy": "shop_item_id"
         },
         "commandDescs": {
             "dev": "Developer use only.",
@@ -215,14 +219,18 @@
             "test": "Run the test command.",
             "generateImage": "Generate an image.",
             "fish": "Go fishing!",
-            "fishing": "Manage fishing."
+            "fishing": "Manage fishing.",
+            "shop": "Browse items in the shop.",
+            "buy": "Purchase an item from the shop.",
+            "inventory": "View your inventory."
         },
         "argDescs": {
             "devCommand": "Command.",
             "helpOption": "Option.",
             "infoOption": "Option.",
             "generateImagePrompt": "Prompt for the image command.",
-            "fishing": "Choose a subcommand"
+            "fishing": "Choose a subcommand",
+            "buy": "The shop item ID to purchase"
         },
         "fields": {
             "commands": "Commands",
@@ -233,6 +241,7 @@
             "Administrator": "Administrator",
             "AttachFiles": "Attach Files",
             "BanMembers": "Ban Members",
+            "BypassSlowmode": "Bypass Slowmode",
             "ChangeNickname": "Change Nickname",
             "Connect": "Connect",
             "CreateEvents": "Create Events",
