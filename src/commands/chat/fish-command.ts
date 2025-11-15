@@ -1,9 +1,10 @@
 import { ChatInputCommandInteraction, EmbedBuilder, PermissionsString } from 'discord.js';
 import { RateLimiter } from 'discord.js-rate-limiter';
 
+import { Rarity } from '../../enums/rarity.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
-import { FishingService, Rarity } from '../../services/fishing.service.js';
+import { FishingService } from '../../services/fishing.service.js';
 import { Lang, Logger } from '../../services/index.js';
 import { UserService } from '../../services/user.service.js';
 import { InteractionUtils } from '../../utils/index.js';
@@ -35,8 +36,30 @@ export class FishCommand implements Command {
                 return;
             }
 
-            // Determine rarity based on weighted random
-            const rarity = this.fishingService.determineRarity();
+            // Auto-use best consumable for rarity boost
+            const itemEffectsService = this.fishingService.itemEffectsService;
+            const bestConsumable = await itemEffectsService.getBestConsumableRarityBoost(user.id);
+            let consumableBoost = 0;
+            let usedConsumable: { name: string; boost: number } | null = null;
+
+            if (bestConsumable) {
+                const boostValue = parseFloat(bestConsumable.item.effectValue || '0');
+                if (!isNaN(boostValue) && boostValue > 0) {
+                    // Use the consumable
+                    const consumed = await itemEffectsService.useConsumable(user.id, bestConsumable.item.id);
+                    if (consumed) {
+                        consumableBoost = boostValue;
+                        usedConsumable = {
+                            name: consumed.name,
+                            boost: boostValue,
+                        };
+                        Logger.info(`[FishCommand] Auto-used consumable ${consumed.name} (+${(boostValue * 100).toFixed(0)}% boost) for ${intr.user.tag}`);
+                    }
+                }
+            }
+
+            // Determine rarity based on weighted random (with item effects + consumable)
+            const rarity = await this.fishingService.determineRarity(user.id, consumableBoost);
             Logger.debug(`[FishCommand] Picked rarity: ${rarity} (${this.fishingService.getRarityName(rarity)}) for ${intr.user.tag}`);
 
             // Pick a random catchable of that rarity
@@ -59,8 +82,11 @@ export class FishCommand implements Command {
                 firstTimeCaught = true;
             }
 
+            // Calculate final worth with item effects applied
+            const finalWorth = await this.fishingService.calculateFinalWorth(caught.worth, user.id);
+
             // Add worth to user's balance
-            await this.userService.addMoney(user.id, caught.worth);
+            await this.userService.addMoney(user.id, finalWorth);
 
             // Record the catch
             await this.fishingService.addCatch(user.id, caught.id);
@@ -68,16 +94,24 @@ export class FishCommand implements Command {
             // Build response embed
             const rarityName = this.fishingService.getRarityName(caught.rarity as Rarity);
             const rarityColor = this.fishingService.getRarityColor(caught.rarity as Rarity);
-            const newBalance = user.money + caught.worth;
+            const newBalance = user.money + finalWorth;
+
+            // Show worth with multiplier indicator if different from base
+            const worthDisplay = finalWorth !== caught.worth ? `${caught.worth} → ${finalWorth}` : `${finalWorth}`;
+
+            let description = `You caught a **${rarityName}** ${caught.name}!`;
+            if (firstTimeCaught) {
+                description += '\n\n🌟 **You\'re the first to catch this!**';
+            }
+            if (usedConsumable) {
+                description += `\n\n🎣 Used **${usedConsumable.name}** (+${(usedConsumable.boost * 100).toFixed(0)}% rarity boost)`;
+            }
 
             const embed = new EmbedBuilder()
                 .setTitle('🎣 Fishing Success!')
-                .setDescription(
-                    `You caught a **${rarityName}** ${caught.name}!` +
-                        (firstTimeCaught ? '\n\n🌟 **You\'re the first to catch this!**' : '')
-                )
+                .setDescription(description)
                 .addFields(
-                    { name: 'Worth', value: `${caught.worth} coins`, inline: true },
+                    { name: 'Worth', value: `${worthDisplay} coins`, inline: true },
                     { name: 'New Balance', value: `${newBalance} coins`, inline: true },
                     { name: 'Rarity', value: rarityName, inline: true }
                 )
@@ -90,7 +124,7 @@ export class FishCommand implements Command {
 
             await InteractionUtils.send(intr, embed);
 
-            Logger.info(`[FishCommand] ${intr.user.tag} caught ${caught.name} (${rarityName}) worth ${caught.worth} coins`);
+            Logger.info(`[FishCommand] ${intr.user.tag} caught ${caught.name} (${rarityName}) worth ${finalWorth} coins (base: ${caught.worth})`);
         } catch (error) {
             Logger.error('[FishCommand] Error executing fish command:', error);
 

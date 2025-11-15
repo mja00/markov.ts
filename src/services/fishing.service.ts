@@ -1,18 +1,10 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from './database.service.js';
+import { ItemEffectsService } from './item-effects.service.js';
 import { Logger } from './logger.js';
 import { Catchable, catchables, catches, CatchInsert } from '../db/schema.js';
-
-/**
- * Rarity levels for catchables
- */
-export enum Rarity {
-    COMMON = 0,
-    UNCOMMON = 1,
-    RARE = 2,
-    LEGENDARY = 3,
-}
+import { Rarity } from '../enums/rarity.js';
 
 /**
  * Rarity weights for random selection
@@ -29,11 +21,24 @@ const RARITY_WEIGHTS = {
  * Service for managing fishing operations
  */
 export class FishingService {
+    public readonly itemEffectsService: ItemEffectsService;
+
+    constructor() {
+        this.itemEffectsService = new ItemEffectsService();
+    }
+
     /**
      * Determine rarity based on weighted random selection
+     * @param userId - Optional user ID to apply item effects
+     * @param consumableBoost - Optional additional boost from a consumable item
      * @returns The selected rarity level
      */
-    public determineRarity(): Rarity {
+    public async determineRarity(userId?: string, consumableBoost?: number): Promise<Rarity> {
+        if (userId) {
+            return await this.itemEffectsService.determineRarityWithEffects(userId, consumableBoost);
+        }
+
+        // Fallback to base weights if no user ID provided
         const random = Math.random() * 100;
         let cumulative = 0;
 
@@ -47,6 +52,21 @@ export class FishingService {
 
         // Fallback to common (should never reach here)
         return Rarity.COMMON;
+    }
+
+    /**
+     * Calculate final worth with item effects applied
+     * @param baseWorth - Base worth of the fish
+     * @param userId - Optional user ID to apply item effects
+     * @returns Final worth after multipliers
+     */
+    public async calculateFinalWorth(baseWorth: number, userId?: string): Promise<number> {
+        if (!userId) {
+            return baseWorth;
+        }
+
+        const multiplier = await this.itemEffectsService.getTotalWorthMultiplier(userId);
+        return this.itemEffectsService.applyWorthMultiplier(baseWorth, multiplier);
     }
 
     /**

@@ -7,8 +7,9 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import { Catchable, User } from '../db/schema.js';
 import * as schema from '../db/schema.js';
+import { Rarity } from '../enums/rarity.js';
 import { getDb as getDatabase } from '../services/database.service.js';
-import { FishingService, Rarity } from '../services/fishing.service.js';
+import { FishingService } from '../services/fishing.service.js';
 import { UserService } from '../services/user.service.js';
 
 // Service instances
@@ -85,4 +86,4 @@ export { userService, fishingService };
 
 // Re-export types
 export type { User, Catchable } from '../db/schema.js';
-export { Rarity } from '../services/fishing.service.js';
+export { Rarity } from '../enums/rarity.js';

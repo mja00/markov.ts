@@ -1,8 +1,10 @@
 import { ChatInputCommandInteraction, EmbedBuilder, PermissionsString } from 'discord.js';
 
+import { Item } from '../../db/schema.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
 import { Lang, Logger } from '../../services/index.js';
+import { EffectType } from '../../services/item-effects.service.js';
 import { ShopService } from '../../services/shop.service.js';
 import { UserService } from '../../services/user.service.js';
 import { InteractionUtils } from '../../utils/interaction-utils.js';
@@ -15,6 +17,33 @@ export class InventoryCommand implements Command {
 
     private readonly userService = new UserService();
     private readonly shopService = new ShopService();
+
+    /**
+     * Format item effect for display
+     * @param item - The item to format
+     * @returns Formatted effect string or empty string
+     */
+    private formatItemEffect(item: Item): string {
+        if (!item.effectType || !item.effectValue) {
+            return '';
+        }
+
+        const effectValue = parseFloat(item.effectValue);
+        if (isNaN(effectValue)) {
+            return '';
+        }
+
+        const typeLabel = item.isPassive ? 'Passive' : item.isConsumable ? 'Consumable' : '';
+
+        switch (item.effectType) {
+            case EffectType.RARITY_BOOST:
+                return `${typeLabel ? `${typeLabel} - ` : ''}+${(effectValue * 100).toFixed(0)}% rarity boost`;
+            case EffectType.WORTH_MULTIPLIER:
+                return `${typeLabel ? `${typeLabel} - ` : ''}${effectValue.toFixed(1)}x worth multiplier`;
+            default:
+                return '';
+        }
+    }
 
     /**
      * Execute the inventory command
@@ -61,9 +90,15 @@ export class InventoryCommand implements Command {
 
             // Add each inventory item as a field
             for (const { inventory, item } of inventoryItems) {
+                const effectText = this.formatItemEffect(item);
+                const valueParts = [`**Quantity:** ${inventory.count}`];
+                if (effectText) {
+                    valueParts.push(`**Effect:** ${effectText}`);
+                }
+
                 embed.addFields({
                     name: `${item.name}`,
-                    value: `**Quantity:** ${inventory.count}`,
+                    value: valueParts.join('\n'),
                     inline: true,
                 });
             }

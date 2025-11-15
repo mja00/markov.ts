@@ -8,8 +8,9 @@
 import 'dotenv/config';
 
 import { catchables, items, shop } from '../db/schema.js';
+import { Rarity } from '../enums/rarity.js';
 import { DatabaseService } from '../services/database.service.js';
-import { Rarity } from '../services/fishing.service.js';
+import { EffectType } from '../services/item-effects.service.js';
 import { Logger } from '../services/logger.js';
 
 /**
@@ -73,14 +74,70 @@ const seedShopItems = async (): Promise<void> => {
 
     // First, create items
     const itemsData = [
-        { name: 'Basic Bait', image: null },
-        { name: 'Premium Bait', image: null },
-        { name: 'Lucky Charm', image: null },
-        { name: 'Fishing Rod Upgrade', image: null },
-        { name: 'Deep Sea Lure', image: null },
-        { name: 'Golden Hook', image: null },
-        { name: 'Sonar Device', image: null },
-        { name: 'Auto Fisher', image: null },
+        {
+            name: 'Basic Bait',
+            image: null,
+            effectType: EffectType.RARITY_BOOST,
+            effectValue: '0.05', // 5% rarity boost
+            isConsumable: true,
+            isPassive: false,
+        },
+        {
+            name: 'Premium Bait',
+            image: null,
+            effectType: EffectType.RARITY_BOOST,
+            effectValue: '0.15', // 15% rarity boost
+            isConsumable: true,
+            isPassive: false,
+        },
+        {
+            name: 'Lucky Charm',
+            image: null,
+            effectType: EffectType.RARITY_BOOST,
+            effectValue: '0.10', // 10% rarity boost
+            isConsumable: false,
+            isPassive: true,
+        },
+        {
+            name: 'Fishing Rod Upgrade',
+            image: null,
+            effectType: EffectType.RARITY_BOOST,
+            effectValue: '0.15', // 15% rarity boost
+            isConsumable: false,
+            isPassive: true,
+        },
+        {
+            name: 'Deep Sea Lure',
+            image: null,
+            effectType: EffectType.RARITY_BOOST,
+            effectValue: '0.20', // 20% rarity boost
+            isConsumable: false,
+            isPassive: true,
+        },
+        {
+            name: 'Golden Hook',
+            image: null,
+            effectType: EffectType.WORTH_MULTIPLIER,
+            effectValue: '1.50', // 1.5x worth multiplier
+            isConsumable: false,
+            isPassive: true,
+        },
+        {
+            name: 'Sonar Device',
+            image: null,
+            effectType: EffectType.RARITY_BOOST,
+            effectValue: '0.25', // 25% rarity boost
+            isConsumable: false,
+            isPassive: true,
+        },
+        {
+            name: 'Auto Fisher',
+            image: null,
+            effectType: null, // No effect (handled by user.autoFishing flag)
+            effectValue: null,
+            isConsumable: false,
+            isPassive: false,
+        },
     ];
 
     try {

@@ -1,9 +1,10 @@
 import { ChatInputCommandInteraction, EmbedBuilder, PermissionsString } from 'discord.js';
 
 import { FishingOption } from '../../enums/fishing-option.js';
+import { Rarity } from '../../enums/rarity.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
-import { FishingService, Rarity } from '../../services/fishing.service.js';
+import { FishingService } from '../../services/fishing.service.js';
 import { Lang, Logger } from '../../services/index.js';
 import { UserService } from '../../services/user.service.js';
 import { InteractionUtils } from '../../utils/interaction-utils.js';

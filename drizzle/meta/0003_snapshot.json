@@ -1,4 +1,6 @@
 {
+  "id": "177d2d4f-c93c-40b2-a893-a880df9673be",
+  "prevId": "b4f5cc90-6051-4a08-a071-49293d1b7e3e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -65,22 +67,22 @@
         "catchables_first_caught_by_users_id_fk": {
           "name": "catchables_first_caught_by_users_id_fk",
           "tableFrom": "catchables",
+          "tableTo": "users",
           "columnsFrom": [
             "first_caught_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.catches": {
       "name": "catches",
@@ -125,35 +127,35 @@
         "catches_catchable_id_catchables_id_fk": {
           "name": "catches_catchable_id_catchables_id_fk",
           "tableFrom": "catches",
+          "tableTo": "catchables",
           "columnsFrom": [
             "catchable_id"
           ],
-          "tableTo": "catchables",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "catches_caught_by_users_id_fk": {
           "name": "catches_caught_by_users_id_fk",
           "tableFrom": "catches",
+          "tableTo": "users",
           "columnsFrom": [
             "caught_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.inventory": {
       "name": "inventory",
@@ -205,35 +207,35 @@
         "inventory_user_id_users_id_fk": {
           "name": "inventory_user_id_users_id_fk",
           "tableFrom": "inventory",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "inventory_item_id_items_id_fk": {
           "name": "inventory_item_id_items_id_fk",
           "tableFrom": "inventory",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.items": {
       "name": "items",
@@ -258,6 +260,33 @@
           "primaryKey": false,
           "notNull": false
         },
+        "effect_type": {
+          "name": "effect_type",
+          "type": "effect_type_enum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effect_value": {
+          "name": "effect_value",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_consumable": {
+          "name": "is_consumable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_passive": {
+          "name": "is_passive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -278,8 +307,8 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.purchases": {
       "name": "purchases",
@@ -330,48 +359,48 @@
         "purchases_user_id_users_id_fk": {
           "name": "purchases_user_id_users_id_fk",
           "tableFrom": "purchases",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "purchases_item_id_items_id_fk": {
           "name": "purchases_item_id_items_id_fk",
           "tableFrom": "purchases",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "purchases_shop_id_shop_id_fk": {
           "name": "purchases_shop_id_shop_id_fk",
           "tableFrom": "purchases",
+          "tableTo": "shop",
           "columnsFrom": [
             "shop_id"
           ],
-          "tableTo": "shop",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.shop": {
       "name": "shop",
@@ -417,22 +446,22 @@
         "shop_item_id_items_id_fk": {
           "name": "shop_item_id_items_id_fk",
           "tableFrom": "shop",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.users": {
       "name": "users",
@@ -492,28 +521,35 @@
       "uniqueConstraints": {
         "users_discord_snowflake_unique": {
           "name": "users_discord_snowflake_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "discord_snowflake"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
-      "isRLSEnabled": false,
-      "checkConstraints": {}
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
-  "enums": {},
-  "schemas": {},
-  "_meta": {
-    "schemas": {},
-    "tables": {},
-    "columns": {}
+  "enums": {
+    "public.effect_type_enum": {
+      "name": "effect_type_enum",
+      "schema": "public",
+      "values": [
+        "RARITY_BOOST",
+        "WORTH_MULTIPLIER"
+      ]
+    }
   },
-  "id": "b4f5cc90-6051-4a08-a071-49293d1b7e3e",
-  "prevId": "cc00339b-e652-4dcb-a816-fad4510eaeed",
+  "schemas": {},
   "sequences": {},
+  "roles": {},
   "policies": {},
   "views": {},
-  "roles": {}
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
 }

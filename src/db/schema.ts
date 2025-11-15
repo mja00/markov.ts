@@ -1,5 +1,5 @@
 import { InferInsertModel, InferSelectModel } from 'drizzle-orm';
-import { boolean, integer, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, integer, numeric, pgEnum, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
     id: uuid('id').defaultRandom().primaryKey(),
@@ -39,10 +39,17 @@ export const catches = pgTable('catches', {
 export type Catch = InferSelectModel<typeof catches>;
 export type CatchInsert = InferInsertModel<typeof catches>;
 
+// Enum for item effect types
+export const effectTypeEnum = pgEnum('effect_type_enum', ['RARITY_BOOST', 'WORTH_MULTIPLIER']);
+
 export const items = pgTable('items', {
     id: uuid('id').defaultRandom().primaryKey(),
     name: varchar('name', { length: 255 }).notNull(),
     image: varchar('image', { length: 255 }),
+    effectType: effectTypeEnum('effect_type'),
+    effectValue: numeric('effect_value', { precision: 10, scale: 2 }),
+    isConsumable: boolean('is_consumable').default(false).notNull(),
+    isPassive: boolean('is_passive').default(false).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
