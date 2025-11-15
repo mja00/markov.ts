@@ -91,3 +91,26 @@ export const inventory = pgTable('inventory', {
 
 export type Inventory = InferSelectModel<typeof inventory>;
 export type InventoryInsert = InferInsertModel<typeof inventory>;
+
+export const guilds = pgTable('guilds', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    discordSnowflake: varchar('discord_snowflake', { length: 255 }).unique().notNull(),
+    fishingCooldownLimit: integer('fishing_cooldown_limit').default(10).notNull(),
+    fishingCooldownWindowSeconds: integer('fishing_cooldown_window_seconds').default(3600).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export type Guild = InferSelectModel<typeof guilds>;
+export type GuildInsert = InferInsertModel<typeof guilds>;
+
+export const fishingAttempts = pgTable('fishing_attempts', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id).notNull(),
+    guildId: uuid('guild_id').references(() => guilds.id),
+    attemptedAt: timestamp('attempted_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export type FishingAttempt = InferSelectModel<typeof fishingAttempts>;
+export type FishingAttemptInsert = InferInsertModel<typeof fishingAttempts>;
