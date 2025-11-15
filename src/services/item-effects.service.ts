@@ -212,11 +212,11 @@ export class ItemEffectsService {
 
         // Increase higher rarities proportionally
         if (totalHigherRarityWeight > 0) {
-            const uncommmonRatio = BASE_RARITY_WEIGHTS[Rarity.UNCOMMON] / totalHigherRarityWeight;
+            const uncommonRatio = BASE_RARITY_WEIGHTS[Rarity.UNCOMMON] / totalHigherRarityWeight;
             const rareRatio = BASE_RARITY_WEIGHTS[Rarity.RARE] / totalHigherRarityWeight;
             const legendaryRatio = BASE_RARITY_WEIGHTS[Rarity.LEGENDARY] / totalHigherRarityWeight;
 
-            weights[Rarity.UNCOMMON] = BASE_RARITY_WEIGHTS[Rarity.UNCOMMON] + reductionFromCommon * uncommmonRatio;
+            weights[Rarity.UNCOMMON] = BASE_RARITY_WEIGHTS[Rarity.UNCOMMON] + reductionFromCommon * uncommonRatio;
             weights[Rarity.RARE] = BASE_RARITY_WEIGHTS[Rarity.RARE] + reductionFromCommon * rareRatio;
             weights[Rarity.LEGENDARY] = BASE_RARITY_WEIGHTS[Rarity.LEGENDARY] + reductionFromCommon * legendaryRatio;
         }
