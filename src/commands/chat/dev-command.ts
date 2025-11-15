@@ -1,4 +1,5 @@
-import djs, { ChatInputCommandInteraction, PermissionsString } from 'discord.js';
+import * as djs from 'discord.js';
+import { ChatInputCommandInteraction, PermissionsString } from 'discord.js';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import typescript from 'typescript';
