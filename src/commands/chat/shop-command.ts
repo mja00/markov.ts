@@ -176,7 +176,7 @@ export class ShopCommand implements Command {
                     embeds: [embed],
                     components: components,
                     flags: MessageFlags.Ephemeral,
-                    fetchReply: true,
+                    withResponse: true,
                 });
             }
         } catch (error) {

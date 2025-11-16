@@ -87,7 +87,7 @@ export class InteractionUtils {
                 return await intr.reply({
                     ...options,
                     flags: hidden ? MessageFlags.Ephemeral : undefined,
-                    fetchReply: true,
+                    withResponse: true,
                 });
             }
         } catch (error) {
@@ -160,7 +160,7 @@ export class InteractionUtils {
                       : content;
             return await intr.update({
                 ...options,
-                fetchReply: true,
+                withResponse: true,
             });
         } catch (error) {
             if (
