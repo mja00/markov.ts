@@ -1,5 +1,13 @@
-import { ChatInputCommandInteraction, EmbedBuilder, PermissionsString } from 'discord.js';
+import {
+    ApplicationCommandOptionChoiceData,
+    AutocompleteFocusedOption,
+    AutocompleteInteraction,
+    ChatInputCommandInteraction,
+    EmbedBuilder,
+    PermissionsString,
+} from 'discord.js';
 
+import { ShopLimits } from '../../constants/shop-limits.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
 import { Lang, Logger } from '../../services/index.js';
@@ -17,6 +25,63 @@ export class BuyCommand implements Command {
     private readonly shopService = new ShopService();
 
     /**
+     * Autocomplete handler for the buy command
+     * Suggests item slugs that are available in the shop
+     */
+    public async autocomplete(
+        intr: AutocompleteInteraction,
+        option: AutocompleteFocusedOption
+    ): Promise<ApplicationCommandOptionChoiceData[]> {
+        try {
+            // Only handle autocomplete for the buy argument
+            if (option.name !== Lang.getRef('arguments.buy', Language.Default)) {
+                return [];
+            }
+
+            const userInput = typeof option.value === 'string' ? option.value.toLowerCase() : '';
+
+            // Get all shop items
+            const shopItems = await this.shopService.getShopItems();
+
+            // Filter and map to choices
+            const filteredItems = shopItems.filter((shopItem) => {
+                // Only show items that have slugs
+                if (!shopItem.item.slug) {
+                    return false;
+                }
+
+                // Filter by slug or name if user has typed something
+                if (!userInput) {
+                    return true;
+                }
+
+                const slug = shopItem.item.slug.toLowerCase();
+                const name = shopItem.item.name.toLowerCase();
+
+                return slug.includes(userInput) || name.includes(userInput);
+            });
+
+            const choices: ApplicationCommandOptionChoiceData[] = filteredItems
+                .map((shopItem) => {
+                    // TypeScript knows slug is not null here due to filter above
+                    const slug = shopItem.item.slug;
+                    const displayName = `${shopItem.item.name} (${shopItem.shop.cost} coins)`;
+
+                    return {
+                        name: displayName,
+                        value: slug,
+                    } as ApplicationCommandOptionChoiceData;
+                })
+                .slice(0, 25); // Discord limit is 25 choices
+
+            return choices;
+        } catch (error) {
+            Logger.error('[BuyCommand] Error in autocomplete:', error);
+            return [];
+        }
+    }
+
+    /**
      * Execute the buy command
      * Allows users to purchase items from the shop
      */
@@ -24,13 +89,34 @@ export class BuyCommand implements Command {
         try {
             Logger.info(`[BuyCommand] Buy command executed by ${intr.user.tag}`);
 
-            // Get the shop ID argument
-            const shopId = intr.options.getString(Lang.getRef('arguments.buy', Language.Default));
+            // Get the shop item identifier (ID or slug) argument
+            const identifier = intr.options.getString(Lang.getRef('arguments.buy', Language.Default));
+            const quantity = intr.options.getInteger(Lang.getRef('arguments.buyQuantity', Language.Default)) || 1;
 
-            if (!shopId) {
+            if (!identifier) {
                 const embed = new EmbedBuilder()
                     .setTitle('Error')
-                    .setDescription('Please provide a valid shop item ID.\nUse `/shop` to see available items.')
+                    .setDescription('Please provide a valid shop item ID or slug.\nUse `/shop` to see available items.')
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed);
+                return;
+            }
+
+            if (quantity < 1) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription('Quantity must be at least 1.')
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed);
+                return;
+            }
+
+            if (quantity > ShopLimits.MAX_PURCHASE_QUANTITY) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription(`Maximum quantity is ${ShopLimits.MAX_PURCHASE_QUANTITY}.`)
                     .setColor(0xff0000);
 
                 await InteractionUtils.send(intr, embed);
@@ -51,56 +137,15 @@ export class BuyCommand implements Command {
                 return;
             }
 
-            // Get shop item details
-            const shopItem = await this.shopService.getShopItemById(shopId);
-
-            if (!shopItem) {
-                const embed = new EmbedBuilder()
-                    .setTitle('Error')
-                    .setDescription('Shop item not found. Please check the item ID and try again.')
-                    .setColor(0xff0000);
-
-                await InteractionUtils.send(intr, embed);
-                return;
-            }
-
-            // Attempt to purchase
-            try {
-                const result = await this.shopService.purchaseItem(user.id, shopId);
-
-                // Get updated user balance
-                const updatedUser = await this.userService.getUserById(user.id);
-
-                const embed = new EmbedBuilder()
-                    .setTitle('✅ Purchase Successful!')
-                    .setDescription(`You purchased **${shopItem.item.name}**!`)
-                    .addFields(
-                        { name: 'Cost', value: `${shopItem.shop.cost} coins`, inline: true },
-                        { name: 'New Balance', value: `${updatedUser?.money || 0} coins`, inline: true },
-                        { name: 'Quantity', value: `${result.inventory.count}`, inline: true }
-                    )
-                    .setColor(0x2ecc71);
-
-                if (shopItem.item.image) {
-                    embed.setThumbnail(shopItem.item.image);
-                }
-
-                await InteractionUtils.send(intr, embed);
-
-                Logger.info(`[BuyCommand] ${intr.user.tag} purchased ${shopItem.item.name} for ${shopItem.shop.cost} coins`);
-            } catch (purchaseError) {
-                // Handle specific purchase errors (insufficient funds, etc.)
-                const errorMessage =
-                    purchaseError instanceof Error ? purchaseError.message : 'An unknown error occurred';
-
-                const embed = new EmbedBuilder()
-                    .setTitle('❌ Purchase Failed')
-                    .setDescription(errorMessage)
-                    .addFields({ name: 'Your Balance', value: `${user.money} coins`, inline: true })
-                    .setColor(0xff0000);
-
-                await InteractionUtils.send(intr, embed);
-            }
+            // Execute purchase with response handling
+            await this.shopService.executePurchaseWithResponse(
+                intr,
+                user.id,
+                intr.user.tag,
+                identifier,
+                quantity,
+                false, // Commands are not ephemeral by default
+            );
         } catch (error) {
             Logger.error('[BuyCommand] Error executing buy command:', error);
 

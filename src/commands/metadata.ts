@@ -130,6 +130,10 @@ export const ChatCommandMetadata: {
                 ...Args.BUY,
                 required: true,
             },
+            {
+                ...Args.BUY_QUANTITY,
+                required: false,
+            },
         ],
     },
     INVENTORY: {

@@ -36,6 +36,7 @@
         "db:add-catchables": "npm run build && node --enable-source-maps dist/scripts/add-catchables.js",
         "db:migrate": "npm run build && node --enable-source-maps dist/scripts/migrate.js",
         "db:seed": "npm run build && node --enable-source-maps dist/scripts/seed.js",
+        "db:populate-slugs": "npm run build && node --enable-source-maps dist/scripts/populate-slugs.js",
         "db:setup": "npm run db:push && npm run db:seed",
         "db:generate": "drizzle-kit generate --config=src/drizzle.config.ts",
         "db:push": "drizzle-kit push --config=src/drizzle.config.ts",

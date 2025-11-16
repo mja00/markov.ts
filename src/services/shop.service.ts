@@ -1,9 +1,12 @@
+import { ChatInputCommandInteraction, EmbedBuilder, ModalSubmitInteraction } from 'discord.js';
 import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { getDb } from './database.service.js';
 import { Logger } from './logger.js';
 import { UserService } from './user.service.js';
+import { ShopLimits } from '../constants/shop-limits.js';
 import { Inventory, inventory, InventoryInsert, Item, items, PurchaseInsert, purchases, Shop, shop, users } from '../db/schema.js';
+import { InteractionUtils } from '../utils/interaction-utils.js';
 
 /**
  * Service for managing shop and inventory operations
@@ -73,24 +76,77 @@ export class ShopService {
     }
 
     /**
+     * Get a shop item by item slug
+     * @param slug - The item slug
+     * @returns Shop item with item details, or null if not found
+     */
+    public async getShopItemBySlug(slug: string): Promise<{
+        shop: Shop;
+        item: Item;
+    } | null> {
+        const db = getDb();
+
+        try {
+            const result = await db
+                .select({
+                    shop: shop,
+                    item: items,
+                })
+                .from(shop)
+                .innerJoin(items, eq(shop.itemId, items.id))
+                .where(eq(items.slug, slug))
+                .limit(1);
+
+            return result[0] || null;
+        } catch (error) {
+            Logger.error(`[ShopService] Failed to get shop item by slug ${slug}:`, error);
+            throw new Error(`Failed to get shop item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Get a shop item by ID or slug
+     * @param identifier - The shop entry UUID or slug
+     * @returns Shop item with item details, or null if not found
+     */
+    public async getShopItemByIdOrSlug(identifier: string): Promise<{
+        shop: Shop;
+        item: Item;
+    } | null> {
+        // Check if identifier matches UUID format (8-4-4-4-12 hexadecimal pattern)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(identifier)) {
+            return await this.getShopItemById(identifier);
+        }
+        // Otherwise try as slug
+        return await this.getShopItemBySlug(identifier);
+    }
+
+    /**
      * Purchase an item from the shop
      * @param userId - The user UUID
-     * @param shopId - The shop entry UUID
-     * @returns The purchase record and updated inventory
+     * @param identifier - The shop entry UUID or slug
+     * @param quantity - Number of items to purchase (default: 1)
+     * @returns The purchase records and updated inventory
      * @throws Error if user doesn't have enough money or item not found
      */
     public async purchaseItem(
         userId: string,
-        shopId: string,
+        identifier: string,
+        quantity: number = 1,
     ): Promise<{
-        purchase: PurchaseInsert;
+        purchases: PurchaseInsert[];
         inventory: Inventory;
     }> {
         const db = getDb();
 
+        if (quantity < 1) {
+            throw new Error('Quantity must be at least 1');
+        }
+
         try {
-            // Get shop item
-            const shopItem = await this.getShopItemById(shopId);
+            // Get shop item by ID or slug
+            const shopItem = await this.getShopItemByIdOrSlug(identifier);
 
             if (!shopItem) {
                 throw new Error('Shop item not found');
@@ -103,9 +159,11 @@ export class ShopService {
                 throw new Error('User not found');
             }
 
+            const totalCost = shopItem.shop.cost * quantity;
+
             // Check if user has enough money
-            if (user.money < shopItem.shop.cost) {
-                throw new Error(`Insufficient funds. Need ${shopItem.shop.cost} coins, have ${user.money} coins`);
+            if (user.money < totalCost) {
+                throw new Error(`Insufficient funds. Need ${totalCost} coins, have ${user.money} coins`);
             }
 
             // Execute all operations in a transaction to ensure atomicity
@@ -115,13 +173,13 @@ export class ShopService {
                 const updatedUser = await tx
                     .update(users)
                     .set({
-                        money: sql`${users.money} - ${shopItem.shop.cost}`,
+                        money: sql`${users.money} - ${totalCost}`,
                         updatedAt: new Date(),
                     })
                     .where(
                         and(
                             eq(users.id, userId),
-                            gte(users.money, shopItem.shop.cost),
+                            gte(users.money, totalCost),
                         ),
                     )
                     .returning();
@@ -140,18 +198,21 @@ export class ShopService {
                     }
 
                     throw new Error(
-                        `Insufficient funds. Need ${shopItem.shop.cost} coins, have ${currentUser[0].money} coins`,
+                        `Insufficient funds. Need ${totalCost} coins, have ${currentUser[0].money} coins`,
                     );
                 }
 
-                // Create purchase record
-                const newPurchase: PurchaseInsert = {
-                    userId: userId,
-                    itemId: shopItem.item.id,
-                    shopId: shopId,
-                };
+                // Create purchase records for each item
+                const purchaseRecords: PurchaseInsert[] = [];
+                for (let i = 0; i < quantity; i++) {
+                    purchaseRecords.push({
+                        userId: userId,
+                        itemId: shopItem.item.id,
+                        shopId: shopItem.shop.id,
+                    });
+                }
 
-                const purchaseResult = await tx.insert(purchases).values(newPurchase).returning();
+                const purchaseResults = await tx.insert(purchases).values(purchaseRecords).returning();
 
                 // Update or create inventory entry
                 const existingInventory = await tx
@@ -166,7 +227,7 @@ export class ShopService {
                     const updated = await tx
                         .update(inventory)
                         .set({
-                            count: sql`${inventory.count} + 1`,
+                            count: sql`${inventory.count} + ${quantity}`,
                             updatedAt: new Date(),
                         })
                         .where(eq(inventory.id, existingInventory[0].id))
@@ -178,7 +239,7 @@ export class ShopService {
                     const newInventory: InventoryInsert = {
                         userId: userId,
                         itemId: shopItem.item.id,
-                        count: 1,
+                        count: quantity,
                     };
 
                     const created = await tx.insert(inventory).values(newInventory).returning();
@@ -186,15 +247,15 @@ export class ShopService {
                 }
 
                 return {
-                    purchase: purchaseResult[0],
+                    purchases: purchaseResults,
                     inventory: inventoryItem,
                 };
             });
 
-            Logger.info(`[ShopService] User ${userId} purchased item ${shopItem.item.name} for ${shopItem.shop.cost} coins`);
+            Logger.info(`[ShopService] User ${userId} purchased ${quantity} x ${shopItem.item.name} for ${totalCost} coins`);
 
             return {
-                purchase: result.purchase,
+                purchases: result.purchases,
                 inventory: result.inventory,
             };
         } catch (error) {
@@ -395,6 +456,125 @@ export class ShopService {
         } catch (error) {
             Logger.error(`[ShopService] Failed to get purchase history for user ${userId}:`, error);
             throw new Error(`Failed to get purchase history: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Execute a purchase and send the response to the user
+     * This method handles the entire purchase flow including UI responses
+     * @param intr - The interaction (command or modal)
+     * @param userId - The user UUID
+     * @param userTag - The user's Discord tag (for logging)
+     * @param identifier - The shop entry UUID or slug
+     * @param quantity - Number of items to purchase
+     * @param isEphemeral - Whether the response should be ephemeral (default: false for commands, true for modals)
+     */
+    public async executePurchaseWithResponse(
+        intr: ChatInputCommandInteraction | ModalSubmitInteraction,
+        userId: string,
+        userTag: string,
+        identifier: string,
+        quantity: number,
+        isEphemeral: boolean = false,
+    ): Promise<void> {
+        try {
+            // Validate quantity
+            if (quantity < 1) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription('Quantity must be at least 1.')
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+                return;
+            }
+
+            if (quantity > ShopLimits.MAX_PURCHASE_QUANTITY) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription(`Maximum quantity is ${ShopLimits.MAX_PURCHASE_QUANTITY}.`)
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+                return;
+            }
+
+            // Get shop item details
+            const shopItem = await this.getShopItemByIdOrSlug(identifier);
+
+            if (!shopItem) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription('Shop item not found. Please check the item ID or slug and try again.')
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+                return;
+            }
+
+            // Get user to check initial balance
+            const user = await this.userService.getUserById(userId);
+
+            if (!user) {
+                Logger.error(`[ShopService] User not found: ${userId}`);
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription('Failed to retrieve your user data.')
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+                return;
+            }
+
+            // Attempt to purchase
+            try {
+                const result = await this.purchaseItem(userId, identifier, quantity);
+
+                // Get updated user balance
+                const updatedUser = await this.userService.getUserById(userId);
+
+                const totalCost = shopItem.shop.cost * quantity;
+                const quantityText = quantity > 1 ? ` x${quantity}` : '';
+
+                const embed = new EmbedBuilder()
+                    .setTitle('✅ Purchase Successful!')
+                    .setDescription(`You purchased **${shopItem.item.name}**${quantityText}!`)
+                    .addFields(
+                        { name: 'Cost', value: `${totalCost} coins (${shopItem.shop.cost} each)`, inline: true },
+                        { name: 'New Balance', value: `${updatedUser?.money || 0} coins`, inline: true },
+                        { name: 'Total Quantity', value: `${result.inventory.count}`, inline: true }
+                    )
+                    .setColor(0x2ecc71);
+
+                if (shopItem.item.image) {
+                    embed.setThumbnail(shopItem.item.image);
+                }
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+
+                Logger.info(`[ShopService] ${userTag} purchased ${quantity} x ${shopItem.item.name} for ${totalCost} coins`);
+            } catch (purchaseError) {
+                // Handle specific purchase errors (insufficient funds, etc.)
+                const errorMessage =
+                    purchaseError instanceof Error ? purchaseError.message : 'An unknown error occurred';
+
+                const embed = new EmbedBuilder()
+                    .setTitle('❌ Purchase Failed')
+                    .setDescription(errorMessage)
+                    .addFields({ name: 'Your Balance', value: `${user.money} coins`, inline: true })
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+            }
+        } catch (error) {
+            Logger.error(`[ShopService] Error executing purchase for user ${userTag}:`, error);
+
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('Error')
+                .setDescription('An error occurred while processing your purchase. Please try again later.')
+                .setColor(0xff0000);
+
+            await InteractionUtils.send(intr, errorEmbed, isEphemeral);
         }
     }
 }

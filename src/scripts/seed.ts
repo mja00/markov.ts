@@ -72,11 +72,17 @@ const seedShopItems = async (): Promise<void> => {
 
     Logger.info('[DatabaseSeed] Seeding shop items...');
 
+    // Helper function to generate slug from name
+    const generateSlug = (name: string): string => {
+        return name.toLowerCase().replace(/\s+/g, '-');
+    };
+
     // First, create items
     const itemsData = [
         {
             name: 'Basic Bait',
             image: null,
+            slug: generateSlug('Basic Bait'),
             effectType: EffectType.RARITY_BOOST,
             effectValue: '0.05', // 5% rarity boost
             isConsumable: true,
@@ -85,6 +91,7 @@ const seedShopItems = async (): Promise<void> => {
         {
             name: 'Premium Bait',
             image: null,
+            slug: generateSlug('Premium Bait'),
             effectType: EffectType.RARITY_BOOST,
             effectValue: '0.15', // 15% rarity boost
             isConsumable: true,
@@ -93,6 +100,7 @@ const seedShopItems = async (): Promise<void> => {
         {
             name: 'Lucky Charm',
             image: null,
+            slug: generateSlug('Lucky Charm'),
             effectType: EffectType.RARITY_BOOST,
             effectValue: '0.10', // 10% rarity boost
             isConsumable: false,
@@ -101,6 +109,7 @@ const seedShopItems = async (): Promise<void> => {
         {
             name: 'Fishing Rod Upgrade',
             image: null,
+            slug: generateSlug('Fishing Rod Upgrade'),
             effectType: EffectType.RARITY_BOOST,
             effectValue: '0.15', // 15% rarity boost
             isConsumable: false,
@@ -109,6 +118,7 @@ const seedShopItems = async (): Promise<void> => {
         {
             name: 'Deep Sea Lure',
             image: null,
+            slug: generateSlug('Deep Sea Lure'),
             effectType: EffectType.RARITY_BOOST,
             effectValue: '0.20', // 20% rarity boost
             isConsumable: false,
@@ -117,6 +127,7 @@ const seedShopItems = async (): Promise<void> => {
         {
             name: 'Golden Hook',
             image: null,
+            slug: generateSlug('Golden Hook'),
             effectType: EffectType.WORTH_MULTIPLIER,
             effectValue: '1.50', // 1.5x worth multiplier
             isConsumable: false,
@@ -125,6 +136,7 @@ const seedShopItems = async (): Promise<void> => {
         {
             name: 'Sonar Device',
             image: null,
+            slug: generateSlug('Sonar Device'),
             effectType: EffectType.RARITY_BOOST,
             effectValue: '0.25', // 25% rarity boost
             isConsumable: false,
@@ -133,6 +145,7 @@ const seedShopItems = async (): Promise<void> => {
         {
             name: 'Auto Fisher',
             image: null,
+            slug: generateSlug('Auto Fisher'),
             effectType: null, // No effect (handled by user.autoFishing flag)
             effectValue: null,
             isConsumable: false,

@@ -80,4 +80,13 @@ export class Args {
         type: ApplicationCommandOptionType.String,
         required: true,
     };
+    public static readonly BUY_QUANTITY: APIApplicationCommandBasicOption = {
+        name: Lang.getRef('arguments.buyQuantity', Language.Default),
+        name_localizations: Lang.getRefLocalizationMap('arguments.buyQuantity'),
+        description: Lang.getRef('argDescs.buyQuantity', Language.Default),
+        description_localizations: Lang.getRefLocalizationMap('argDescs.buyQuantity'),
+        type: ApplicationCommandOptionType.Integer,
+        required: false,
+        min_value: 1,
+    };
 }

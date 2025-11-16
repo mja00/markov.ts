@@ -4,7 +4,7 @@ import { REST } from '@discordjs/rest';
 import { Options, Partials } from 'discord.js';
 import { createRequire } from 'node:module';
 
-import { Button } from './buttons/index.js';
+import { Button, ShopButton } from './buttons/index.js';
 import {
     BuyCommand,
     DevCommand,
@@ -31,6 +31,7 @@ import {
     GuildJoinHandler,
     GuildLeaveHandler,
     MessageHandler,
+    ModalHandler,
     ReactionHandler,
     TriggerHandler,
 } from './events/index.js';
@@ -93,6 +94,7 @@ async function start(): Promise<void> {
 
     // Buttons
     let buttons: Button[] = [
+        new ShopButton(),
         // TODO: Add new buttons here
     ];
 
@@ -111,6 +113,7 @@ async function start(): Promise<void> {
     let guildLeaveHandler = new GuildLeaveHandler();
     let commandHandler = new CommandHandler(commands, eventDataService);
     let buttonHandler = new ButtonHandler(buttons, eventDataService);
+    let modalHandler = new ModalHandler(eventDataService);
     let triggerHandler = new TriggerHandler(triggers, eventDataService);
     let messageHandler = new MessageHandler(triggerHandler);
     let reactionHandler = new ReactionHandler(reactions, eventDataService);
@@ -129,6 +132,7 @@ async function start(): Promise<void> {
         messageHandler,
         commandHandler,
         buttonHandler,
+        modalHandler,
         reactionHandler,
         new JobService(jobs)
     );
