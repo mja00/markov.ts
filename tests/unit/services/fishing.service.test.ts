@@ -1,4 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Mock the logger to prevent config.json loading
+vi.mock('../../../src/services/logger.js', () => ({
+    Logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+    },
+}));
 
 import { Rarity } from '../../../src/enums/rarity.js';
 import { FishingService } from '../../../src/services/fishing.service.js';
