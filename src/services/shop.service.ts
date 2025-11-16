@@ -73,24 +73,76 @@ export class ShopService {
     }
 
     /**
+     * Get a shop item by item slug
+     * @param slug - The item slug
+     * @returns Shop item with item details, or null if not found
+     */
+    public async getShopItemBySlug(slug: string): Promise<{
+        shop: Shop;
+        item: Item;
+    } | null> {
+        const db = getDb();
+
+        try {
+            const result = await db
+                .select({
+                    shop: shop,
+                    item: items,
+                })
+                .from(shop)
+                .innerJoin(items, eq(shop.itemId, items.id))
+                .where(eq(items.slug, slug))
+                .limit(1);
+
+            return result[0] || null;
+        } catch (error) {
+            Logger.error(`[ShopService] Failed to get shop item by slug ${slug}:`, error);
+            throw new Error(`Failed to get shop item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Get a shop item by ID or slug
+     * @param identifier - The shop entry UUID or slug
+     * @returns Shop item with item details, or null if not found
+     */
+    public async getShopItemByIdOrSlug(identifier: string): Promise<{
+        shop: Shop;
+        item: Item;
+    } | null> {
+        // Try as UUID first (UUIDs are 36 characters with dashes)
+        if (identifier.length === 36 && identifier.includes('-')) {
+            return await this.getShopItemById(identifier);
+        }
+        // Otherwise try as slug
+        return await this.getShopItemBySlug(identifier);
+    }
+
+    /**
      * Purchase an item from the shop
      * @param userId - The user UUID
-     * @param shopId - The shop entry UUID
-     * @returns The purchase record and updated inventory
+     * @param identifier - The shop entry UUID or slug
+     * @param quantity - Number of items to purchase (default: 1)
+     * @returns The purchase records and updated inventory
      * @throws Error if user doesn't have enough money or item not found
      */
     public async purchaseItem(
         userId: string,
-        shopId: string,
+        identifier: string,
+        quantity: number = 1,
     ): Promise<{
-        purchase: PurchaseInsert;
+        purchases: PurchaseInsert[];
         inventory: Inventory;
     }> {
         const db = getDb();
 
+        if (quantity < 1) {
+            throw new Error('Quantity must be at least 1');
+        }
+
         try {
-            // Get shop item
-            const shopItem = await this.getShopItemById(shopId);
+            // Get shop item by ID or slug
+            const shopItem = await this.getShopItemByIdOrSlug(identifier);
 
             if (!shopItem) {
                 throw new Error('Shop item not found');
@@ -103,9 +155,11 @@ export class ShopService {
                 throw new Error('User not found');
             }
 
+            const totalCost = shopItem.shop.cost * quantity;
+
             // Check if user has enough money
-            if (user.money < shopItem.shop.cost) {
-                throw new Error(`Insufficient funds. Need ${shopItem.shop.cost} coins, have ${user.money} coins`);
+            if (user.money < totalCost) {
+                throw new Error(`Insufficient funds. Need ${totalCost} coins, have ${user.money} coins`);
             }
 
             // Execute all operations in a transaction to ensure atomicity
@@ -115,13 +169,13 @@ export class ShopService {
                 const updatedUser = await tx
                     .update(users)
                     .set({
-                        money: sql`${users.money} - ${shopItem.shop.cost}`,
+                        money: sql`${users.money} - ${totalCost}`,
                         updatedAt: new Date(),
                     })
                     .where(
                         and(
                             eq(users.id, userId),
-                            gte(users.money, shopItem.shop.cost),
+                            gte(users.money, totalCost),
                         ),
                     )
                     .returning();
@@ -140,18 +194,21 @@ export class ShopService {
                     }
 
                     throw new Error(
-                        `Insufficient funds. Need ${shopItem.shop.cost} coins, have ${currentUser[0].money} coins`,
+                        `Insufficient funds. Need ${totalCost} coins, have ${currentUser[0].money} coins`,
                     );
                 }
 
-                // Create purchase record
-                const newPurchase: PurchaseInsert = {
-                    userId: userId,
-                    itemId: shopItem.item.id,
-                    shopId: shopId,
-                };
+                // Create purchase records for each item
+                const purchaseRecords: PurchaseInsert[] = [];
+                for (let i = 0; i < quantity; i++) {
+                    purchaseRecords.push({
+                        userId: userId,
+                        itemId: shopItem.item.id,
+                        shopId: shopItem.shop.id,
+                    });
+                }
 
-                const purchaseResult = await tx.insert(purchases).values(newPurchase).returning();
+                const purchaseResults = await tx.insert(purchases).values(purchaseRecords).returning();
 
                 // Update or create inventory entry
                 const existingInventory = await tx
@@ -166,7 +223,7 @@ export class ShopService {
                     const updated = await tx
                         .update(inventory)
                         .set({
-                            count: sql`${inventory.count} + 1`,
+                            count: sql`${inventory.count} + ${quantity}`,
                             updatedAt: new Date(),
                         })
                         .where(eq(inventory.id, existingInventory[0].id))
@@ -178,7 +235,7 @@ export class ShopService {
                     const newInventory: InventoryInsert = {
                         userId: userId,
                         itemId: shopItem.item.id,
-                        count: 1,
+                        count: quantity,
                     };
 
                     const created = await tx.insert(inventory).values(newInventory).returning();
@@ -186,15 +243,15 @@ export class ShopService {
                 }
 
                 return {
-                    purchase: purchaseResult[0],
+                    purchases: purchaseResults,
                     inventory: inventoryItem,
                 };
             });
 
-            Logger.info(`[ShopService] User ${userId} purchased item ${shopItem.item.name} for ${shopItem.shop.cost} coins`);
+            Logger.info(`[ShopService] User ${userId} purchased ${quantity} x ${shopItem.item.name} for ${totalCost} coins`);
 
             return {
-                purchase: result.purchase,
+                purchases: result.purchases,
                 inventory: result.inventory,
             };
         } catch (error) {

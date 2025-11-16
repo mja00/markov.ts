@@ -81,6 +81,15 @@ export class ButtonHandler implements EventHandler {
     }
 
     private findButton(id: string): Button {
-        return this.buttons.find(button => button.ids.includes(id));
+        // First try exact match
+        let button = this.buttons.find(button => button.ids.includes(id));
+        if (button) {
+            return button;
+        }
+
+        // Then try prefix match (for buttons like shop:page:1, shop:buy:slug)
+        return this.buttons.find(button =>
+            button.ids.some(buttonId => id.startsWith(buttonId + ':'))
+        );
     }
 }

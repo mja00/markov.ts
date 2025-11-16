@@ -8,6 +8,7 @@ import {
     Interaction,
     Message,
     MessageReaction,
+    ModalSubmitInteraction,
     PartialMessageReaction,
     PartialUser,
     RateLimitData,
@@ -22,6 +23,7 @@ import {
     GuildJoinHandler,
     GuildLeaveHandler,
     MessageHandler,
+    ModalHandler,
     ReactionHandler,
 } from '../events/index.js';
 import { JobService, Logger } from '../services/index.js';
@@ -43,6 +45,7 @@ export class Bot {
         private messageHandler: MessageHandler,
         private commandHandler: CommandHandler,
         private buttonHandler: ButtonHandler,
+        private modalHandler: ModalHandler,
         private reactionHandler: ReactionHandler,
         private jobService: JobService
     ) {}
@@ -150,6 +153,12 @@ export class Bot {
         } else if (intr instanceof ButtonInteraction) {
             try {
                 await this.buttonHandler.process(intr);
+            } catch (error) {
+                Logger.error(Logs.error.button, error);
+            }
+        } else if (intr instanceof ModalSubmitInteraction) {
+            try {
+                await this.modalHandler.process(intr);
             } catch (error) {
                 Logger.error(Logs.error.button, error);
             }

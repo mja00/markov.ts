@@ -210,7 +210,8 @@
             "option": "option",
             "prompt": "prompt",
             "fishing": "fishing",
-            "buy": "shop_item_id"
+            "buy": "shop_item_id",
+            "buyQuantity": "quantity"
         },
         "commandDescs": {
             "dev": "Developer use only.",
@@ -230,7 +231,8 @@
             "infoOption": "Option.",
             "generateImagePrompt": "Prompt for the image command.",
             "fishing": "Choose a subcommand",
-            "buy": "The shop item ID to purchase"
+            "buy": "The shop item ID or slug to purchase",
+            "buyQuantity": "The number of items to purchase (default: 1)"
         },
         "fields": {
             "commands": "Commands",

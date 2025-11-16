@@ -46,6 +46,7 @@ export const items = pgTable('items', {
     id: uuid('id').defaultRandom().primaryKey(),
     name: varchar('name', { length: 255 }).notNull(),
     image: varchar('image', { length: 255 }),
+    slug: varchar('slug', { length: 255 }).unique(),
     effectType: effectTypeEnum('effect_type'),
     effectValue: numeric('effect_value', { precision: 10, scale: 2 }),
     isConsumable: boolean('is_consumable').default(false).notNull(),
