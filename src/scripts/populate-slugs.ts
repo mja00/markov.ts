@@ -65,7 +65,8 @@ const populateSlugs = async (): Promise<void> => {
             let counter = 1;
 
             // Handle slug conflicts by appending a counter
-            while (true) {
+            let slugFound = false;
+            while (!slugFound && counter <= 1000) {
                 try {
                     // Check if slug already exists (excluding current item)
                     const existing = await db
@@ -76,28 +77,26 @@ const populateSlugs = async (): Promise<void> => {
 
                     if (existing.length === 0) {
                         // Slug is available, use it
-                        break;
-                    }
-
-                    // Slug exists, try with counter
-                    slug = `${baseSlug}-${counter}`;
-                    counter++;
-
-                    // Prevent infinite loop (safety check)
-                    if (counter > 1000) {
-                        // Fallback to using item ID if we can't find a unique slug
-                        slug = `${baseSlug}-${item.id.substring(0, 8)}`;
-                        Logger.warn(
-                            `[PopulateSlugs] Could not generate unique slug for "${item.name}", using fallback: "${slug}"`
-                        );
-                        break;
+                        slugFound = true;
+                    } else {
+                        // Slug exists, try with counter
+                        slug = `${baseSlug}-${counter}`;
+                        counter++;
                     }
                 } catch (error) {
                     Logger.error(`[PopulateSlugs] Error checking slug uniqueness for "${item.name}":`, error);
                     // Fallback to item ID if check fails
                     slug = `${baseSlug}-${item.id.substring(0, 8)}`;
-                    break;
+                    slugFound = true;
                 }
+            }
+
+            // If we couldn't find a unique slug, use fallback
+            if (!slugFound) {
+                slug = `${baseSlug}-${item.id.substring(0, 8)}`;
+                Logger.warn(
+                    `[PopulateSlugs] Could not generate unique slug for "${item.name}", using fallback: "${slug}"`
+                );
             }
 
             try {
