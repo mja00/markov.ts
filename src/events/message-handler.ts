@@ -31,13 +31,12 @@ export class MessageHandler implements EventHandler {
 
         // Log the server + channel + message
         const serverName = msg.guild?.name ?? 'DM';
-        const serverID = msg.guild?.id ?? 'DM';
         const channelID = msg.channel.id;
+        const channelName = 'name' in msg.channel ? msg.channel.name : 'DM';
         const userTag = msg.author.displayName;
-        const userID = msg.author.id;
         const message = msg.content;
         Logger.info(
-            `[Message]: ${serverName} (${serverID}) - ${channelID} - ${userTag} (${userID}) - ${message}`
+            `[Message]: ${serverName} - ${channelName} - ${userTag} - ${message}`
         );
 
         // If this is a PartialGroupDMChannel, just pass
