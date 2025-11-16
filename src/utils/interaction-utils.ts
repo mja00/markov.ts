@@ -5,6 +5,7 @@ import {
     DiscordAPIError,
     RESTJSONErrorCodes as DiscordApiErrors,
     EmbedBuilder,
+    InteractionCallbackResponse,
     InteractionReplyOptions,
     InteractionResponse,
     InteractionUpdateOptions,
@@ -70,7 +71,7 @@ export class InteractionUtils {
         intr: CommandInteraction | MessageComponentInteraction | ModalSubmitInteraction,
         content: string | EmbedBuilder | InteractionReplyOptions,
         hidden: boolean = false
-    ): Promise<Message> {
+    ): Promise<Message | InteractionResponse | InteractionCallbackResponse> {
         try {
             let options: InteractionReplyOptions =
                 typeof content === 'string'
@@ -150,7 +151,7 @@ export class InteractionUtils {
     public static async update(
         intr: MessageComponentInteraction,
         content: string | EmbedBuilder | InteractionUpdateOptions
-    ): Promise<Message> {
+    ): Promise<Message | InteractionResponse | InteractionCallbackResponse> {
         try {
             let options: InteractionUpdateOptions =
                 typeof content === 'string'
