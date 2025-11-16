@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Catchable } from '../../src/db/schema.js';
 import { Rarity } from '../../src/enums/rarity.js';
+import { TimeOfDay } from '../../src/enums/time-of-day.js';
 import { FishingService } from '../../src/services/fishing.service.js';
 
 // Mock the database service
@@ -32,6 +33,7 @@ describe('FishingService Integration Tests', () => {
             select: vi.fn().mockReturnThis(),
             from: vi.fn().mockReturnThis(),
             where: vi.fn().mockReturnThis(),
+            orderBy: vi.fn().mockReturnThis(),
             limit: vi.fn().mockReturnThis(),
         };
 
@@ -44,42 +46,33 @@ describe('FishingService Integration Tests', () => {
 
     describe('pickCatchableByRarity', () => {
         it('should pick a random catchable from available options', async () => {
-            const mockCatchables: Catchable[] = [
-                {
-                    id: '1',
-                    name: 'Common Fish 1',
-                    rarity: Rarity.COMMON,
-                    worth: 10,
-                    image: '🐟',
-                    firstCaughtBy: null,
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                },
-                {
-                    id: '2',
-                    name: 'Common Fish 2',
-                    rarity: Rarity.COMMON,
-                    worth: 15,
-                    image: '🐠',
-                    firstCaughtBy: null,
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                },
-            ];
+            const mockCatchable: Catchable = {
+                id: '1',
+                name: 'Common Fish 1',
+                rarity: Rarity.COMMON,
+                worth: 10,
+                image: '🐟',
+                firstCaughtBy: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                timeOfDay: null,
+            };
 
-            // Mock the database query to return our test catchables
-            mockDb.where.mockResolvedValue(mockCatchables);
+            // Mock the database query to return a single catchable (LIMIT 1)
+            // The query chain is: select().from().where().orderBy().limit()
+            mockDb.limit.mockResolvedValue([mockCatchable]);
 
             const result = await fishingService.pickCatchableByRarity(Rarity.COMMON);
 
             expect(result).toBeDefined();
-            expect(mockCatchables).toContainEqual(result);
+            expect(result).toEqual(mockCatchable);
             expect(result?.rarity).toBe(Rarity.COMMON);
         });
 
         it('should return null when no catchables are found', async () => {
             // Mock the database query to return empty array
-            mockDb.where.mockResolvedValue([]);
+            // The query chain is: select().from().where().orderBy().limit()
+            mockDb.limit.mockResolvedValue([]);
 
             const result = await fishingService.pickCatchableByRarity(Rarity.LEGENDARY);
 
@@ -94,11 +87,17 @@ describe('FishingService Integration Tests', () => {
                 worth: (i + 1) * 10,
                 image: '🐟',
                 firstCaughtBy: null,
+                timeOfDay: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             }));
 
-            mockDb.where.mockResolvedValue(mockCatchables);
+            // Mock to return one random catchable per call (simulating RANDOM() LIMIT 1)
+            // The query chain is: select().from().where().orderBy().limit()
+            mockDb.limit.mockImplementation(() => {
+                const randomIndex = Math.floor(Math.random() * mockCatchables.length);
+                return Promise.resolve([mockCatchables[randomIndex]]);
+            });
 
             // Pick multiple catchables
             const picks = await Promise.all(
@@ -119,8 +118,8 @@ describe('FishingService Integration Tests', () => {
         });
 
         it('should handle database errors gracefully', async () => {
-            // Mock a database error
-            mockDb.where.mockRejectedValue(new Error('Database connection failed'));
+            // Mock a database error - can occur at any point in the query chain
+            mockDb.limit.mockRejectedValue(new Error('Database connection failed'));
 
             await expect(
                 fishingService.pickCatchableByRarity(Rarity.RARE)
@@ -222,6 +221,126 @@ describe('FishingService Integration Tests', () => {
             const result = await fishingService.calculateFinalWorth(baseWorth);
 
             expect(result).toBe(baseWorth);
+        });
+    });
+
+    describe('Time-Based Fishing', () => {
+        it('should pick DAY fish during DAY time', async () => {
+            const dayFish: Catchable = {
+                id: '1',
+                name: 'Day Fish',
+                rarity: Rarity.COMMON,
+                worth: 10,
+                image: '🐟',
+                firstCaughtBy: null,
+                timeOfDay: 'DAY',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            mockDb.limit.mockResolvedValue([dayFish]);
+
+            const result = await fishingService.pickCatchableByRarity(Rarity.COMMON, TimeOfDay.DAY);
+
+            expect(result).toBeDefined();
+            expect(result?.name).toBe('Day Fish');
+            expect(result?.timeOfDay).toBe('DAY');
+        });
+
+        it('should not pick NIGHT fish during DAY time', async () => {
+            // Mock database to return empty array (no matching fish)
+            mockDb.limit.mockResolvedValue([]);
+
+            const result = await fishingService.pickCatchableByRarity(Rarity.COMMON, TimeOfDay.DAY);
+
+            expect(result).toBeNull();
+        });
+
+        it('should always pick ANY time fish regardless of current time', async () => {
+            const anyTimeFish: Catchable = {
+                id: '1',
+                name: 'Any Time Fish',
+                rarity: Rarity.COMMON,
+                worth: 10,
+                image: '🐟',
+                firstCaughtBy: null,
+                timeOfDay: 'ANY',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            mockDb.limit.mockResolvedValue([anyTimeFish]);
+
+            // Test during different times of day
+            const dayResult = await fishingService.pickCatchableByRarity(Rarity.COMMON, TimeOfDay.DAY);
+            expect(dayResult?.timeOfDay).toBe('ANY');
+
+            const nightResult = await fishingService.pickCatchableByRarity(Rarity.COMMON, TimeOfDay.NIGHT);
+            expect(nightResult?.timeOfDay).toBe('ANY');
+
+            const dawnResult = await fishingService.pickCatchableByRarity(Rarity.COMMON, TimeOfDay.DAWN);
+            expect(dawnResult?.timeOfDay).toBe('ANY');
+
+            const duskResult = await fishingService.pickCatchableByRarity(Rarity.COMMON, TimeOfDay.DUSK);
+            expect(duskResult?.timeOfDay).toBe('ANY');
+        });
+
+        it('should pick time-specific fish during their designated time', async () => {
+            const nightFish: Catchable = {
+                id: '1',
+                name: 'Night Fish',
+                rarity: Rarity.RARE,
+                worth: 50,
+                image: '🦈',
+                firstCaughtBy: null,
+                timeOfDay: 'NIGHT',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            mockDb.limit.mockResolvedValue([nightFish]);
+
+            const result = await fishingService.pickCatchableByRarity(Rarity.RARE, TimeOfDay.NIGHT);
+
+            expect(result).toBeDefined();
+            expect(result?.name).toBe('Night Fish');
+            expect(result?.timeOfDay).toBe('NIGHT');
+        });
+
+        it('should handle DAWN and DUSK time periods correctly', async () => {
+            const dawnFish: Catchable = {
+                id: '1',
+                name: 'Dawn Fish',
+                rarity: Rarity.UNCOMMON,
+                worth: 25,
+                image: '🐠',
+                firstCaughtBy: null,
+                timeOfDay: 'DAWN',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            const duskFish: Catchable = {
+                id: '2',
+                name: 'Dusk Fish',
+                rarity: Rarity.UNCOMMON,
+                worth: 30,
+                image: '🐡',
+                firstCaughtBy: null,
+                timeOfDay: 'DUSK',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            // Test DAWN
+            mockDb.limit.mockResolvedValue([dawnFish]);
+            const dawnResult = await fishingService.pickCatchableByRarity(Rarity.UNCOMMON, TimeOfDay.DAWN);
+            expect(dawnResult?.timeOfDay).toBe('DAWN');
+
+            // Test DUSK
+            mockDb.limit.mockResolvedValue([duskFish]);
+            const duskResult = await fishingService.pickCatchableByRarity(Rarity.UNCOMMON, TimeOfDay.DUSK);
+            expect(duskResult?.timeOfDay).toBe('DUSK');
         });
     });
 });

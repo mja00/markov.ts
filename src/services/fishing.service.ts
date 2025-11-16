@@ -1,10 +1,11 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
 import { getDb } from './database.service.js';
 import { ItemEffectsService } from './item-effects.service.js';
 import { Logger } from './logger.js';
 import { Catchable, catchables, catches, CatchInsert } from '../db/schema.js';
 import { Rarity } from '../enums/rarity.js';
+import { TimeOfDay } from '../enums/time-of-day.js';
 
 /**
  * Rarity weights for random selection
@@ -18,6 +19,17 @@ const RARITY_WEIGHTS = {
 };
 
 /**
+ * Time of day hour boundaries (24-hour format, UTC)
+ * These define when each time period starts/ends
+ */
+const TIME_BOUNDARIES = {
+    DAWN_START: 5,
+    DAWN_END: 7,
+    DAY_END: 18,
+    DUSK_END: 20,
+} as const;
+
+/**
  * Service for managing fishing operations
  */
 export class FishingService {
@@ -25,6 +37,82 @@ export class FishingService {
 
     constructor() {
         this.itemEffectsService = new ItemEffectsService();
+    }
+
+    /**
+     * Determine the current time of day based on the hour (24-hour format)
+     * Uses UTC timezone for consistency across all users.
+     *
+     * Time periods (exclusive upper bounds):
+     * - Dawn: 5-7 UTC (5:00-6:59) - hours 5, 6
+     * - Day: 7-18 UTC (7:00-17:59) - hours 7-17
+     * - Dusk: 18-20 UTC (18:00-19:59) - hours 18, 19
+     * - Night: 20-5 UTC (20:00-4:59) - hours 20-23, 0-4
+     *
+     * @param hour - Optional hour to check (defaults to current hour in UTC)
+     * @returns The time of day enum value
+     */
+    public getCurrentTimeOfDay(hour?: number): TimeOfDay {
+        const currentHour = hour ?? new Date().getUTCHours();
+
+        // Dawn: 5-7 UTC (5:00-6:59)
+        if (currentHour >= TIME_BOUNDARIES.DAWN_START && currentHour < TIME_BOUNDARIES.DAWN_END) {
+            return TimeOfDay.DAWN;
+        }
+        // Day: 7-18 UTC (7:00-17:59)
+        if (currentHour >= TIME_BOUNDARIES.DAWN_END && currentHour < TIME_BOUNDARIES.DAY_END) {
+            return TimeOfDay.DAY;
+        }
+        // Dusk: 18-20 UTC (18:00-19:59)
+        if (currentHour >= TIME_BOUNDARIES.DAY_END && currentHour < TIME_BOUNDARIES.DUSK_END) {
+            return TimeOfDay.DUSK;
+        }
+        // Night: 20-5 UTC (20:00-4:59)
+        return TimeOfDay.NIGHT;
+    }
+
+    /**
+     * Get a human-readable name for the time of day
+     * @param timeOfDay - The time of day enum value
+     * @returns Human-readable name
+     */
+    public getTimeOfDayName(timeOfDay: TimeOfDay): string {
+        switch (timeOfDay) {
+            case TimeOfDay.DAY:
+                return 'Day';
+            case TimeOfDay.NIGHT:
+                return 'Night';
+            case TimeOfDay.DAWN:
+                return 'Dawn';
+            case TimeOfDay.DUSK:
+                return 'Dusk';
+            case TimeOfDay.ANY:
+                return 'Any Time';
+            default:
+                return 'Unknown';
+        }
+    }
+
+    /**
+     * Get an emoji for the time of day
+     * @param timeOfDay - The time of day enum value
+     * @returns Emoji representing the time of day
+     */
+    public getTimeOfDayEmoji(timeOfDay: TimeOfDay): string {
+        switch (timeOfDay) {
+            case TimeOfDay.DAY:
+                return '☀️';
+            case TimeOfDay.NIGHT:
+                return '🌙';
+            case TimeOfDay.DAWN:
+                return '🌅';
+            case TimeOfDay.DUSK:
+                return '🌆';
+            case TimeOfDay.ANY:
+                return '🕐';
+            default:
+                return '❓';
+        }
     }
 
     /**
@@ -72,26 +160,41 @@ export class FishingService {
     /**
      * Pick a random catchable by rarity
      * @param rarity - The rarity level to pick from
+     * @param timeOfDay - Optional time of day to filter by (defaults to current time)
      * @returns A random catchable of the specified rarity, or null if none found
      */
-    public async pickCatchableByRarity(rarity: Rarity): Promise<Catchable | null> {
+    public async pickCatchableByRarity(rarity: Rarity, timeOfDay?: TimeOfDay): Promise<Catchable | null> {
         const db = getDb();
 
         try {
-            // Get all catchables of this rarity
-            const availableCatchables = await db
+            // Determine current time of day if not provided
+            const currentTimeOfDay = timeOfDay ?? this.getCurrentTimeOfDay();
+
+            // Get a random catchable of this rarity that is available at this time of day
+            // Fish are available if their timeOfDay is null (legacy), ANY, or matches the current time
+            // Using ORDER BY RANDOM() LIMIT 1 for better performance with large datasets
+            const result = await db
                 .select()
                 .from(catchables)
-                .where(eq(catchables.rarity, rarity));
+                .where(
+                    and(
+                        eq(catchables.rarity, rarity),
+                        or(
+                            isNull(catchables.timeOfDay),
+                            eq(catchables.timeOfDay, TimeOfDay.ANY),
+                            eq(catchables.timeOfDay, currentTimeOfDay)
+                        )
+                    )
+                )
+                .orderBy(sql`RANDOM()`)
+                .limit(1);
 
-            if (availableCatchables.length === 0) {
-                Logger.warn(`[FishingService] No catchables found for rarity ${rarity}`);
+            if (result.length === 0) {
+                Logger.warn(`[FishingService] No catchables found for rarity ${rarity} at time ${currentTimeOfDay}`);
                 return null;
             }
 
-            // Pick a random one
-            const randomIndex = Math.floor(Math.random() * availableCatchables.length);
-            return availableCatchables[randomIndex];
+            return result[0];
         } catch (error) {
             Logger.error(`[FishingService] Failed to pick catchable by rarity ${rarity}:`, error);
             throw new Error(`Failed to pick catchable: ${error instanceof Error ? error.message : 'Unknown error'}`);
