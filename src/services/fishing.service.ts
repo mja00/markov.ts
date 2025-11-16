@@ -42,25 +42,32 @@ export class FishingService {
     /**
      * Determine the current time of day based on the hour (24-hour format)
      * Uses UTC timezone for consistency across all users.
+     *
+     * Time periods (exclusive upper bounds):
+     * - Dawn: 5-7 UTC (5:00-6:59) - hours 5, 6
+     * - Day: 7-18 UTC (7:00-17:59) - hours 7-17
+     * - Dusk: 18-20 UTC (18:00-19:59) - hours 18, 19
+     * - Night: 20-5 UTC (20:00-4:59) - hours 20-23, 0-4
+     *
      * @param hour - Optional hour to check (defaults to current hour in UTC)
      * @returns The time of day enum value
      */
     public getCurrentTimeOfDay(hour?: number): TimeOfDay {
         const currentHour = hour ?? new Date().getUTCHours();
 
-        // Dawn: 5-7 UTC
+        // Dawn: 5-7 UTC (5:00-6:59)
         if (currentHour >= TIME_BOUNDARIES.DAWN_START && currentHour < TIME_BOUNDARIES.DAWN_END) {
             return TimeOfDay.DAWN;
         }
-        // Day: 7-18 UTC
+        // Day: 7-18 UTC (7:00-17:59)
         if (currentHour >= TIME_BOUNDARIES.DAWN_END && currentHour < TIME_BOUNDARIES.DAY_END) {
             return TimeOfDay.DAY;
         }
-        // Dusk: 18-20 UTC
+        // Dusk: 18-20 UTC (18:00-19:59)
         if (currentHour >= TIME_BOUNDARIES.DAY_END && currentHour < TIME_BOUNDARIES.DUSK_END) {
             return TimeOfDay.DUSK;
         }
-        // Night: 20-5 UTC
+        // Night: 20-5 UTC (20:00-4:59)
         return TimeOfDay.NIGHT;
     }
 

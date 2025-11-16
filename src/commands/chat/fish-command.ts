@@ -162,7 +162,9 @@ export class FishCommand implements Command {
 
             // Show time of day info if fish is time-specific
             // Note: null values are handled by the database query as 'ANY'
-            if (caught.timeOfDay && caught.timeOfDay !== TimeOfDay.ANY) {
+            if (caught.timeOfDay &&
+                caught.timeOfDay !== TimeOfDay.ANY &&
+                Object.values(TimeOfDay).includes(caught.timeOfDay as TimeOfDay)) {
                 const fishTimeOfDayName = this.fishingService.getTimeOfDayName(caught.timeOfDay as TimeOfDay);
                 const fishTimeOfDayEmoji = this.fishingService.getTimeOfDayEmoji(caught.timeOfDay as TimeOfDay);
                 description += `\n\n${fishTimeOfDayEmoji} *Only appears during ${fishTimeOfDayName}*`;
