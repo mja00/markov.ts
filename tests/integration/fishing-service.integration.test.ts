@@ -32,6 +32,7 @@ describe('FishingService Integration Tests', () => {
             select: vi.fn().mockReturnThis(),
             from: vi.fn().mockReturnThis(),
             where: vi.fn().mockReturnThis(),
+            orderBy: vi.fn().mockReturnThis(),
             limit: vi.fn().mockReturnThis(),
         };
 
@@ -44,42 +45,33 @@ describe('FishingService Integration Tests', () => {
 
     describe('pickCatchableByRarity', () => {
         it('should pick a random catchable from available options', async () => {
-            const mockCatchables: Catchable[] = [
-                {
-                    id: '1',
-                    name: 'Common Fish 1',
-                    rarity: Rarity.COMMON,
-                    worth: 10,
-                    image: '🐟',
-                    firstCaughtBy: null,
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                },
-                {
-                    id: '2',
-                    name: 'Common Fish 2',
-                    rarity: Rarity.COMMON,
-                    worth: 15,
-                    image: '🐠',
-                    firstCaughtBy: null,
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                },
-            ];
+            const mockCatchable: Catchable = {
+                id: '1',
+                name: 'Common Fish 1',
+                rarity: Rarity.COMMON,
+                worth: 10,
+                image: '🐟',
+                firstCaughtBy: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                timeOfDay: null,
+            };
 
-            // Mock the database query to return our test catchables
-            mockDb.where.mockResolvedValue(mockCatchables);
+            // Mock the database query to return a single catchable (LIMIT 1)
+            // The query chain is: select().from().where().orderBy().limit()
+            mockDb.limit.mockResolvedValue([mockCatchable]);
 
             const result = await fishingService.pickCatchableByRarity(Rarity.COMMON);
 
             expect(result).toBeDefined();
-            expect(mockCatchables).toContainEqual(result);
+            expect(result).toEqual(mockCatchable);
             expect(result?.rarity).toBe(Rarity.COMMON);
         });
 
         it('should return null when no catchables are found', async () => {
             // Mock the database query to return empty array
-            mockDb.where.mockResolvedValue([]);
+            // The query chain is: select().from().where().orderBy().limit()
+            mockDb.limit.mockResolvedValue([]);
 
             const result = await fishingService.pickCatchableByRarity(Rarity.LEGENDARY);
 
@@ -94,11 +86,17 @@ describe('FishingService Integration Tests', () => {
                 worth: (i + 1) * 10,
                 image: '🐟',
                 firstCaughtBy: null,
+                timeOfDay: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             }));
 
-            mockDb.where.mockResolvedValue(mockCatchables);
+            // Mock to return one random catchable per call (simulating RANDOM() LIMIT 1)
+            // The query chain is: select().from().where().orderBy().limit()
+            mockDb.limit.mockImplementation(() => {
+                const randomIndex = Math.floor(Math.random() * mockCatchables.length);
+                return Promise.resolve([mockCatchables[randomIndex]]);
+            });
 
             // Pick multiple catchables
             const picks = await Promise.all(
@@ -119,8 +117,8 @@ describe('FishingService Integration Tests', () => {
         });
 
         it('should handle database errors gracefully', async () => {
-            // Mock a database error
-            mockDb.where.mockRejectedValue(new Error('Database connection failed'));
+            // Mock a database error - can occur at any point in the query chain
+            mockDb.limit.mockRejectedValue(new Error('Database connection failed'));
 
             await expect(
                 fishingService.pickCatchableByRarity(Rarity.RARE)
