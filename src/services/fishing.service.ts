@@ -1,10 +1,11 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
 import { getDb } from './database.service.js';
 import { ItemEffectsService } from './item-effects.service.js';
 import { Logger } from './logger.js';
 import { Catchable, catchables, catches, CatchInsert } from '../db/schema.js';
 import { Rarity } from '../enums/rarity.js';
+import { TimeOfDay } from '../enums/time-of-day.js';
 
 /**
  * Rarity weights for random selection
@@ -25,6 +26,74 @@ export class FishingService {
 
     constructor() {
         this.itemEffectsService = new ItemEffectsService();
+    }
+
+    /**
+     * Determine the current time of day based on the hour (24-hour format)
+     * @param hour - Optional hour to check (defaults to current hour in UTC)
+     * @returns The time of day enum value
+     */
+    public getCurrentTimeOfDay(hour?: number): TimeOfDay {
+        const currentHour = hour ?? new Date().getUTCHours();
+
+        // Dawn: 5-7
+        if (currentHour >= 5 && currentHour < 7) {
+            return TimeOfDay.DAWN;
+        }
+        // Day: 7-18
+        if (currentHour >= 7 && currentHour < 18) {
+            return TimeOfDay.DAY;
+        }
+        // Dusk: 18-20
+        if (currentHour >= 18 && currentHour < 20) {
+            return TimeOfDay.DUSK;
+        }
+        // Night: 20-5
+        return TimeOfDay.NIGHT;
+    }
+
+    /**
+     * Get a human-readable name for the time of day
+     * @param timeOfDay - The time of day enum value
+     * @returns Human-readable name
+     */
+    public getTimeOfDayName(timeOfDay: TimeOfDay): string {
+        switch (timeOfDay) {
+            case TimeOfDay.DAY:
+                return 'Day';
+            case TimeOfDay.NIGHT:
+                return 'Night';
+            case TimeOfDay.DAWN:
+                return 'Dawn';
+            case TimeOfDay.DUSK:
+                return 'Dusk';
+            case TimeOfDay.ANY:
+                return 'Any Time';
+            default:
+                return 'Unknown';
+        }
+    }
+
+    /**
+     * Get an emoji for the time of day
+     * @param timeOfDay - The time of day enum value
+     * @returns Emoji representing the time of day
+     */
+    public getTimeOfDayEmoji(timeOfDay: TimeOfDay): string {
+        switch (timeOfDay) {
+            case TimeOfDay.DAY:
+                return '☀️';
+            case TimeOfDay.NIGHT:
+                return '🌙';
+            case TimeOfDay.DAWN:
+                return '🌅';
+            case TimeOfDay.DUSK:
+                return '🌆';
+            case TimeOfDay.ANY:
+                return '🕐';
+            default:
+                return '❓';
+        }
     }
 
     /**
@@ -72,20 +141,33 @@ export class FishingService {
     /**
      * Pick a random catchable by rarity
      * @param rarity - The rarity level to pick from
+     * @param timeOfDay - Optional time of day to filter by (defaults to current time)
      * @returns A random catchable of the specified rarity, or null if none found
      */
-    public async pickCatchableByRarity(rarity: Rarity): Promise<Catchable | null> {
+    public async pickCatchableByRarity(rarity: Rarity, timeOfDay?: TimeOfDay): Promise<Catchable | null> {
         const db = getDb();
 
         try {
-            // Get all catchables of this rarity
+            // Determine current time of day if not provided
+            const currentTimeOfDay = timeOfDay ?? this.getCurrentTimeOfDay();
+
+            // Get all catchables of this rarity that are available at this time of day
+            // Fish are available if their timeOfDay is ANY or matches the current time
             const availableCatchables = await db
                 .select()
                 .from(catchables)
-                .where(eq(catchables.rarity, rarity));
+                .where(
+                    and(
+                        eq(catchables.rarity, rarity),
+                        or(
+                            eq(catchables.timeOfDay, TimeOfDay.ANY),
+                            eq(catchables.timeOfDay, currentTimeOfDay)
+                        )
+                    )
+                );
 
             if (availableCatchables.length === 0) {
-                Logger.warn(`[FishingService] No catchables found for rarity ${rarity}`);
+                Logger.warn(`[FishingService] No catchables found for rarity ${rarity} at time ${currentTimeOfDay}`);
                 return null;
             }
 

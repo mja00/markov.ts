@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction, EmbedBuilder, PermissionsString } from 'di
 import { RateLimiter } from 'discord.js-rate-limiter';
 
 import { Rarity } from '../../enums/rarity.js';
+import { TimeOfDay } from '../../enums/time-of-day.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
 import { FishingCooldownService } from '../../services/fishing-cooldown.service.js';
@@ -143,6 +144,11 @@ export class FishCommand implements Command {
             const rarityColor = this.fishingService.getRarityColor(caught.rarity as Rarity);
             const newBalance = user.money + finalWorth;
 
+            // Get time of day information
+            const currentTimeOfDay = this.fishingService.getCurrentTimeOfDay();
+            const timeOfDayName = this.fishingService.getTimeOfDayName(currentTimeOfDay);
+            const timeOfDayEmoji = this.fishingService.getTimeOfDayEmoji(currentTimeOfDay);
+
             // Show worth with multiplier indicator if different from base
             const worthDisplay = finalWorth !== caught.worth ? `${caught.worth} → ${finalWorth}` : `${finalWorth}`;
 
@@ -152,6 +158,13 @@ export class FishCommand implements Command {
             }
             if (usedConsumable) {
                 description += `\n\n🎣 Used **${usedConsumable.name}** (+${(usedConsumable.boost * 100).toFixed(0)}% rarity boost)`;
+            }
+
+            // Show time of day info if fish is time-specific
+            if (caught.timeOfDay && caught.timeOfDay !== TimeOfDay.ANY) {
+                const fishTimeOfDayName = this.fishingService.getTimeOfDayName(caught.timeOfDay as TimeOfDay);
+                const fishTimeOfDayEmoji = this.fishingService.getTimeOfDayEmoji(caught.timeOfDay as TimeOfDay);
+                description += `\n\n${fishTimeOfDayEmoji} *Only appears during ${fishTimeOfDayName}*`;
             }
 
             // Show remaining attempts if under limit
@@ -165,7 +178,8 @@ export class FishCommand implements Command {
                 .addFields(
                     { name: 'Worth', value: `${worthDisplay} coins`, inline: true },
                     { name: 'New Balance', value: `${newBalance} coins`, inline: true },
-                    { name: 'Rarity', value: rarityName, inline: true }
+                    { name: 'Rarity', value: rarityName, inline: true },
+                    { name: 'Time', value: `${timeOfDayEmoji} ${timeOfDayName}`, inline: true }
                 )
                 .setColor(rarityColor);
 

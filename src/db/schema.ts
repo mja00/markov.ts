@@ -1,6 +1,12 @@
 import { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import { boolean, integer, numeric, pgEnum, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
+// Enum for item effect types
+export const effectTypeEnum = pgEnum('effect_type_enum', ['RARITY_BOOST', 'WORTH_MULTIPLIER']);
+
+// Enum for time of day
+export const timeOfDayEnum = pgEnum('time_of_day_enum', ['DAY', 'NIGHT', 'DAWN', 'DUSK', 'ANY']);
+
 export const users = pgTable('users', {
     id: uuid('id').defaultRandom().primaryKey(),
     discordSnowflake: varchar('discord_snowflake', { length: 255 }).unique().notNull(),
@@ -20,6 +26,7 @@ export const catchables = pgTable('catchables', {
     rarity: integer('rarity').default(0).notNull(),
     worth: integer('worth').default(0).notNull(),
     image: varchar('image', { length: 255 }),
+    timeOfDay: timeOfDayEnum('time_of_day').default('ANY'),
     firstCaughtBy: uuid('first_caught_by').references(() => users.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -38,9 +45,6 @@ export const catches = pgTable('catches', {
 
 export type Catch = InferSelectModel<typeof catches>;
 export type CatchInsert = InferInsertModel<typeof catches>;
-
-// Enum for item effect types
-export const effectTypeEnum = pgEnum('effect_type_enum', ['RARITY_BOOST', 'WORTH_MULTIPLIER']);
 
 export const items = pgTable('items', {
     id: uuid('id').defaultRandom().primaryKey(),
