@@ -19,6 +19,17 @@ const RARITY_WEIGHTS = {
 };
 
 /**
+ * Time of day hour boundaries (24-hour format, UTC)
+ * These define when each time period starts/ends
+ */
+const TIME_BOUNDARIES = {
+    DAWN_START: 5,
+    DAWN_END: 7,
+    DAY_END: 18,
+    DUSK_END: 20,
+} as const;
+
+/**
  * Service for managing fishing operations
  */
 export class FishingService {
@@ -30,25 +41,26 @@ export class FishingService {
 
     /**
      * Determine the current time of day based on the hour (24-hour format)
+     * Uses UTC timezone for consistency across all users.
      * @param hour - Optional hour to check (defaults to current hour in UTC)
      * @returns The time of day enum value
      */
     public getCurrentTimeOfDay(hour?: number): TimeOfDay {
         const currentHour = hour ?? new Date().getUTCHours();
 
-        // Dawn: 5-7
-        if (currentHour >= 5 && currentHour < 7) {
+        // Dawn: 5-7 UTC
+        if (currentHour >= TIME_BOUNDARIES.DAWN_START && currentHour < TIME_BOUNDARIES.DAWN_END) {
             return TimeOfDay.DAWN;
         }
-        // Day: 7-18
-        if (currentHour >= 7 && currentHour < 18) {
+        // Day: 7-18 UTC
+        if (currentHour >= TIME_BOUNDARIES.DAWN_END && currentHour < TIME_BOUNDARIES.DAY_END) {
             return TimeOfDay.DAY;
         }
-        // Dusk: 18-20
-        if (currentHour >= 18 && currentHour < 20) {
+        // Dusk: 18-20 UTC
+        if (currentHour >= TIME_BOUNDARIES.DAY_END && currentHour < TIME_BOUNDARIES.DUSK_END) {
             return TimeOfDay.DUSK;
         }
-        // Night: 20-5
+        // Night: 20-5 UTC
         return TimeOfDay.NIGHT;
     }
 
@@ -151,9 +163,10 @@ export class FishingService {
             // Determine current time of day if not provided
             const currentTimeOfDay = timeOfDay ?? this.getCurrentTimeOfDay();
 
-            // Get all catchables of this rarity that are available at this time of day
+            // Get a random catchable of this rarity that is available at this time of day
             // Fish are available if their timeOfDay is null (legacy), ANY, or matches the current time
-            const availableCatchables = await db
+            // Using ORDER BY RANDOM() LIMIT 1 for better performance with large datasets
+            const result = await db
                 .select()
                 .from(catchables)
                 .where(
@@ -165,16 +178,16 @@ export class FishingService {
                             eq(catchables.timeOfDay, currentTimeOfDay)
                         )
                     )
-                );
+                )
+                .orderBy(sql`RANDOM()`)
+                .limit(1);
 
-            if (availableCatchables.length === 0) {
+            if (result.length === 0) {
                 Logger.warn(`[FishingService] No catchables found for rarity ${rarity} at time ${currentTimeOfDay}`);
                 return null;
             }
 
-            // Pick a random one
-            const randomIndex = Math.floor(Math.random() * availableCatchables.length);
-            return availableCatchables[randomIndex];
+            return result[0];
         } catch (error) {
             Logger.error(`[FishingService] Failed to pick catchable by rarity ${rarity}:`, error);
             throw new Error(`Failed to pick catchable: ${error instanceof Error ? error.message : 'Unknown error'}`);

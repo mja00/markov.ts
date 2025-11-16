@@ -161,8 +161,8 @@ export class FishCommand implements Command {
             }
 
             // Show time of day info if fish is time-specific
-            // Treat null as 'ANY' for backward compatibility with legacy catchables
-            if (caught.timeOfDay && caught.timeOfDay !== TimeOfDay.ANY && caught.timeOfDay !== null) {
+            // Note: null values are handled by the database query as 'ANY'
+            if (caught.timeOfDay && caught.timeOfDay !== TimeOfDay.ANY) {
                 const fishTimeOfDayName = this.fishingService.getTimeOfDayName(caught.timeOfDay as TimeOfDay);
                 const fishTimeOfDayEmoji = this.fishingService.getTimeOfDayEmoji(caught.timeOfDay as TimeOfDay);
                 description += `\n\n${fishTimeOfDayEmoji} *Only appears during ${fishTimeOfDayName}*`;
@@ -179,9 +179,9 @@ export class FishCommand implements Command {
                 .addFields(
                     { name: 'Worth', value: `${worthDisplay} coins`, inline: true },
                     { name: 'New Balance', value: `${newBalance} coins`, inline: true },
-                    { name: 'Rarity', value: rarityName, inline: true },
-                    { name: 'Time', value: `${timeOfDayEmoji} ${timeOfDayName}`, inline: true }
+                    { name: 'Rarity', value: rarityName, inline: true }
                 )
+                .setFooter({ text: `${timeOfDayEmoji} Current time: ${timeOfDayName}` })
                 .setColor(rarityColor);
 
             // Add image if available
