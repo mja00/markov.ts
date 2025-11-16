@@ -16,5 +16,5 @@
         "forceConsistentCasingInFileNames": true,
         "jsx": "react-jsx"
     },
-    "exclude": ["dist", "node_modules", "tests"]
+    "exclude": ["dist", "node_modules", "tests", "vitest.config.ts"]
 }

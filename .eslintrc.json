@@ -91,5 +91,17 @@
             }
         ],
         "unicorn/prefer-node-protocol": "error"
-    }
+    },
+    "overrides": [
+        {
+            "files": ["tests/**/*.ts"],
+            "parserOptions": {
+                "project": "./tsconfig.test.json"
+            },
+            "rules": {
+                "@typescript-eslint/explicit-function-return-type": "off",
+                "@typescript-eslint/typedef": "off"
+            }
+        }
+    ]
 }
