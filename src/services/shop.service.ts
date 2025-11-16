@@ -1,9 +1,12 @@
+import { ChatInputCommandInteraction, EmbedBuilder, ModalSubmitInteraction } from 'discord.js';
 import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { getDb } from './database.service.js';
 import { Logger } from './logger.js';
 import { UserService } from './user.service.js';
+import { ShopLimits } from '../constants/shop-limits.js';
 import { Inventory, inventory, InventoryInsert, Item, items, PurchaseInsert, purchases, Shop, shop, users } from '../db/schema.js';
+import { InteractionUtils } from '../utils/interaction-utils.js';
 
 /**
  * Service for managing shop and inventory operations
@@ -453,6 +456,125 @@ export class ShopService {
         } catch (error) {
             Logger.error(`[ShopService] Failed to get purchase history for user ${userId}:`, error);
             throw new Error(`Failed to get purchase history: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Execute a purchase and send the response to the user
+     * This method handles the entire purchase flow including UI responses
+     * @param intr - The interaction (command or modal)
+     * @param userId - The user UUID
+     * @param userTag - The user's Discord tag (for logging)
+     * @param identifier - The shop entry UUID or slug
+     * @param quantity - Number of items to purchase
+     * @param isEphemeral - Whether the response should be ephemeral (default: false for commands, true for modals)
+     */
+    public async executePurchaseWithResponse(
+        intr: ChatInputCommandInteraction | ModalSubmitInteraction,
+        userId: string,
+        userTag: string,
+        identifier: string,
+        quantity: number,
+        isEphemeral: boolean = false,
+    ): Promise<void> {
+        try {
+            // Validate quantity
+            if (quantity < 1) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription('Quantity must be at least 1.')
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+                return;
+            }
+
+            if (quantity > ShopLimits.MAX_PURCHASE_QUANTITY) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription(`Maximum quantity is ${ShopLimits.MAX_PURCHASE_QUANTITY}.`)
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+                return;
+            }
+
+            // Get shop item details
+            const shopItem = await this.getShopItemByIdOrSlug(identifier);
+
+            if (!shopItem) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription('Shop item not found. Please check the item ID or slug and try again.')
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+                return;
+            }
+
+            // Get user to check initial balance
+            const user = await this.userService.getUserById(userId);
+
+            if (!user) {
+                Logger.error(`[ShopService] User not found: ${userId}`);
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription('Failed to retrieve your user data.')
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+                return;
+            }
+
+            // Attempt to purchase
+            try {
+                const result = await this.purchaseItem(userId, identifier, quantity);
+
+                // Get updated user balance
+                const updatedUser = await this.userService.getUserById(userId);
+
+                const totalCost = shopItem.shop.cost * quantity;
+                const quantityText = quantity > 1 ? ` x${quantity}` : '';
+
+                const embed = new EmbedBuilder()
+                    .setTitle('✅ Purchase Successful!')
+                    .setDescription(`You purchased **${shopItem.item.name}**${quantityText}!`)
+                    .addFields(
+                        { name: 'Cost', value: `${totalCost} coins (${shopItem.shop.cost} each)`, inline: true },
+                        { name: 'New Balance', value: `${updatedUser?.money || 0} coins`, inline: true },
+                        { name: 'Total Quantity', value: `${result.inventory.count}`, inline: true }
+                    )
+                    .setColor(0x2ecc71);
+
+                if (shopItem.item.image) {
+                    embed.setThumbnail(shopItem.item.image);
+                }
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+
+                Logger.info(`[ShopService] ${userTag} purchased ${quantity} x ${shopItem.item.name} for ${totalCost} coins`);
+            } catch (purchaseError) {
+                // Handle specific purchase errors (insufficient funds, etc.)
+                const errorMessage =
+                    purchaseError instanceof Error ? purchaseError.message : 'An unknown error occurred';
+
+                const embed = new EmbedBuilder()
+                    .setTitle('❌ Purchase Failed')
+                    .setDescription(errorMessage)
+                    .addFields({ name: 'Your Balance', value: `${user.money} coins`, inline: true })
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed, isEphemeral);
+            }
+        } catch (error) {
+            Logger.error(`[ShopService] Error executing purchase for user ${userTag}:`, error);
+
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('Error')
+                .setDescription('An error occurred while processing your purchase. Please try again later.')
+                .setColor(0xff0000);
+
+            await InteractionUtils.send(intr, errorEmbed, isEphemeral);
         }
     }
 }

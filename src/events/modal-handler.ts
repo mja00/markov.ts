@@ -1,8 +1,9 @@
-import { EmbedBuilder, ModalSubmitInteraction } from 'discord.js';
+import { ModalSubmitInteraction } from 'discord.js';
 import { RateLimiter } from 'discord.js-rate-limiter';
 import { createRequire } from 'node:module';
 
 import { EventHandler } from './index.js';
+import { ShopLimits } from '../constants/shop-limits.js';
 import { EventDataService } from '../services/index.js';
 import { Logger } from '../services/logger.js';
 import { ShopService } from '../services/shop.service.js';
@@ -62,9 +63,9 @@ export class ModalHandler implements EventHandler {
                 return;
             }
 
-            if (quantity > 1000) {
+            if (quantity > ShopLimits.MAX_PURCHASE_QUANTITY) {
                 await InteractionUtils.send(intr, {
-                    content: 'Maximum quantity is 1000.',
+                    content: `Maximum quantity is ${ShopLimits.MAX_PURCHASE_QUANTITY}.`,
                 }, true);
                 return;
             }
@@ -84,57 +85,16 @@ export class ModalHandler implements EventHandler {
                 return;
             }
 
-            // Get shop item details
+            // Execute purchase with response handling
             const shopService = new ShopService();
-            const shopItem = await shopService.getShopItemByIdOrSlug(slug);
-
-            if (!shopItem) {
-                await InteractionUtils.send(intr, {
-                    content: 'Shop item not found. Please check the item slug and try again.',
-                }, true);
-                return;
-            }
-
-            // Attempt to purchase
-            try {
-                const result = await shopService.purchaseItem(user.id, slug, quantity);
-
-                // Get updated user balance
-                const updatedUser = await userService.getUserById(user.id);
-
-                const totalCost = shopItem.shop.cost * quantity;
-                const quantityText = quantity > 1 ? ` x${quantity}` : '';
-
-                const embed = new EmbedBuilder()
-                    .setTitle('✅ Purchase Successful!')
-                    .setDescription(`You purchased **${shopItem.item.name}**${quantityText}!`)
-                    .addFields(
-                        { name: 'Cost', value: `${totalCost} coins (${shopItem.shop.cost} each)`, inline: true },
-                        { name: 'New Balance', value: `${updatedUser?.money || 0} coins`, inline: true },
-                        { name: 'Total Quantity', value: `${result.inventory.count}`, inline: true }
-                    )
-                    .setColor(0x2ecc71);
-
-                if (shopItem.item.image) {
-                    embed.setThumbnail(shopItem.item.image);
-                }
-
-                await InteractionUtils.send(intr, embed, true);
-
-                Logger.info(`[ModalHandler] ${intr.user.tag} purchased ${quantity} x ${shopItem.item.name} for ${totalCost} coins`);
-            } catch (purchaseError) {
-                // Handle specific purchase errors (insufficient funds, etc.)
-                const errorMessage =
-                    purchaseError instanceof Error ? purchaseError.message : 'An unknown error occurred';
-
-                const embed = new EmbedBuilder()
-                    .setTitle('❌ Purchase Failed')
-                    .setDescription(errorMessage)
-                    .addFields({ name: 'Your Balance', value: `${user.money} coins`, inline: true })
-                    .setColor(0xff0000);
-
-                await InteractionUtils.send(intr, embed, true);
-            }
+            await shopService.executePurchaseWithResponse(
+                intr,
+                user.id,
+                intr.user.tag,
+                slug,
+                quantity,
+                true, // Modals are ephemeral by default
+            );
         } catch (error) {
             Logger.error('[ModalHandler] Error handling shop buy modal:', error);
 

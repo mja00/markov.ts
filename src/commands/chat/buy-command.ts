@@ -7,6 +7,7 @@ import {
     PermissionsString,
 } from 'discord.js';
 
+import { ShopLimits } from '../../constants/shop-limits.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
 import { Lang, Logger } from '../../services/index.js';
@@ -64,9 +65,6 @@ export class BuyCommand implements Command {
                 .map((shopItem) => {
                     // TypeScript knows slug is not null here due to filter above
                     const slug = shopItem.item.slug;
-                    if (!slug) {
-                        return null;
-                    }
                     const displayName = `${shopItem.item.name} (${shopItem.shop.cost} coins)`;
 
                     return {
@@ -74,7 +72,6 @@ export class BuyCommand implements Command {
                         value: slug,
                     } as ApplicationCommandOptionChoiceData;
                 })
-                .filter((choice): choice is ApplicationCommandOptionChoiceData => choice !== null)
                 .slice(0, 25); // Discord limit is 25 choices
 
             return choices;
@@ -116,6 +113,16 @@ export class BuyCommand implements Command {
                 return;
             }
 
+            if (quantity > ShopLimits.MAX_PURCHASE_QUANTITY) {
+                const embed = new EmbedBuilder()
+                    .setTitle('Error')
+                    .setDescription(`Maximum quantity is ${ShopLimits.MAX_PURCHASE_QUANTITY}.`)
+                    .setColor(0xff0000);
+
+                await InteractionUtils.send(intr, embed);
+                return;
+            }
+
             // Ensure user exists
             const user = await this.userService.ensureUserExists(intr.user.id, intr.user.tag);
 
@@ -130,59 +137,15 @@ export class BuyCommand implements Command {
                 return;
             }
 
-            // Get shop item details by ID or slug
-            const shopItem = await this.shopService.getShopItemByIdOrSlug(identifier);
-
-            if (!shopItem) {
-                const embed = new EmbedBuilder()
-                    .setTitle('Error')
-                    .setDescription('Shop item not found. Please check the item ID or slug and try again.')
-                    .setColor(0xff0000);
-
-                await InteractionUtils.send(intr, embed);
-                return;
-            }
-
-            // Attempt to purchase
-            try {
-                const result = await this.shopService.purchaseItem(user.id, identifier, quantity);
-
-                // Get updated user balance
-                const updatedUser = await this.userService.getUserById(user.id);
-
-                const totalCost = shopItem.shop.cost * quantity;
-                const quantityText = quantity > 1 ? ` x${quantity}` : '';
-
-                const embed = new EmbedBuilder()
-                    .setTitle('✅ Purchase Successful!')
-                    .setDescription(`You purchased **${shopItem.item.name}**${quantityText}!`)
-                    .addFields(
-                        { name: 'Cost', value: `${totalCost} coins (${shopItem.shop.cost} each)`, inline: true },
-                        { name: 'New Balance', value: `${updatedUser?.money || 0} coins`, inline: true },
-                        { name: 'Total Quantity', value: `${result.inventory.count}`, inline: true }
-                    )
-                    .setColor(0x2ecc71);
-
-                if (shopItem.item.image) {
-                    embed.setThumbnail(shopItem.item.image);
-                }
-
-                await InteractionUtils.send(intr, embed);
-
-                Logger.info(`[BuyCommand] ${intr.user.tag} purchased ${quantity} x ${shopItem.item.name} for ${totalCost} coins`);
-            } catch (purchaseError) {
-                // Handle specific purchase errors (insufficient funds, etc.)
-                const errorMessage =
-                    purchaseError instanceof Error ? purchaseError.message : 'An unknown error occurred';
-
-                const embed = new EmbedBuilder()
-                    .setTitle('❌ Purchase Failed')
-                    .setDescription(errorMessage)
-                    .addFields({ name: 'Your Balance', value: `${user.money} coins`, inline: true })
-                    .setColor(0xff0000);
-
-                await InteractionUtils.send(intr, embed);
-            }
+            // Execute purchase with response handling
+            await this.shopService.executePurchaseWithResponse(
+                intr,
+                user.id,
+                intr.user.tag,
+                identifier,
+                quantity,
+                false, // Commands are not ephemeral by default
+            );
         } catch (error) {
             Logger.error('[BuyCommand] Error executing buy command:', error);
 

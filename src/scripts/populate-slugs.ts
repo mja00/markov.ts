@@ -7,7 +7,7 @@
 
 import 'dotenv/config';
 
-import { eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 
 import { items } from '../db/schema.js';
 import { DatabaseService } from '../services/database.service.js';
@@ -15,9 +15,22 @@ import { Logger } from '../services/logger.js';
 
 /**
  * Generate slug from item name
+ * @param name - The item name
+ * @returns A sanitized slug
+ * @throws Error if name is empty or invalid
  */
 const generateSlug = (name: string): string => {
-    return name.toLowerCase().replace(/\s+/g, '-');
+    if (!name?.trim()) {
+        throw new Error('Cannot generate slug from empty name');
+    }
+
+    return name
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '') // Remove special characters except spaces and hyphens
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/-+/g, '-') // Collapse multiple consecutive hyphens to single
+        .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+        .trim();
 };
 
 /**
@@ -47,15 +60,58 @@ const populateSlugs = async (): Promise<void> => {
         // Update each item with a slug
         let updated = 0;
         for (const item of itemsWithoutSlugs) {
-            const slug = generateSlug(item.name);
+            let baseSlug = generateSlug(item.name);
+            let slug = baseSlug;
+            let counter = 1;
 
-            await db
-                .update(items)
-                .set({ slug: slug })
-                .where(eq(items.id, item.id));
+            // Handle slug conflicts by appending a counter
+            while (true) {
+                try {
+                    // Check if slug already exists (excluding current item)
+                    const existing = await db
+                        .select()
+                        .from(items)
+                        .where(and(eq(items.slug, slug), ne(items.id, item.id)))
+                        .limit(1);
 
-            Logger.info(`[PopulateSlugs] Updated item "${item.name}" with slug "${slug}"`);
-            updated++;
+                    if (existing.length === 0) {
+                        // Slug is available, use it
+                        break;
+                    }
+
+                    // Slug exists, try with counter
+                    slug = `${baseSlug}-${counter}`;
+                    counter++;
+
+                    // Prevent infinite loop (safety check)
+                    if (counter > 1000) {
+                        // Fallback to using item ID if we can't find a unique slug
+                        slug = `${baseSlug}-${item.id.substring(0, 8)}`;
+                        Logger.warn(
+                            `[PopulateSlugs] Could not generate unique slug for "${item.name}", using fallback: "${slug}"`
+                        );
+                        break;
+                    }
+                } catch (error) {
+                    Logger.error(`[PopulateSlugs] Error checking slug uniqueness for "${item.name}":`, error);
+                    // Fallback to item ID if check fails
+                    slug = `${baseSlug}-${item.id.substring(0, 8)}`;
+                    break;
+                }
+            }
+
+            try {
+                await db
+                    .update(items)
+                    .set({ slug: slug })
+                    .where(eq(items.id, item.id));
+
+                Logger.info(`[PopulateSlugs] Updated item "${item.name}" with slug "${slug}"`);
+                updated++;
+            } catch (error) {
+                Logger.error(`[PopulateSlugs] Failed to update item "${item.name}" with slug "${slug}":`, error);
+                // Continue with next item instead of failing completely
+            }
         }
 
         Logger.info(`[PopulateSlugs] ✅ Successfully populated ${updated} slugs!`);
