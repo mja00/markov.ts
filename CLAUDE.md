@@ -176,3 +176,9 @@ Required environment variables (typically in `.env`):
 - OpenAI API key (for AI features)
 - fal.ai API key (for image generation)
 - Bot developer Discord user ID(s)
+
+
+## Reminders
+
+- When wanting to create custom migration, use the following command to generate a migration file: `drizzle-kit generate --custom --name=<migration>`
+- Always ensure you're running linting, type checks, builds, and tests after completing features
