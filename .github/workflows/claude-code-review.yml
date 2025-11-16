@@ -7,8 +7,10 @@ on:
 jobs:
   test:
     # Only run if comment contains "claude" and is on a PR (not an issue)
+    # Exclude bot comments to prevent infinite loops
     if: |
       github.event.issue.pull_request != null &&
+      github.event.comment.author.type != 'Bot' &&
       contains(github.event.comment.body, 'claude')
     runs-on: ubuntu-latest
     permissions:
@@ -48,8 +50,10 @@ jobs:
   claude-review:
     needs: test
     # Only run if comment contains "claude" and is on a PR (not an issue)
+    # Exclude bot comments to prevent infinite loops
     if: |
       github.event.issue.pull_request != null &&
+      github.event.comment.author.type != 'Bot' &&
       contains(github.event.comment.body, 'claude')
 
     runs-on: ubuntu-latest
