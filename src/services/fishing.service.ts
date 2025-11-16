@@ -152,7 +152,7 @@ export class FishingService {
             const currentTimeOfDay = timeOfDay ?? this.getCurrentTimeOfDay();
 
             // Get all catchables of this rarity that are available at this time of day
-            // Fish are available if their timeOfDay is ANY or matches the current time
+            // Fish are available if their timeOfDay is null (legacy), ANY, or matches the current time
             const availableCatchables = await db
                 .select()
                 .from(catchables)
@@ -160,6 +160,7 @@ export class FishingService {
                     and(
                         eq(catchables.rarity, rarity),
                         or(
+                            isNull(catchables.timeOfDay),
                             eq(catchables.timeOfDay, TimeOfDay.ANY),
                             eq(catchables.timeOfDay, currentTimeOfDay)
                         )
