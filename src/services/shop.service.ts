@@ -110,8 +110,9 @@ export class ShopService {
         shop: Shop;
         item: Item;
     } | null> {
-        // Try as UUID first (UUIDs are 36 characters with dashes)
-        if (identifier.length === 36 && identifier.includes('-')) {
+        // Check if identifier matches UUID format (8-4-4-4-12 hexadecimal pattern)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(identifier)) {
             return await this.getShopItemById(identifier);
         }
         // Otherwise try as slug
