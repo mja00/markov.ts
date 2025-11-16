@@ -64,6 +64,20 @@
       "when": 1763265878223,
       "tag": "0008_update-null-time-of-day",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1763266519702,
+      "tag": "0009_fantastic_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1763266620864,
+      "tag": "0010_add-catchables-index",
+      "breakpoints": true
     }
   ]
 }

@@ -26,7 +26,7 @@ export const catchables = pgTable('catchables', {
     rarity: integer('rarity').default(0).notNull(),
     worth: integer('worth').default(0).notNull(),
     image: varchar('image', { length: 255 }),
-    timeOfDay: timeOfDayEnum('time_of_day').default('ANY'),
+    timeOfDay: timeOfDayEnum('time_of_day').default('ANY').notNull(),
     firstCaughtBy: uuid('first_caught_by').references(() => users.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
