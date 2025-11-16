@@ -3,8 +3,10 @@ import { and, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { getDb } from './database.service.js';
 import { Logger } from './logger.js';
 import { ShopService } from './shop.service.js';
+import { WeatherService } from './weather.service.js';
 import { inventory, Item, items } from '../db/schema.js';
 import { Rarity } from '../enums/rarity.js';
+import { Weather } from '../enums/weather.js';
 
 /**
  * Effect types that items can have
@@ -30,9 +32,11 @@ const BASE_RARITY_WEIGHTS = {
  */
 export class ItemEffectsService {
     private readonly shopService: ShopService;
+    private readonly weatherService: WeatherService;
 
     constructor() {
         this.shopService = new ShopService();
+        this.weatherService = new WeatherService();
     }
     /**
      * Get all passive items owned by a user
@@ -252,9 +256,10 @@ export class ItemEffectsService {
      * Determine rarity based on weighted random selection with item effects
      * @param userId - The user UUID (optional)
      * @param consumableBoost - Optional additional boost from a consumable item
+     * @param weather - Optional weather to apply weather effects
      * @returns The selected rarity level
      */
-    public async determineRarityWithEffects(userId?: string, consumableBoost?: number): Promise<Rarity> {
+    public async determineRarityWithEffects(userId?: string, consumableBoost?: number, weather?: Weather): Promise<Rarity> {
         let weights = { ...BASE_RARITY_WEIGHTS };
         let totalBoost = 0;
 
@@ -274,7 +279,21 @@ export class ItemEffectsService {
             Logger.debug(`[ItemEffectsService] Applied total rarity boost of ${totalBoost * 100}% for user ${userId || 'unknown'}`);
         }
 
-        const random = Math.random() * 100;
+        // Apply weather effects
+        if (weather) {
+            const weatherEffects = this.weatherService.getWeatherEffects(weather);
+            weights = {
+                [Rarity.COMMON]: weights[Rarity.COMMON] * weatherEffects.commonModifier,
+                [Rarity.UNCOMMON]: weights[Rarity.UNCOMMON] * weatherEffects.uncommonModifier,
+                [Rarity.RARE]: weights[Rarity.RARE] * weatherEffects.rareModifier,
+                [Rarity.LEGENDARY]: weights[Rarity.LEGENDARY] * weatherEffects.legendaryModifier,
+            };
+            Logger.debug(`[ItemEffectsService] Applied weather effects: ${weather}`);
+        }
+
+        // Calculate total weight (may not be 100 after weather modifiers)
+        const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
+        const random = Math.random() * totalWeight;
         let cumulative = 0;
 
         // Iterate through rarities from highest to lowest

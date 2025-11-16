@@ -7,6 +7,7 @@ import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
 import { FishingCooldownService } from '../../services/fishing-cooldown.service.js';
 import { FishingService } from '../../services/fishing.service.js';
+import { GuildService } from '../../services/guild.service.js';
 import { Lang, Logger } from '../../services/index.js';
 import { UserService } from '../../services/user.service.js';
 import { InteractionUtils } from '../../utils/index.js';
@@ -21,6 +22,7 @@ export class FishCommand implements Command {
     private readonly userService = new UserService();
     private readonly fishingService = new FishingService();
     private readonly cooldownService = new FishingCooldownService();
+    private readonly guildService = new GuildService();
 
     /**
      * Execute the fish command
@@ -92,8 +94,15 @@ export class FishCommand implements Command {
                 }
             }
 
-            // Determine rarity based on weighted random (with item effects + consumable)
-            const rarity = await this.fishingService.determineRarity(user.id, consumableBoost);
+            // Get guild ID for weather effects
+            let guildId: string | null = null;
+            if (guildDiscordSnowflake) {
+                const guild = await this.guildService.ensureGuildExists(guildDiscordSnowflake);
+                guildId = guild.id;
+            }
+
+            // Determine rarity based on weighted random (with item effects + consumable + weather)
+            const rarity = await this.fishingService.determineRarityWithWeather(user.id, guildId, consumableBoost);
             Logger.debug(`[FishCommand] Picked rarity: ${rarity} (${this.fishingService.getRarityName(rarity)}) for ${intr.user.tag}`);
 
             // Pick a random catchable of that rarity
@@ -149,6 +158,11 @@ export class FishCommand implements Command {
             const timeOfDayName = this.fishingService.getTimeOfDayName(currentTimeOfDay);
             const timeOfDayEmoji = this.fishingService.getTimeOfDayEmoji(currentTimeOfDay);
 
+            // Get weather information
+            const currentWeather = await this.fishingService.weatherService.getCurrentWeather(guildId);
+            const weatherName = this.fishingService.weatherService.getWeatherName(currentWeather);
+            const weatherEmoji = this.fishingService.weatherService.getWeatherEmoji(currentWeather);
+
             // Show worth with multiplier indicator if different from base
             const worthDisplay = finalWorth !== caught.worth ? `${caught.worth} → ${finalWorth}` : `${finalWorth}`;
 
@@ -181,7 +195,7 @@ export class FishCommand implements Command {
                     { name: 'New Balance', value: `${newBalance} coins`, inline: true },
                     { name: 'Rarity', value: rarityName, inline: true }
                 )
-                .setFooter({ text: `${timeOfDayEmoji} Current time: ${timeOfDayName}` })
+                .setFooter({ text: `${timeOfDayEmoji} ${timeOfDayName} | ${weatherEmoji} ${weatherName}` })
                 .setColor(rarityColor);
 
             // Add image if available

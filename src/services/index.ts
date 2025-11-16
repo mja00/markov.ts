@@ -8,3 +8,4 @@ export { Logger } from './logger.js';
 export { MasterApiService } from './master-api-service.js';
 export { OpenAIService } from './openai.js';
 export { ImageUpload } from './image-upload.js';
+export { WeatherService } from './weather.service.js';

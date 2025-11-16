@@ -7,6 +7,9 @@ export const effectTypeEnum = pgEnum('effect_type_enum', ['RARITY_BOOST', 'WORTH
 // Enum for time of day
 export const timeOfDayEnum = pgEnum('time_of_day_enum', ['DAY', 'NIGHT', 'DAWN', 'DUSK', 'ANY']);
 
+// Enum for weather
+export const weatherEnum = pgEnum('weather_enum', ['SUNNY', 'RAINY', 'STORMY', 'FOGGY', 'SNOWY']);
+
 export const users = pgTable('users', {
     id: uuid('id').defaultRandom().primaryKey(),
     discordSnowflake: varchar('discord_snowflake', { length: 255 }).unique().notNull(),
@@ -119,3 +122,15 @@ export const fishingAttempts = pgTable('fishing_attempts', {
 
 export type FishingAttempt = InferSelectModel<typeof fishingAttempts>;
 export type FishingAttemptInsert = InferInsertModel<typeof fishingAttempts>;
+
+export const guildWeather = pgTable('guild_weather', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    guildId: uuid('guild_id').references(() => guilds.id).notNull().unique(),
+    currentWeather: weatherEnum('current_weather').default('SUNNY').notNull(),
+    nextChangeAt: timestamp('next_change_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export type GuildWeather = InferSelectModel<typeof guildWeather>;
+export type GuildWeatherInsert = InferInsertModel<typeof guildWeather>;

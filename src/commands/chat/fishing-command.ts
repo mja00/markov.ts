@@ -5,6 +5,7 @@ import { Rarity } from '../../enums/rarity.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
 import { FishingService } from '../../services/fishing.service.js';
+import { GuildService } from '../../services/guild.service.js';
 import { Lang, Logger } from '../../services/index.js';
 import { UserService } from '../../services/user.service.js';
 import { InteractionUtils } from '../../utils/interaction-utils.js';
@@ -17,6 +18,7 @@ export class FishingCommand implements Command {
 
     private readonly userService = new UserService();
     private readonly fishingService = new FishingService();
+    private readonly guildService = new GuildService();
 
     /**
      * Execute the fishing management command
@@ -37,10 +39,14 @@ export class FishingCommand implements Command {
                     embed = await this.getLeaderboardEmbed();
                     break;
                 }
+                case FishingOption.WEATHER: {
+                    embed = await this.getWeatherEmbed(intr);
+                    break;
+                }
                 default: {
                     embed = new EmbedBuilder()
                         .setTitle('Invalid Option')
-                        .setDescription('Please select either Stats or Leaderboard.')
+                        .setDescription('Please select Stats, Leaderboard, or Weather.')
                         .setColor(0xff0000);
                 }
             }
@@ -156,6 +162,45 @@ export class FishingCommand implements Command {
 
         if (topByMoney.length === 0 && topByCatches.length === 0) {
             embed.setDescription('No fishing data yet. Be the first to catch something!');
+        }
+
+        return embed;
+    }
+
+    /**
+     * Build weather embed showing current weather and its effects
+     */
+    private async getWeatherEmbed(intr: ChatInputCommandInteraction): Promise<EmbedBuilder> {
+        // Get guild ID
+        let guildId: string | null = null;
+        if (intr.guild?.id) {
+            const guild = await this.guildService.ensureGuildExists(intr.guild.id);
+            guildId = guild.id;
+        }
+
+        // Get current weather
+        const weatherService = this.fishingService.weatherService;
+        const currentWeather = await weatherService.getCurrentWeather(guildId);
+        const weatherName = weatherService.getWeatherName(currentWeather);
+        const weatherEmoji = weatherService.getWeatherEmoji(currentWeather);
+        const weatherDescription = weatherService.getWeatherDescription(currentWeather);
+
+        // Build embed
+        const embed = new EmbedBuilder()
+            .setTitle(`${weatherEmoji} Current Weather: ${weatherName}`)
+            .setDescription(weatherDescription)
+            .setColor(0x3498db);
+
+        // Get time until next weather change
+        const timeUntilChange = await weatherService.getTimeUntilNextChange(guildId);
+        if (timeUntilChange !== null && timeUntilChange > 0) {
+            const hours = Math.floor(timeUntilChange / (60 * 60 * 1000));
+            const minutes = Math.floor((timeUntilChange % (60 * 60 * 1000)) / (60 * 1000));
+            const timeDisplay = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+            embed.setFooter({ text: `Weather changes in ${timeDisplay}` });
+        } else if (guildId === null) {
+            embed.setFooter({ text: 'Weather is always sunny in DMs!' });
         }
 
         return embed;

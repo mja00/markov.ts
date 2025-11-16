@@ -2,10 +2,12 @@ import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
 import { getDb } from './database.service.js';
 import { ItemEffectsService } from './item-effects.service.js';
+import { WeatherService } from './weather.service.js';
 import { Logger } from './logger.js';
 import { Catchable, catchables, catches, CatchInsert } from '../db/schema.js';
 import { Rarity } from '../enums/rarity.js';
 import { TimeOfDay } from '../enums/time-of-day.js';
+import { Weather } from '../enums/weather.js';
 
 /**
  * Rarity weights for random selection
@@ -34,9 +36,11 @@ const TIME_BOUNDARIES = {
  */
 export class FishingService {
     public readonly itemEffectsService: ItemEffectsService;
+    public readonly weatherService: WeatherService;
 
     constructor() {
         this.itemEffectsService = new ItemEffectsService();
+        this.weatherService = new WeatherService();
     }
 
     /**
@@ -119,20 +123,34 @@ export class FishingService {
      * Determine rarity based on weighted random selection
      * @param userId - Optional user ID to apply item effects
      * @param consumableBoost - Optional additional boost from a consumable item
+     * @param weather - Optional weather to apply weather effects
      * @returns The selected rarity level
      */
-    public async determineRarity(userId?: string, consumableBoost?: number): Promise<Rarity> {
+    public async determineRarity(userId?: string, consumableBoost?: number, weather?: Weather): Promise<Rarity> {
         if (userId) {
-            return await this.itemEffectsService.determineRarityWithEffects(userId, consumableBoost);
+            return await this.itemEffectsService.determineRarityWithEffects(userId, consumableBoost, weather);
         }
 
-        // Fallback to base weights if no user ID provided
-        const random = Math.random() * 100;
+        // Apply weather effects to base weights
+        let weights = { ...RARITY_WEIGHTS };
+        if (weather) {
+            const weatherEffects = this.weatherService.getWeatherEffects(weather);
+            weights = {
+                [Rarity.COMMON]: RARITY_WEIGHTS[Rarity.COMMON] * weatherEffects.commonModifier,
+                [Rarity.UNCOMMON]: RARITY_WEIGHTS[Rarity.UNCOMMON] * weatherEffects.uncommonModifier,
+                [Rarity.RARE]: RARITY_WEIGHTS[Rarity.RARE] * weatherEffects.rareModifier,
+                [Rarity.LEGENDARY]: RARITY_WEIGHTS[Rarity.LEGENDARY] * weatherEffects.legendaryModifier,
+            };
+        }
+
+        // Calculate total weight
+        const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
+        const random = Math.random() * totalWeight;
         let cumulative = 0;
 
         // Iterate through rarities from highest to lowest
         for (const rarity of [Rarity.LEGENDARY, Rarity.RARE, Rarity.UNCOMMON, Rarity.COMMON]) {
-            cumulative += RARITY_WEIGHTS[rarity];
+            cumulative += weights[rarity];
             if (random < cumulative) {
                 return rarity;
             }
@@ -140,6 +158,22 @@ export class FishingService {
 
         // Fallback to common (should never reach here)
         return Rarity.COMMON;
+    }
+
+    /**
+     * Determine rarity with guild weather effects applied
+     * @param userId - Optional user ID to apply item effects
+     * @param guildId - Guild ID to get weather for (null for DM context)
+     * @param consumableBoost - Optional additional boost from a consumable item
+     * @returns The selected rarity level
+     */
+    public async determineRarityWithWeather(
+        userId: string | undefined,
+        guildId: string | null,
+        consumableBoost?: number,
+    ): Promise<Rarity> {
+        const weather = await this.weatherService.getCurrentWeather(guildId);
+        return await this.determineRarity(userId, consumableBoost, weather);
     }
 
     /**
