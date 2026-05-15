@@ -161,7 +161,7 @@ npm run commands:delete                # Delete a specific command
 ## Configuration
 
 - **TypeScript**: `tsconfig.json` with strict type checking, ESM modules
-- **ESLint**: `.eslintrc.json` for code quality
+- **ESLint**: `eslint.config.mjs` (flat config) for code quality
 - **Prettier**: `.prettierrc.json` for code formatting
 - **Vitest**: `vitest.config.ts` for testing configuration
 - **Drizzle**: `src/drizzle.config.ts` for database configuration
