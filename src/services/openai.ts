@@ -1,4 +1,4 @@
-/* eslint-disable import/no-extraneous-dependencies */
+ 
 import * as fal from '@fal-ai/serverless-client';
 import fetch from 'node-fetch';
 import * as fs from 'node:fs';

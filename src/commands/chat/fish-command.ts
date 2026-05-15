@@ -1,7 +1,6 @@
 import { ChatInputCommandInteraction, EmbedBuilder, PermissionsString } from 'discord.js';
 import { RateLimiter } from 'discord.js-rate-limiter';
 
-import { Rarity } from '../../enums/rarity.js';
 import { TimeOfDay } from '../../enums/time-of-day.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
@@ -140,8 +139,8 @@ export class FishCommand implements Command {
             const remainingAttempts = await this.cooldownService.getRemainingAttempts(user.id, guildDiscordSnowflake);
 
             // Build response embed
-            const rarityName = this.fishingService.getRarityName(caught.rarity as Rarity);
-            const rarityColor = this.fishingService.getRarityColor(caught.rarity as Rarity);
+            const rarityName = this.fishingService.getRarityName(caught.rarity);
+            const rarityColor = this.fishingService.getRarityColor(caught.rarity);
             const newBalance = user.money + finalWorth;
 
             // Get time of day information

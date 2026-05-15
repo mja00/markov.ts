@@ -7,7 +7,6 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import { Catchable, User } from '../db/schema.js';
 import * as schema from '../db/schema.js';
-import { Rarity } from '../enums/rarity.js';
 import { getDb as getDatabase } from '../services/database.service.js';
 import { FishingService } from '../services/fishing.service.js';
 import { UserService } from '../services/user.service.js';
@@ -40,7 +39,7 @@ export async function ensureUserExists(discordId: string, discordTag?: string): 
  * @returns A random catchable of the specified rarity
  */
 export async function pickCatchableByRarity(rarity: number): Promise<Catchable | null> {
-    return await fishingService.pickCatchableByRarity(rarity as Rarity);
+    return await fishingService.pickCatchableByRarity(rarity);
 }
 
 /**

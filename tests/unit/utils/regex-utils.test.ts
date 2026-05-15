@@ -132,12 +132,12 @@ describe('RegexUtils', () => {
         });
 
         it('should handle undefined input', () => {
-            const result = RegexUtils.escapeRegex(undefined as any);
+            const result = RegexUtils.escapeRegex(undefined);
             expect(result).toBeUndefined();
         });
 
         it('should handle null input', () => {
-            const result = RegexUtils.escapeRegex(null as any);
+            const result = RegexUtils.escapeRegex(null);
             expect(result).toBeUndefined();
         });
     });
@@ -199,12 +199,12 @@ describe('RegexUtils', () => {
         });
 
         it('should handle undefined input', () => {
-            const result = RegexUtils.discordId(undefined as any);
+            const result = RegexUtils.discordId(undefined);
             expect(result).toBeUndefined();
         });
 
         it('should handle null input', () => {
-            const result = RegexUtils.discordId(null as any);
+            const result = RegexUtils.discordId(null);
             expect(result).toBeUndefined();
         });
 

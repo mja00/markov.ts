@@ -70,7 +70,7 @@ export class BuyCommand implements Command {
                     return {
                         name: displayName,
                         value: slug,
-                    } as ApplicationCommandOptionChoiceData;
+                    };
                 })
                 .slice(0, 25); // Discord limit is 25 choices
 

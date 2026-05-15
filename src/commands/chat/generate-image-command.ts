@@ -1,4 +1,4 @@
-/* eslint-disable import/no-extraneous-dependencies */
+ 
 import * as fal from '@fal-ai/serverless-client';
 import { AttachmentBuilder, ChatInputCommandInteraction, PermissionsString } from 'discord.js';
 import { readFile } from 'node:fs/promises';

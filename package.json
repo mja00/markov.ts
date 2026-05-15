@@ -75,21 +75,20 @@
         "remove-markdown": "0.6.4"
     },
     "devDependencies": {
-        "@eslint/js": "^9.33.0",
+        "@eslint/js": "^9.39.4",
         "@types/express": "5.0.6",
         "@types/luxon": "3.7.1",
         "@types/node": "^25.8.0",
         "@types/node-schedule": "2.1.8",
         "@types/remove-markdown": "0.3.4",
-        "@typescript-eslint/eslint-plugin": "^6.21.0",
-        "@typescript-eslint/parser": "^6.21.0",
         "@vitest/coverage-v8": "^4.0.9",
         "drizzle-kit": "^0.31.4",
-        "eslint": "^8.57.1",
+        "eslint": "^9.39.4",
         "eslint-plugin-import": "^2.32.0",
-        "eslint-plugin-unicorn": "^48.0.1",
+        "eslint-plugin-unicorn": "^64.0.0",
         "prettier": "^3.6.2",
         "typescript": "^5.9.2",
+        "typescript-eslint": "^8.59.3",
         "vitest": "^4.0.9"
     }
 }

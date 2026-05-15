@@ -1,7 +1,6 @@
 import { ChatInputCommandInteraction, EmbedBuilder, PermissionsString } from 'discord.js';
 
 import { FishingOption } from '../../enums/fishing-option.js';
-import { Rarity } from '../../enums/rarity.js';
 import { Language } from '../../models/enum-helpers/index.js';
 import { EventData } from '../../models/internal-models.js';
 import { FishingService } from '../../services/fishing.service.js';
@@ -88,7 +87,7 @@ export class FishingCommand implements Command {
 
         // Add rarest catch if exists
         if (stats.rarestCatch) {
-            const rarityName = this.fishingService.getRarityName(stats.rarestCatch.rarity as Rarity);
+            const rarityName = this.fishingService.getRarityName(stats.rarestCatch.rarity);
             embed.addFields({
                 name: '🏆 Rarest Catch',
                 value: `${stats.rarestCatch.name} (${rarityName})`,

@@ -28,19 +28,35 @@ let logger = pino(
 
 export class Logger {
     public static info(message: string, obj?: any): void {
-        obj ? logger.info(obj, message) : logger.info(message);
+        if (obj) {
+            logger.info(obj, message);
+        } else {
+            logger.info(message);
+        }
     }
 
     public static warn(message: string, obj?: any): void {
-        obj ? logger.warn(obj, message) : logger.warn(message);
+        if (obj) {
+            logger.warn(obj, message);
+        } else {
+            logger.warn(message);
+        }
     }
 
     public static debug(message: string, obj?: any): void {
-        obj ? logger.debug(obj, message) : logger.debug(message);
+        if (obj) {
+            logger.debug(obj, message);
+        } else {
+            logger.debug(message);
+        }
     }
 
     public static trace(message: string, obj?: any): void {
-        obj ? logger.trace(obj, message) : logger.trace(message);
+        if (obj) {
+            logger.trace(obj, message);
+        } else {
+            logger.trace(message);
+        }
     }
 
     public static async error(message: string, obj?: any): Promise<void> {
