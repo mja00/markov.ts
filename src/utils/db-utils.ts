@@ -3,14 +3,14 @@
  * This file provides helper functions that delegate to the optimized service layer
  */
 
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import { Catchable, User } from '../db/schema.js';
 import * as schema from '../db/schema.js';
-import { Rarity } from '../enums/rarity.js';
 import { getDb as getDatabase } from '../services/database.service.js';
 import { FishingService } from '../services/fishing.service.js';
 import { UserService } from '../services/user.service.js';
+
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 // Service instances
 const userService = new UserService();
@@ -21,7 +21,7 @@ const fishingService = new FishingService();
  * @returns Database instance
  */
 export function getDb(): PostgresJsDatabase<typeof schema> {
-    return getDatabase();
+	return getDatabase();
 }
 
 /**
@@ -31,7 +31,7 @@ export function getDb(): PostgresJsDatabase<typeof schema> {
  * @returns The user record
  */
 export async function ensureUserExists(discordId: string, discordTag?: string): Promise<User> {
-    return await userService.ensureUserExists(discordId, discordTag);
+	return await userService.ensureUserExists(discordId, discordTag);
 }
 
 /**
@@ -40,7 +40,7 @@ export async function ensureUserExists(discordId: string, discordTag?: string): 
  * @returns A random catchable of the specified rarity
  */
 export async function pickCatchableByRarity(rarity: number): Promise<Catchable | null> {
-    return await fishingService.pickCatchableByRarity(rarity as Rarity);
+	return await fishingService.pickCatchableByRarity(rarity);
 }
 
 /**
@@ -49,8 +49,8 @@ export async function pickCatchableByRarity(rarity: number): Promise<Catchable |
  * @param worth - Amount to add
  */
 export async function addWorthToUser(user: User | string, worth: number): Promise<void> {
-    const userId = typeof user === 'string' ? user : user.id;
-    await userService.addMoney(userId, worth);
+	const userId = typeof user === 'string' ? user : user.id;
+	await userService.addMoney(userId, worth);
 }
 
 /**
@@ -59,14 +59,14 @@ export async function addWorthToUser(user: User | string, worth: number): Promis
  * @param catchable - Catchable object or catchable ID
  */
 export async function firstCatch(user: User | string, catchable: Catchable | string): Promise<void> {
-    const userId = typeof user === 'string' ? user : user.id;
-    const catchableId = typeof catchable === 'string' ? catchable : catchable.id;
+	const userId = typeof user === 'string' ? user : user.id;
+	const catchableId = typeof catchable === 'string' ? catchable : catchable.id;
 
-    const isFirst = await fishingService.isFirstCatch(catchableId);
+	const isFirst = await fishingService.isFirstCatch(catchableId);
 
-    if (isFirst) {
-        await fishingService.markFirstCatch(catchableId, userId);
-    }
+	if (isFirst) {
+		await fishingService.markFirstCatch(catchableId, userId);
+	}
 }
 
 /**
@@ -75,10 +75,10 @@ export async function firstCatch(user: User | string, catchable: Catchable | str
  * @param catchable - Catchable object or catchable ID
  */
 export async function addCatch(user: User | string, catchable: Catchable | string): Promise<void> {
-    const userId = typeof user === 'string' ? user : user.id;
-    const catchableId = typeof catchable === 'string' ? catchable : catchable.id;
+	const userId = typeof user === 'string' ? user : user.id;
+	const catchableId = typeof catchable === 'string' ? catchable : catchable.id;
 
-    await fishingService.addCatch(userId, catchableId);
+	await fishingService.addCatch(userId, catchableId);
 }
 
 // Re-export services for direct access

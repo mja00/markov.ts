@@ -1,192 +1,195 @@
 import 'dotenv/config';
 
+import { createRequire } from 'node:module';
+
 import { REST } from '@discordjs/rest';
 import { Options, Partials } from 'discord.js';
-import { createRequire } from 'node:module';
 
 import { Button, ShopButton } from './buttons/index.js';
 import {
-    BuyCommand,
-    DevCommand,
-    FishCommand,
-    FishingCommand,
-    GenerateImageCommand,
-    HelpCommand,
-    InfoCommand,
-    InventoryCommand,
-    ShopCommand,
-    TestCommand,
+	BuyCommand,
+	DevCommand,
+	FishCommand,
+	FishingCommand,
+	GenerateImageCommand,
+	HelpCommand,
+	InfoCommand,
+	InventoryCommand,
+	ShopCommand,
+	TestCommand,
 } from './commands/chat/index.js';
 import {
-    ChatCommandMetadata,
-    Command,
-    MessageCommandMetadata,
-    UserCommandMetadata,
+	ChatCommandMetadata,
+	Command,
+	MessageCommandMetadata,
+	UserCommandMetadata,
 } from './commands/index.js';
 import { ViewDateSent } from './commands/message/index.js';
 import { ViewDateJoined } from './commands/user/index.js';
 import {
-    ButtonHandler,
-    CommandHandler,
-    GuildJoinHandler,
-    GuildLeaveHandler,
-    MessageHandler,
-    ModalHandler,
-    ReactionHandler,
-    TriggerHandler,
+	ButtonHandler,
+	CommandHandler,
+	GuildJoinHandler,
+	GuildLeaveHandler,
+	MessageHandler,
+	ModalHandler,
+	ReactionHandler,
+	TriggerHandler,
 } from './events/index.js';
 import { CustomClient } from './extensions/index.js';
 import { Job } from './jobs/index.js';
 import { Bot } from './models/bot.js';
 import { Reaction } from './reactions/index.js';
 import {
-    CommandRegistrationService,
-    DatabaseService,
-    EventDataService,
-    JobService,
-    Logger,
-    OpenAIService,
+	CommandRegistrationService,
+	DatabaseService,
+	EventDataService,
+	JobService,
+	Logger,
+	OpenAIService,
 } from './services/index.js';
 import { Trigger } from './triggers/index.js';
 
 const require = createRequire(import.meta.url);
-let Config = require('../config/config.json');
-let Logs = require('../lang/logs.json');
+const Config = require('../config/config.json');
+const Logs = require('../lang/logs.json');
 
 async function start(): Promise<void> {
-    // Services
-    let eventDataService = new EventDataService();
+	// Services
+	const eventDataService = new EventDataService();
 
-    // Client
-    let client = new CustomClient({
-        intents: Config.client.intents,
-        partials: (Config.client.partials as string[]).map(partial => Partials[partial]),
-        makeCache: Options.cacheWithLimits({
-            // Keep default caching behavior
-            ...Options.DefaultMakeCacheSettings,
-            // Override specific options from config
-            ...Config.client.caches,
-        }),
-    });
+	// Client
+	const client = new CustomClient({
+		intents: Config.client.intents,
+		partials: (Config.client.partials as string[]).map(partial => Partials[partial]),
+		makeCache: Options.cacheWithLimits({
+			// Keep default caching behavior
+			...Options.DefaultMakeCacheSettings,
+			// Override specific options from config
+			...Config.client.caches,
+		}),
+	});
 
-    // Commands
-    let commands: Command[] = [
-        // Chat Commands
-        new DevCommand(),
-        new HelpCommand(),
-        new InfoCommand(),
-        new TestCommand(),
-        new GenerateImageCommand(),
-        new FishCommand(),
-        new FishingCommand(),
-        new ShopCommand(),
-        new BuyCommand(),
-        new InventoryCommand(),
+	// Commands
+	const commands: Command[] = [
+		// Chat Commands
+		new DevCommand(),
+		new HelpCommand(),
+		new InfoCommand(),
+		new TestCommand(),
+		new GenerateImageCommand(),
+		new FishCommand(),
+		new FishingCommand(),
+		new ShopCommand(),
+		new BuyCommand(),
+		new InventoryCommand(),
 
-        // Message Context Commands
-        new ViewDateSent(),
+		// Message Context Commands
+		new ViewDateSent(),
 
-        // User Context Commands
-        new ViewDateJoined(),
+		// User Context Commands
+		new ViewDateJoined(),
 
-        // TODO: Add new commands here
-    ];
+		// TODO: Add new commands here
+	];
 
-    // Buttons
-    let buttons: Button[] = [
-        new ShopButton(),
-        // TODO: Add new buttons here
-    ];
+	// Buttons
+	const buttons: Button[] = [
+		new ShopButton(),
+		// TODO: Add new buttons here
+	];
 
-    // Reactions
-    let reactions: Reaction[] = [
-        // TODO: Add new reactions here
-    ];
+	// Reactions
+	const reactions: Reaction[] = [
+		// TODO: Add new reactions here
+	];
 
-    // Triggers
-    let triggers: Trigger[] = [
-        // TODO: Add new triggers here
-    ];
+	// Triggers
+	const triggers: Trigger[] = [
+		// TODO: Add new triggers here
+	];
 
-    // Event handlers
-    let guildJoinHandler = new GuildJoinHandler(eventDataService);
-    let guildLeaveHandler = new GuildLeaveHandler();
-    let commandHandler = new CommandHandler(commands, eventDataService);
-    let buttonHandler = new ButtonHandler(buttons, eventDataService);
-    let modalHandler = new ModalHandler(eventDataService);
-    let triggerHandler = new TriggerHandler(triggers, eventDataService);
-    let messageHandler = new MessageHandler(triggerHandler);
-    let reactionHandler = new ReactionHandler(reactions, eventDataService);
+	// Event handlers
+	const guildJoinHandler = new GuildJoinHandler(eventDataService);
+	const guildLeaveHandler = new GuildLeaveHandler();
+	const commandHandler = new CommandHandler(commands, eventDataService);
+	const buttonHandler = new ButtonHandler(buttons, eventDataService);
+	const modalHandler = new ModalHandler(eventDataService);
+	const triggerHandler = new TriggerHandler(triggers, eventDataService);
+	const messageHandler = new MessageHandler(triggerHandler);
+	const reactionHandler = new ReactionHandler(reactions, eventDataService);
 
-    // Jobs
-    let jobs: Job[] = [
-        // TODO: Add new jobs here
-    ];
+	// Jobs
+	const jobs: Job[] = [
+		// TODO: Add new jobs here
+	];
 
-    // Bot
-    let bot = new Bot(
-        Config.client.token,
-        client,
-        guildJoinHandler,
-        guildLeaveHandler,
-        messageHandler,
-        commandHandler,
-        buttonHandler,
-        modalHandler,
-        reactionHandler,
-        new JobService(jobs)
-    );
+	// Bot
+	const bot = new Bot(
+		Config.client.token,
+		client,
+		guildJoinHandler,
+		guildLeaveHandler,
+		messageHandler,
+		commandHandler,
+		buttonHandler,
+		modalHandler,
+		reactionHandler,
+		new JobService(jobs),
+	);
 
-    // Register
-    if (process.argv[2] == 'commands') {
-        try {
-            let rest = new REST({ version: '10' }).setToken(Config.client.token);
-            let commandRegistrationService = new CommandRegistrationService(rest);
-            let localCmds = [
-                ...Object.values(ChatCommandMetadata).sort((a, b) => (a.name > b.name ? 1 : -1)),
-                ...Object.values(MessageCommandMetadata).sort((a, b) => (a.name > b.name ? 1 : -1)),
-                ...Object.values(UserCommandMetadata).sort((a, b) => (a.name > b.name ? 1 : -1)),
-            ];
-            await commandRegistrationService.process(localCmds, process.argv);
-        } catch (error) {
-            Logger.error(Logs.error.commandAction, error);
-        }
-        // Wait for any final logs to be written.
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        process.exit();
-    }
+	// Register
+	if (process.argv[2] === 'commands') {
+		try {
+			const rest = new REST({ version: '10' }).setToken(Config.client.token);
+			const commandRegistrationService = new CommandRegistrationService(rest);
+			const localCmds = [
+				...Object.values(ChatCommandMetadata).sort((first, second) => (first.name > second.name ? 1 : -1)),
+				...Object.values(MessageCommandMetadata).sort((first, second) => (first.name > second.name ? 1 : -1)),
+				...Object.values(UserCommandMetadata).sort((first, second) => (first.name > second.name ? 1 : -1)),
+			];
+			await commandRegistrationService.process(localCmds, process.argv);
+		} catch (error) {
+			Logger.error(Logs.error.commandAction, error);
+		}
+		// Wait for any final logs to be written.
+		await new Promise((resolve) => {
+			setTimeout(resolve, 1000);
+		});
+		process.exit();
+	}
 
-    // Start an OpenAI service
-    await OpenAIService.getInstance();
+	// Start an OpenAI service
+	await OpenAIService.getInstance();
 
-    // Connect to database
-    try {
-        await DatabaseService.getInstance().connect();
-        Logger.info('Database connection established');
-    } catch (error) {
-        Logger.warn('Failed to connect to database - fishing features will be unavailable:', error);
-    }
+	// Connect to database
+	try {
+		await DatabaseService.getInstance().connect();
+		Logger.info('Database connection established');
+	} catch (error) {
+		Logger.warn('Failed to connect to database - fishing features will be unavailable:', error);
+	}
 
-    await bot.start();
+	await bot.start();
 }
 
 process.on('unhandledRejection', (reason, _promise) => {
-    Logger.error(Logs.error.unhandledRejection, reason);
+	Logger.error(Logs.error.unhandledRejection, reason);
 });
 
 process.on('SIGINT', async () => {
-    process.exit(0);
+	process.exit(0);
 });
 
 process.on('exit', async () => {
-    Logger.info('Bot shutting down...');
-    const openAI = await OpenAIService.getInstance();
-    await openAI.onShutdown();
+	Logger.info('Bot shutting down...');
+	const openAI = await OpenAIService.getInstance();
+	await openAI.onShutdown();
 
-    // Disconnect from database
-    await DatabaseService.getInstance().disconnect();
+	// Disconnect from database
+	await DatabaseService.getInstance().disconnect();
 });
 
-start().catch(error => {
-    Logger.error(Logs.error.unspecified, error);
+start().catch((error) => {
+	Logger.error(Logs.error.unspecified, error);
 });
