@@ -13,6 +13,7 @@ const customConfig = defineConfig([
         'misc',
         'node_modules',
         'temp',
+        'coverage',
         'eslint.config.mjs',
         'src/db/schema.js',
         'src/db/schema.d.ts',
