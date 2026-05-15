@@ -1,4 +1,4 @@
 export enum FishingOption {
-    STATS = 'STATS',
-    LEADERBOARD = 'LEADERBOARD',
+	STATS = 'STATS',
+	LEADERBOARD = 'LEADERBOARD',
 }

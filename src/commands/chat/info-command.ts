@@ -8,28 +8,28 @@ import { InteractionUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
 
 export class InfoCommand implements Command {
-    public names = [Lang.getRef('chatCommands.info', Language.Default)];
-    public deferType = CommandDeferType.HIDDEN;
-    public requireClientPerms: PermissionsString[] = [];
+	public names = [Lang.getRef('chatCommands.info', Language.Default)];
+	public deferType = CommandDeferType.HIDDEN;
+	public requireClientPerms: PermissionsString[] = [];
 
-    public async execute(intr: ChatInputCommandInteraction, data: EventData): Promise<void> {
-        let args = {
-            option: intr.options.getString(
-                Lang.getRef('arguments.option', Language.Default)
-            ) as InfoOption,
-        };
+	public async execute(intr: ChatInputCommandInteraction, data: EventData): Promise<void> {
+		const args = {
+			option: intr.options.getString(
+				Lang.getRef('arguments.option', Language.Default),
+			) as InfoOption,
+		};
 
-        let embed: EmbedBuilder;
-        switch (args.option) {
-            case InfoOption.ABOUT: {
-                embed = Lang.getEmbed('displayEmbeds.about', data.lang);
-                break;
-            }
-            default: {
-                return;
-            }
-        }
+		let embed: EmbedBuilder;
+		switch (args.option) {
+			case InfoOption.ABOUT: {
+				embed = Lang.getEmbed('displayEmbeds.about', data.lang);
+				break;
+			}
+			default: {
+				return;
+			}
+		}
 
-        await InteractionUtils.send(intr, embed);
-    }
+		await InteractionUtils.send(intr, embed);
+	}
 }

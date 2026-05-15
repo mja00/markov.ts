@@ -18,10 +18,8 @@ npm run start:pm2      # Start with PM2 process manager
 
 ### Code Quality
 ```bash
-npm run lint           # Run ESLint for code linting
-npm run lint:fix       # Fix auto-fixable linting issues
-npm run format         # Check code formatting with Prettier
-npm run format:fix     # Fix code formatting issues
+npm run lint           # Run ESLint for code linting (also enforces formatting)
+npm run lint:fix       # Fix auto-fixable linting and formatting issues
 ```
 
 ### Testing
@@ -161,8 +159,7 @@ npm run commands:delete                # Delete a specific command
 ## Configuration
 
 - **TypeScript**: `tsconfig.json` with strict type checking, ESM modules
-- **ESLint**: `eslint.config.mjs` (flat config) for code quality
-- **Prettier**: `.prettierrc.json` for code formatting
+- **ESLint**: `eslint.config.mjs` (flat config, extends `@nodecraft/eslint-config`) for code quality and formatting
 - **Vitest**: `vitest.config.ts` for testing configuration
 - **Drizzle**: `src/drizzle.config.ts` for database configuration
 - **Bot Config**: `config/config.json` (see `config/*.example.json` for templates)
