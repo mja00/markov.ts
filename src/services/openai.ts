@@ -159,9 +159,10 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
             }
         },
         {
+            // Note: the image_generation tool now defaults to the gpt-image-2 model,
+            // which does not support the `input_fidelity` parameter (gpt-image-1 did).
             type: 'image_generation',
             background: 'opaque',
-            input_fidelity: 'low',
             quality: 'medium',
             size: '1024x1024',
         }
