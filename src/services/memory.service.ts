@@ -327,19 +327,24 @@ export class MemoryService {
 	}
 
 	/**
-	 * Delete a memory by ID.
+	 * Delete a memory by ID only if it belongs to the given guild (admin/server-scoped delete).
+	 * Prevents cross-guild deletion.
 	 *
 	 * @param id - The memory UUID
+	 * @param guildSnowflake - The guild ID that must own the memory
 	 * @returns true if a memory was deleted
 	 */
-	public async forgetById(id: string): Promise<boolean> {
+	public async forgetByIdForGuild(id: string, guildSnowflake: string): Promise<boolean> {
 		const db = getDb();
 
 		try {
-			const result = await db.delete(memories).where(eq(memories.id, id)).returning();
+			const result = await db
+				.delete(memories)
+				.where(and(eq(memories.id, id), eq(memories.guildSnowflake, guildSnowflake)))
+				.returning();
 			return result.length > 0;
 		} catch (error) {
-			Logger.error('[MemoryService] Failed to forget memory by id:', error);
+			Logger.error(`[MemoryService] Failed to forget memory ${id} for guild ${guildSnowflake}:`, error);
 			throw new Error(`Failed to forget memory: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });
 		}
 	}

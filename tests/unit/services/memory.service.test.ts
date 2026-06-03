@@ -20,17 +20,19 @@ vi.mock('../../../src/services/logger.js', () => {
 });
 
 // Mock the embedding service so we control the embedding result.
-const { createEmbeddingMock, insertMock, selectMock, dbMock } = vi.hoisted(() => {
+const { createEmbeddingMock, insertMock, selectMock, deleteMock, dbMock } = vi.hoisted(() => {
 	const insertFn = vi.fn();
 	const selectFn = vi.fn();
+	const deleteFn = vi.fn();
 	return {
 		createEmbeddingMock: vi.fn(),
 		insertMock: insertFn,
 		selectMock: selectFn,
+		deleteMock: deleteFn,
 		dbMock: {
 			insert: insertFn,
 			select: selectFn,
-			delete: vi.fn(),
+			delete: deleteFn,
 			update: vi.fn(),
 		},
 	};
@@ -110,6 +112,7 @@ describe('MemoryService', () => {
 		createEmbeddingMock.mockReset();
 		insertMock.mockReset();
 		selectMock.mockReset();
+		deleteMock.mockReset();
 	});
 
 	describe('saveMemory', () => {
@@ -226,6 +229,60 @@ describe('MemoryService', () => {
 
 			expect(result).toEqual([]);
 			expect(selectMock).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('forgetByIdForGuild', () => {
+		it('returns true when a row matching both id and guildSnowflake is deleted', async () => {
+			const returning = vi.fn().mockResolvedValue([{ id: 'mem-uuid-1' }]);
+			const where = vi.fn(() => { return { returning }; });
+			deleteMock.mockReturnValue({ where });
+
+			const service = new MemoryService();
+			const result = await service.forgetByIdForGuild('mem-uuid-1', 'GUILD_A');
+
+			expect(result).toBe(true);
+			expect(deleteMock).toHaveBeenCalledTimes(1);
+			expect(where).toHaveBeenCalledTimes(1);
+			expect(returning).toHaveBeenCalledTimes(1);
+		});
+
+		it('returns false when no row matches (wrong guild or non-existent id)', async () => {
+			const returning = vi.fn().mockResolvedValue([]);
+			const where = vi.fn(() => { return { returning }; });
+			deleteMock.mockReturnValue({ where });
+
+			const service = new MemoryService();
+			const result = await service.forgetByIdForGuild('mem-uuid-1', 'GUILD_B');
+
+			expect(result).toBe(false);
+		});
+
+		it('constrains the delete by both id and guildSnowflake', async () => {
+			const returning = vi.fn().mockResolvedValue([]);
+			const where = vi.fn(() => { return { returning }; });
+			deleteMock.mockReturnValue({ where });
+
+			const service = new MemoryService();
+			await service.forgetByIdForGuild('mem-uuid-1', 'GUILD_A');
+
+			// The where clause must encode both the memory id and the guild — verify
+			// by rendering the SQL condition the same way the scope-filter tests do.
+			const whereArg = where.mock.calls[0][0];
+			const { sql, params } = dialect.sqlToQuery(whereArg);
+			const lower = sql.toLowerCase();
+
+			expect(params).toContain('mem-uuid-1');
+			expect(params).toContain('GUILD_A');
+			expect(lower).toContain('guild_snowflake');
+		});
+
+		it('throws when the db operation rejects', async () => {
+			const where = vi.fn(() => { return { returning: vi.fn().mockRejectedValue(new Error('db error')) }; });
+			deleteMock.mockReturnValue({ where });
+
+			const service = new MemoryService();
+			await expect(service.forgetByIdForGuild('mem-uuid-1', 'GUILD_A')).rejects.toThrow('Failed to forget memory');
 		});
 	});
 });

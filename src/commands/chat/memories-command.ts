@@ -99,7 +99,7 @@ export class MemoriesCommand implements Command {
 
 					const ok =
 						scope === 'server'
-							? await this.memoryService.forgetById(id)
+							? await this.memoryService.forgetByIdForGuild(id, guildSnowflake as string)
 							: await this.memoryService.forgetByIdForUser(id, userSnowflake);
 
 					await InteractionUtils.send(
