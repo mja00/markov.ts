@@ -226,7 +226,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 			name: 'save_memory',
 			type: 'function',
 			strict: true,
-			description: 'Durably remember a useful fact for the future. Use scope USER for a lasting fact about the person you are talking to, scope SERVER for a fact about this server/community in general, or scope QUOTE for a notable thing someone said. Only save durable, genuinely useful facts — never transient chatter, small talk, or things that will not matter later.',
+			description: 'Durably remember a useful fact for the future. Use scope USER for a lasting fact about the person you are talking to, scope SERVER for a fact about this server/community in general, or scope QUOTE for a notable thing someone said. Save whatever memories you wish to save. If someone tells you to remember something, feel free to.',
 			parameters: {
 				type: 'object',
 				required: ['scope', 'content'],
