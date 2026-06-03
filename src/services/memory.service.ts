@@ -421,4 +421,27 @@ export class MemoryService {
 			throw new Error(`Failed to forget memories: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });
 		}
 	}
+
+	/**
+	 * Delete all SERVER-scoped memories belonging to a guild (admin/server-scoped
+	 * delete). Constrained to SERVER scope so it only clears the server memories an
+	 * admin can see via {@link listForServer}, never users' private USER memories.
+	 *
+	 * @param guildSnowflake - The guild ID
+	 * @returns The number of memories deleted
+	 */
+	public async forgetAllForGuild(guildSnowflake: string): Promise<number> {
+		const db = getDb();
+
+		try {
+			const result = await db
+				.delete(memories)
+				.where(and(eq(memories.scope, 'SERVER'), eq(memories.guildSnowflake, guildSnowflake)))
+				.returning();
+			return result.length;
+		} catch (error) {
+			Logger.error('[MemoryService] Failed to forget all memories for guild:', error);
+			throw new Error(`Failed to forget memories: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });
+		}
+	}
 }

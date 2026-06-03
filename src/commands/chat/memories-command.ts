@@ -110,10 +110,14 @@ export class MemoriesCommand implements Command {
 					return;
 				}
 				case MemoryOption.FORGET_ALL: {
-					const count = await this.memoryService.forgetAllForUser(userSnowflake);
+					const count =
+						scope === 'server'
+							? await this.memoryService.forgetAllForGuild(guildSnowflake as string)
+							: await this.memoryService.forgetAllForUser(userSnowflake);
+					const target = scope === 'server' ? 'server ' : '';
 					await InteractionUtils.send(
 						intr,
-						`Forgot ${count} ${count === 1 ? 'memory' : 'memories'}.`,
+						`Forgot ${count} ${target}${count === 1 ? 'memory' : 'memories'}.`,
 						true,
 					);
 					return;

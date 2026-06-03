@@ -316,4 +316,47 @@ describe('MemoryService', () => {
 			await expect(service.forgetByIdForGuild('mem-uuid-1', 'GUILD_A')).rejects.toThrow('Failed to forget memory');
 		});
 	});
+
+	describe('forgetAllForGuild', () => {
+		it('returns the count of deleted rows', async () => {
+			const returning = vi.fn().mockResolvedValue([{ id: 'mem-1' }, { id: 'mem-2' }]);
+			const where = vi.fn(() => { return { returning }; });
+			deleteMock.mockReturnValue({ where });
+
+			const service = new MemoryService();
+			const count = await service.forgetAllForGuild('GUILD_A');
+
+			expect(count).toBe(2);
+			expect(deleteMock).toHaveBeenCalledTimes(1);
+		});
+
+		it('constrains the delete to SERVER scope and the guild (never users\' private memories)', async () => {
+			const returning = vi.fn().mockResolvedValue([]);
+			const where = vi.fn(() => { return { returning }; });
+			deleteMock.mockReturnValue({ where });
+
+			const service = new MemoryService();
+			await service.forgetAllForGuild('GUILD_A');
+
+			// The where clause must encode both the SERVER scope and the guild, so an
+			// admin "forget all" can never wipe users' private USER memories.
+			const whereArg = where.mock.calls[0][0];
+			const { sql, params } = dialect.sqlToQuery(whereArg);
+			const lower = sql.toLowerCase();
+
+			expect(params).toContain('SERVER');
+			expect(params).toContain('GUILD_A');
+			expect(params).not.toContain('USER');
+			expect(params).not.toContain('QUOTE');
+			expect(lower).toContain('guild_snowflake');
+		});
+
+		it('throws when the db operation rejects', async () => {
+			const where = vi.fn(() => { return { returning: vi.fn().mockRejectedValue(new Error('db error')) }; });
+			deleteMock.mockReturnValue({ where });
+
+			const service = new MemoryService();
+			await expect(service.forgetAllForGuild('GUILD_A')).rejects.toThrow('Failed to forget memories');
+		});
+	});
 });
