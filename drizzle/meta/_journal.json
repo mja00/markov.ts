@@ -78,6 +78,13 @@
       "when": 1763266620864,
       "tag": "0010_add-catchables-index",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780457410625,
+      "tag": "0011_broken_black_queen",
+      "breakpoints": true
     }
   ]
 }

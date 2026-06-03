@@ -1,13 +1,16 @@
 import { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import {
 	boolean,
+	index,
 	integer,
 	numeric,
 	pgEnum,
 	pgTable,
+	text,
 	timestamp,
 	uuid,
 	varchar,
+	vector,
 } from 'drizzle-orm/pg-core';
 
 // Enum for item effect types
@@ -128,3 +131,27 @@ export const fishingAttempts = pgTable('fishing_attempts', {
 
 export type FishingAttempt = InferSelectModel<typeof fishingAttempts>;
 export type FishingAttemptInsert = InferInsertModel<typeof fishingAttempts>;
+
+export const memoryScopeEnum = pgEnum('memory_scope_enum', ['USER', 'SERVER', 'QUOTE']);
+
+export const memories = pgTable('memories', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	scope: memoryScopeEnum('scope').notNull(),
+	userSnowflake: varchar('user_snowflake', { length: 255 }),
+	guildSnowflake: varchar('guild_snowflake', { length: 255 }),
+	content: text('content').notNull(),
+	embedding: vector('embedding', { dimensions: 1536 }),
+	sourceChannelSnowflake: varchar('source_channel_snowflake', { length: 255 }),
+	createdByModel: boolean('created_by_model').default(true).notNull(),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+	return {
+		guildIdx: index('memories_guild_idx').on(table.guildSnowflake),
+		userGuildIdx: index('memories_user_guild_idx').on(table.userSnowflake, table.guildSnowflake),
+		embeddingIdx: index('memories_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
+	};
+});
+
+export type Memory = InferSelectModel<typeof memories>;
+export type MemoryInsert = InferInsertModel<typeof memories>;
