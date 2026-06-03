@@ -1,3 +1,4 @@
+CREATE EXTENSION IF NOT EXISTS vector;--> statement-breakpoint
 CREATE TYPE "public"."memory_scope_enum" AS ENUM('USER', 'SERVER', 'QUOTE');--> statement-breakpoint
 CREATE TABLE "memories" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
