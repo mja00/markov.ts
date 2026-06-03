@@ -7,8 +7,11 @@ import * as fal from '@fal-ai/serverless-client';
 import fetch from 'node-fetch';
 import OpenAI from 'openai';
 
+
 import { ImageUpload } from './image-upload.js';
 import { Logger } from './logger.js';
+import { MemoryService } from './memory.service.js';
+import { Memory } from '../db/schema.js';
 
 const require = createRequire(import.meta.url);
 const Config = require('../../config/config.json');
@@ -50,12 +53,20 @@ export type GeneratedImageInfo = {
 	dataUrl: string;
 };
 
+export type RequestContext = {
+	channelId: string;
+	userSnowflake: string;
+	guildSnowflake: string | null;
+	username: string;
+};
+
 export class OpenAIService {
 	// We want to store some state in the service
 	private static instance: OpenAIService;
 	private constructor() {}
 	private conversations: Map<string, ConversationState> = new Map();
 	private imageUploadInstance: ImageUpload = ImageUpload.getInstance();
+	private readonly memoryService = new MemoryService();
 	// Track generated image info by response ID for later extraction
 	private imageDataByResponseId: Map<string, GeneratedImageInfo[]> = new Map();
 
@@ -65,11 +76,50 @@ export class OpenAIService {
 		return Math.floor(Math.random() * (max - min + 1)) + min;
 	}
 
-	private callFunction(name: string, args: any): string {
+	private async callFunction(name: string, args: any, ctx: RequestContext): Promise<string> {
 		switch (name) {
 			case 'random_number_generator': {
 				const result = this.randomNumberGenerator(args);
 				return result.toString();
+			}
+			case 'save_memory': {
+				try {
+					// SERVER-scoped claims require attribution so they aren't treated as fact.
+					const content = args.scope === 'SERVER'
+						? `${ctx.username} claimed: ${args.content}`
+						: args.content;
+
+					const { status } = await this.memoryService.saveMemory({
+						scope: args.scope,
+						content,
+						userSnowflake: ctx.userSnowflake,
+						guildSnowflake: ctx.guildSnowflake,
+						sourceChannelSnowflake: ctx.channelId,
+						createdByModel: true,
+					});
+
+					if (status === 'saved') {
+						return 'Got it — I\'ll remember that.';
+					}
+					if (status === 'duplicate') {
+						return 'I already remembered that.';
+					}
+					return 'I could not save that right now.';
+				} catch (error) {
+					Logger.error('[OpenAI] save_memory failed:', error);
+					return 'I could not save that right now.';
+				}
+			}
+			case 'recall_memory': {
+				try {
+					const results = await this.memoryService.searchMemories(args.query, ctx.userSnowflake, ctx.guildSnowflake);
+					return results.length > 0
+						? results.map(memory => `- [${memory.scope}] ${memory.content}`).join('\n')
+						: 'No matching memories.';
+				} catch (error) {
+					Logger.error('[OpenAI] recall_memory failed:', error);
+					return 'No matching memories.';
+				}
 			}
 			default: {
 				Logger.warn(`Unknown function called: ${name}`);
@@ -82,9 +132,9 @@ export class OpenAIService {
 	private async processResponseWithFunctionCalls(
 		initialResponse: OpenAI.Responses.Response,
 		promptConfig: OpenAI.Responses.ResponseCreateParams,
-		channelId: string,
+		ctx: RequestContext,
 	): Promise<OpenAI.Responses.Response> {
-		const followUpResponse = await this.handleToolCalls(initialResponse, promptConfig, channelId);
+		const followUpResponse = await this.handleToolCalls(initialResponse, promptConfig, ctx);
 
 		// If we got a follow-up response, use that; otherwise use the original
 		return followUpResponse || initialResponse;
@@ -168,6 +218,58 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 			size: '1024x1024',
 		},
 	];
+
+	// Memory tools - only offered on the initial request when memory is active.
+	// Deliberately kept out of `this.tools` so they are never offered on follow-ups.
+	private readonly memoryTools: OpenAI.Responses.Tool[] = [
+		{
+			name: 'save_memory',
+			type: 'function',
+			strict: true,
+			description: 'Durably remember a useful fact for the future. Use scope USER for a lasting fact about the person you are talking to, scope SERVER for a fact about this server/community in general, or scope QUOTE for a notable thing someone said. Only save durable, genuinely useful facts — never transient chatter, small talk, or things that will not matter later.',
+			parameters: {
+				type: 'object',
+				required: ['scope', 'content'],
+				additionalProperties: false,
+				properties: {
+					scope: {
+						type: 'string',
+						enum: ['USER', 'SERVER', 'QUOTE'],
+						description: 'USER = a lasting fact about the current user; SERVER = a fact about this server/community; QUOTE = a notable thing someone said.',
+					},
+					content: {
+						type: 'string',
+						description: 'The fact to remember, phrased concisely.',
+					},
+				},
+			},
+		},
+		{
+			name: 'recall_memory',
+			type: 'function',
+			strict: true,
+			description: 'Search your long-term memory for relevant facts about the current user or server before answering.',
+			parameters: {
+				type: 'object',
+				required: ['query'],
+				additionalProperties: false,
+				properties: {
+					query: {
+						type: 'string',
+						description: 'What to search your memory for.',
+					},
+				},
+			},
+		},
+	];
+
+	// Build a preamble of recalled memories to prepend to the model input.
+	private buildMemoryPreamble(recalled: Memory[]): string {
+		if (recalled.length === 0) {
+			return '';
+		}
+		return `Things you remember (use naturally, don't recite verbatim):\n${recalled.map(memory => `- [${memory.scope}] ${memory.content}`).join('\n')}`;
+	}
 
 	// Reusable prompt configuration
 	private getPromptConfig(channelId: string, username: string, additionalVariables: Record<string, any> = {}): OpenAI.Responses.ResponseCreateParams {
@@ -260,9 +362,25 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 		from: string,
 		referencedMessageContent: string,
 		username: string,
+		userSnowflake?: string | null,
+		guildSnowflake?: string | null,
 		referencedImageUrl?: string,
 	): Promise<OpenAI.Responses.Response> {
 		const conversation = await this.getOrCreateConversation(channelId);
+
+		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username };
+		const memoryActive = Boolean(Config.memory?.enabled && userSnowflake);
+
+		let recalled: Memory[] = [];
+		if (memoryActive) {
+			try {
+				recalled = await this.memoryService.recallForContext(message, userSnowflake as string, guildSnowflake ?? null);
+			} catch (error) {
+				Logger.error('[OpenAI] memory recall failed:', error);
+			}
+		}
+		const preamble = this.buildMemoryPreamble(recalled);
+		const tools = memoryActive ? [...this.tools, ...this.memoryTools] : this.tools;
 
 		const promptConfig = this.getPromptConfig(channelId, username, {
 			message: message,
@@ -272,6 +390,8 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 			...(referencedImageUrl && { has_referenced_image: 'true', referenced_image_url: referencedImageUrl }),
 		});
 
+		const originalText = `${username} is replying to ${from}'s message "${referencedMessageContent}": ${message}`;
+
 		// If there's an image from the referenced message, include it in the input
 		const input = referencedImageUrl
 			? [
@@ -280,7 +400,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 					content: [
 						{
 							type: 'input_text' as const,
-							text: `${username} is replying to ${from}'s message "${referencedMessageContent}": ${message}`,
+							text: preamble ? `${preamble}\n\n${originalText}` : originalText,
 						},
 						{
 							type: 'input_image' as const,
@@ -290,17 +410,17 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 					],
 				},
 			]
-			: `${username} is replying to ${from}'s message "${referencedMessageContent}": ${message}`;
+			: (preamble ? `${preamble}\n\n${originalText}` : originalText);
 
 		const initialResponse = await openai.responses.create({
 			input: input,
-			tools: this.tools,
+			tools,
 			...promptConfig,
 			previous_response_id: conversation.lastResponseId,
 		}) as OpenAI.Responses.Response;
 
 		// Process any function calls and get the final response
-		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, channelId);
+		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
 
 		// Update conversation state
 		conversation.lastResponseId = response.id;
@@ -314,17 +434,35 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 		channelId: string,
 		message: string,
 		username: string,
+		userSnowflake?: string | null,
+		guildSnowflake?: string | null,
 	): Promise<OpenAI.Responses.Response> {
 		const conversation = await this.getOrCreateConversation(channelId);
 		const userInput = `${username}: ${message}`;
+
+		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username };
+		const memoryActive = Boolean(Config.memory?.enabled && userSnowflake);
+
+		let recalled: Memory[] = [];
+		if (memoryActive) {
+			try {
+				recalled = await this.memoryService.recallForContext(message, userSnowflake as string, guildSnowflake ?? null);
+			} catch (error) {
+				Logger.error('[OpenAI] memory recall failed:', error);
+			}
+		}
+		const preamble = this.buildMemoryPreamble(recalled);
+		const tools = memoryActive ? [...this.tools, ...this.memoryTools] : this.tools;
 
 		const promptConfig = this.getPromptConfig(channelId, username, {
 			message: message,
 		});
 
+		const input = preamble ? `${preamble}\n\n${userInput}` : userInput;
+
 		const initialResponse = await openai.responses.create({
-			input: userInput,
-			tools: this.tools,
+			input: input,
+			tools,
 			...promptConfig,
 			previous_response_id: conversation.lastResponseId,
 		}) as OpenAI.Responses.Response;
@@ -336,7 +474,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 		// }, null, 2));
 
 		// Process any function calls and get the final response
-		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, channelId);
+		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
 
 		// Logger.info('Final processed response from sendMessage:', JSON.stringify({
 		//     id: response.id,
@@ -357,14 +495,32 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 		message: string,
 		imageUrl: string,
 		username: string,
+		userSnowflake?: string | null,
+		guildSnowflake?: string | null,
 	): Promise<OpenAI.Responses.Response> {
 		const conversation = await this.getOrCreateConversation(channelId);
+
+		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username };
+		const memoryActive = Boolean(Config.memory?.enabled && userSnowflake);
+
+		let recalled: Memory[] = [];
+		if (memoryActive) {
+			try {
+				recalled = await this.memoryService.recallForContext(message, userSnowflake as string, guildSnowflake ?? null);
+			} catch (error) {
+				Logger.error('[OpenAI] memory recall failed:', error);
+			}
+		}
+		const preamble = this.buildMemoryPreamble(recalled);
+		const tools = memoryActive ? [...this.tools, ...this.memoryTools] : this.tools;
 
 		const promptConfig = this.getPromptConfig(channelId, username, {
 			message: message,
 			has_image: 'true',
 			image_url: imageUrl,
 		});
+
+		const originalText = `${username}: ${message}`;
 
 		const initialResponse = await openai.responses.create({
 			input: [
@@ -373,7 +529,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 					content: [
 						{
 							type: 'input_text',
-							text: `${username}: ${message}`,
+							text: preamble ? `${preamble}\n\n${originalText}` : originalText,
 						},
 						{
 							type: 'input_image',
@@ -383,13 +539,13 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 					],
 				},
 			],
-			tools: this.tools,
+			tools,
 			...promptConfig,
 			previous_response_id: conversation.lastResponseId,
 		}) as OpenAI.Responses.Response;
 
 		// Process any function calls and get the final response
-		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, channelId);
+		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
 
 		// Update conversation state
 		conversation.lastResponseId = response.id;
@@ -505,11 +661,11 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 	}
 
 	// Handle function calls and image generation in the response and execute them
-	public async handleToolCalls(response: OpenAI.Responses.Response, promptConfig: OpenAI.Responses.ResponseCreateParams, channelId: string): Promise<OpenAI.Responses.Response | null> {
+	public async handleToolCalls(response: OpenAI.Responses.Response, promptConfig: OpenAI.Responses.ResponseCreateParams, ctx: RequestContext): Promise<OpenAI.Responses.Response | null> {
 		let hasToolCalls = false;
 		const inputMessages: any[] = []; // Don't copy output items - only include function call outputs and new messages
 		const generatedImages: GeneratedImageInfo[] = [];
-		const conversation = await this.getOrCreateConversation(channelId);
+		const conversation = await this.getOrCreateConversation(ctx.channelId);
 
 		Logger.trace('handleToolCalls - Processing response with output length:', response.output?.length || 0);
 
@@ -527,7 +683,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 					Logger.trace(`Executing function call: ${name} with args:`, args);
 
 					try {
-						const result = this.callFunction(name, args);
+						const result = await this.callFunction(name, args, ctx);
 
 						// Append the function call result to input messages
 						inputMessages.push({
@@ -559,20 +715,16 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 							const generatedImage = await this.saveGeneratedImage(outputItem.result);
 							generatedImages.push(generatedImage);
 
-							// Include the generated image as an input_image using a data URL so the AI can see it
-							// Also include text to inform the AI about the successful generation
+							// Inform the AI that generation succeeded. We don't re-attach the image
+							// itself: the model already knows the prompt it requested and can reply
+							// based on that, avoiding the cost of feeding the image back as vision input.
 							inputMessages.push({
 								type: 'message',
 								role: 'user',
 								content: [
 									{
 										type: 'input_text',
-										text: 'I\'ve generated the image you requested and attached it for your review.',
-									},
-									{
-										type: 'input_image',
-										image_url: generatedImage.dataUrl,
-										detail: 'auto',
+										text: 'I\'ve generated the image you requested.',
 									},
 								],
 							});
@@ -623,7 +775,7 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 
 				// Update conversation state with the follow-up response ID
 				conversation.lastResponseId = followUpResponse.id;
-				this.conversations.set(channelId, conversation);
+				this.conversations.set(ctx.channelId, conversation);
 
 				return followUpResponse;
 			} catch (error) {
