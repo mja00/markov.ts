@@ -18,7 +18,14 @@ import { Logger } from './logger.js';
 import { Memory, memories } from '../db/schema.js';
 
 const require = createRequire(import.meta.url);
-const Config = require('../../config/config.json');
+// config.json is gitignored and absent in CI/test environments; fall back to
+// defaults so importing this module never throws. Threshold reads below use ?? fallbacks.
+let Config: { memory?: { similarityThreshold?: number; recallLimit?: number; dedupeThreshold?: number; }; } = {};
+try {
+	Config = require('../../config/config.json');
+} catch {
+	Logger.warn('[MemoryService] config.json not found; using default memory thresholds.');
+}
 
 const DEFAULT_SIMILARITY_THRESHOLD = 0.35;
 const DEFAULT_RECALL_LIMIT = 8;
