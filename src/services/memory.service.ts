@@ -27,6 +27,21 @@ try {
 	Logger.warn('[MemoryService] config.json not found; using default memory thresholds.');
 }
 
+// Metadata columns for list queries. Deliberately excludes the 1536-dimension
+// `embedding` vector, which list/UI callers never need and which would bloat
+// DB I/O and payload size. Callers set `embedding: null` on the returned rows.
+const MEMORY_LIST_COLUMNS = {
+	id: memories.id,
+	scope: memories.scope,
+	userSnowflake: memories.userSnowflake,
+	guildSnowflake: memories.guildSnowflake,
+	content: memories.content,
+	sourceChannelSnowflake: memories.sourceChannelSnowflake,
+	createdByModel: memories.createdByModel,
+	createdAt: memories.createdAt,
+	updatedAt: memories.updatedAt,
+};
+
 const DEFAULT_SIMILARITY_THRESHOLD = 0.35;
 const DEFAULT_RECALL_LIMIT = 8;
 const DEFAULT_DEDUPE_THRESHOLD = 0.9;
@@ -178,7 +193,11 @@ export class MemoryService {
 				.values({
 					scope: input.scope,
 					content: input.content,
-					userSnowflake: input.userSnowflake,
+					// Only USER memories are owned by a user. Stamping SERVER/QUOTE
+					// memories with the caller's snowflake would let user-scoped delete
+					// APIs (forgetByIdForUser / forgetAllForUser) remove them, bypassing
+					// the admin gate that protects server memories.
+					userSnowflake: input.scope === 'USER' ? input.userSnowflake : null,
 					guildSnowflake: input.guildSnowflake,
 					sourceChannelSnowflake: input.sourceChannelSnowflake ?? null,
 					createdByModel: input.createdByModel ?? true,
@@ -294,11 +313,12 @@ export class MemoryService {
 		const db = getDb();
 
 		try {
-			return await db
-				.select()
+			const rows = await db
+				.select(MEMORY_LIST_COLUMNS)
 				.from(memories)
 				.where(
 					and(
+						eq(memories.scope, 'USER'),
 						eq(memories.userSnowflake, userSnowflake),
 						guildSnowflake === null
 							? isNull(memories.guildSnowflake)
@@ -306,6 +326,7 @@ export class MemoryService {
 					),
 				)
 				.orderBy(desc(memories.createdAt));
+			return rows.map((row) => { return { ...row, embedding: null }; }) as Memory[];
 		} catch (error) {
 			Logger.error('[MemoryService] Failed to list memories for user:', error);
 			throw new Error(`Failed to list memories for user: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });
@@ -322,11 +343,12 @@ export class MemoryService {
 		const db = getDb();
 
 		try {
-			return await db
-				.select()
+			const rows = await db
+				.select(MEMORY_LIST_COLUMNS)
 				.from(memories)
 				.where(and(eq(memories.scope, 'SERVER'), eq(memories.guildSnowflake, guildSnowflake)))
 				.orderBy(desc(memories.createdAt));
+			return rows.map((row) => { return { ...row, embedding: null }; }) as Memory[];
 		} catch (error) {
 			Logger.error('[MemoryService] Failed to list memories for server:', error);
 			throw new Error(`Failed to list memories for server: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });

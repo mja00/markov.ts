@@ -206,6 +206,37 @@ describe('MemoryService', () => {
 			expect(result.memory?.id).toBe('new-id');
 			expect(insertMock).toHaveBeenCalledTimes(1);
 		});
+
+		it('does not stamp SERVER memories with the caller snowflake (admin-gate isolation)', async () => {
+			createEmbeddingMock.mockResolvedValue(Array.from({ length: 1536 }, () => 0.1));
+
+			const limit = vi.fn().mockResolvedValue([]); // no duplicate
+			const orderBy = vi.fn(() => { return { limit }; });
+			const where = vi.fn(() => { return { orderBy }; });
+			const from = vi.fn(() => { return { where }; });
+			selectMock.mockReturnValue({ from });
+
+			const returning = vi.fn().mockResolvedValue([{ id: 'server-id' }]);
+			const values = vi.fn(() => { return { returning }; });
+			insertMock.mockReturnValue({ values });
+
+			const service = new MemoryService();
+			await service.saveMemory({
+				scope: 'SERVER',
+				content: 'USER123 claimed: the server is about fishing',
+				userSnowflake: 'USER123',
+				guildSnowflake: 'GUILD_A',
+			});
+
+			// SERVER memories must be stored with a null userSnowflake so user-scoped
+			// delete APIs cannot remove them, bypassing the Manage Server admin gate.
+			expect(values).toHaveBeenCalledTimes(1);
+			expect(values.mock.calls[0][0]).toMatchObject({
+				scope: 'SERVER',
+				userSnowflake: null,
+				guildSnowflake: 'GUILD_A',
+			});
+		});
 	});
 
 	describe('recallForContext', () => {
