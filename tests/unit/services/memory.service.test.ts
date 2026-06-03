@@ -1,0 +1,231 @@
+import { PgDialect } from 'drizzle-orm/pg-core';
+import {
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from 'vitest';
+
+// Mock the logger to prevent config.json loading
+vi.mock('../../../src/services/logger.js', () => {
+	return {
+		Logger: {
+			info: vi.fn(),
+			warn: vi.fn(),
+			error: vi.fn(),
+			debug: vi.fn(),
+		},
+	};
+});
+
+// Mock the embedding service so we control the embedding result.
+const { createEmbeddingMock, insertMock, selectMock, dbMock } = vi.hoisted(() => {
+	const insertFn = vi.fn();
+	const selectFn = vi.fn();
+	return {
+		createEmbeddingMock: vi.fn(),
+		insertMock: insertFn,
+		selectMock: selectFn,
+		dbMock: {
+			insert: insertFn,
+			select: selectFn,
+			delete: vi.fn(),
+			update: vi.fn(),
+		},
+	};
+});
+
+vi.mock('../../../src/services/embedding.service.js', () => {
+	return {
+		EmbeddingService: vi.fn(function EmbeddingService() {
+			return { createEmbedding: createEmbeddingMock };
+		}),
+	};
+});
+
+// Mock the database service with a chainable builder that records calls.
+vi.mock('../../../src/services/database.service.js', () => {
+	return {
+		getDb: vi.fn(() => dbMock),
+	};
+});
+
+import { MemoryService, buildMemoryScopeFilter } from '../../../src/services/memory.service.js';
+
+const dialect = new PgDialect();
+
+describe('buildMemoryScopeFilter (privacy-critical scope isolation)', () => {
+	it('constrains USER memories by guild in guild context and references all three scopes', () => {
+		const { sql, params } = dialect.sqlToQuery(buildMemoryScopeFilter('USER123', 'GUILD_A'));
+		const lower = sql.toLowerCase();
+
+		// All three scopes must be represented in a guild context.
+		expect(params).toContain('USER');
+		expect(params).toContain('QUOTE');
+		expect(params).toContain('SERVER');
+
+		// The user's snowflake and the guild must both be parameters: a USER
+		// memory query is constrained by guild (cross-guild-leak regression guard).
+		expect(params).toContain('USER123');
+		expect(params).toContain('GUILD_A');
+
+		// The guild column must be referenced (the USER branch ANDs guild_snowflake).
+		expect(lower).toContain('guild_snowflake');
+		expect(lower).toContain('user_snowflake');
+
+		// GUILD_A must appear at least three times: once per scope branch
+		// (USER, QUOTE, SERVER), proving the USER branch is guild-scoped.
+		const guildOccurrences = params.filter(param => param === 'GUILD_A').length;
+		expect(guildOccurrences).toBeGreaterThanOrEqual(3);
+	});
+
+	it('returns ONLY the USER scope with an is-null guild check in DM context', () => {
+		const { sql, params } = dialect.sqlToQuery(buildMemoryScopeFilter('USER123', null));
+		const lower = sql.toLowerCase();
+
+		// Only the USER scope should appear; no SERVER/QUOTE branches.
+		expect(params).toContain('USER');
+		expect(params).not.toContain('SERVER');
+		expect(params).not.toContain('QUOTE');
+
+		// Guild must be checked with IS NULL, and no concrete guild value present.
+		expect(lower).toContain('is null');
+		expect(params).not.toContain('GUILD_A');
+
+		// The user is still constrained.
+		expect(params).toContain('USER123');
+	});
+
+	it('does not let a guild value satisfy the DM filter', () => {
+		const dm = dialect.sqlToQuery(buildMemoryScopeFilter('USER123', null));
+		// A DM filter must not embed any guild value, so guild A can never match.
+		expect(dm.params).not.toContain('GUILD_A');
+		expect(dm.params).not.toContain('GUILD_B');
+	});
+});
+
+describe('MemoryService', () => {
+	beforeEach(() => {
+		createEmbeddingMock.mockReset();
+		insertMock.mockReset();
+		selectMock.mockReset();
+	});
+
+	describe('saveMemory', () => {
+		it('returns failed and does not insert when embedding is null', async () => {
+			createEmbeddingMock.mockResolvedValue(null);
+
+			const service = new MemoryService();
+			const result = await service.saveMemory({
+				scope: 'USER',
+				content: 'remember this',
+				userSnowflake: 'USER123',
+				guildSnowflake: 'GUILD_A',
+			});
+
+			expect(result).toEqual({ status: 'failed', memory: null });
+			expect(insertMock).not.toHaveBeenCalled();
+			expect(selectMock).not.toHaveBeenCalled();
+		});
+
+		it('returns duplicate and does not insert when a similar memory exists', async () => {
+			createEmbeddingMock.mockResolvedValue(Array.from({ length: 1536 }, () => 0.1));
+
+			const existingRow = {
+				id: 'existing-id',
+				scope: 'USER',
+				userSnowflake: 'USER123',
+				guildSnowflake: 'GUILD_A',
+				content: 'remember this',
+				embedding: null,
+				sourceChannelSnowflake: null,
+				createdByModel: true,
+				createdAt: new Date(),
+				updatedAt: new Date(),
+				similarity: 0.95,
+			};
+
+			// db.select().from().where().orderBy().limit() -> [existingRow]
+			const limit = vi.fn().mockResolvedValue([existingRow]);
+			const orderBy = vi.fn(() => { return { limit }; });
+			const where = vi.fn(() => { return { orderBy }; });
+			const from = vi.fn(() => { return { where }; });
+			selectMock.mockReturnValue({ from });
+
+			const service = new MemoryService();
+			const result = await service.saveMemory({
+				scope: 'USER',
+				content: 'remember this',
+				userSnowflake: 'USER123',
+				guildSnowflake: 'GUILD_A',
+			});
+
+			expect(result.status).toBe('duplicate');
+			expect(result.memory?.id).toBe('existing-id');
+			expect(insertMock).not.toHaveBeenCalled();
+		});
+
+		it('inserts and returns saved when no duplicate exists', async () => {
+			createEmbeddingMock.mockResolvedValue(Array.from({ length: 1536 }, () => 0.1));
+
+			const limit = vi.fn().mockResolvedValue([]); // no duplicate
+			const orderBy = vi.fn(() => { return { limit }; });
+			const where = vi.fn(() => { return { orderBy }; });
+			const from = vi.fn(() => { return { where }; });
+			selectMock.mockReturnValue({ from });
+
+			const createdRow = {
+				id: 'new-id',
+				scope: 'USER',
+				userSnowflake: 'USER123',
+				guildSnowflake: 'GUILD_A',
+				content: 'remember this',
+				embedding: null,
+				sourceChannelSnowflake: null,
+				createdByModel: true,
+				createdAt: new Date(),
+				updatedAt: new Date(),
+			};
+			const returning = vi.fn().mockResolvedValue([createdRow]);
+			const values = vi.fn(() => { return { returning }; });
+			insertMock.mockReturnValue({ values });
+
+			const service = new MemoryService();
+			const result = await service.saveMemory({
+				scope: 'USER',
+				content: 'remember this',
+				userSnowflake: 'USER123',
+				guildSnowflake: 'GUILD_A',
+			});
+
+			expect(result.status).toBe('saved');
+			expect(result.memory?.id).toBe('new-id');
+			expect(insertMock).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe('recallForContext', () => {
+		it('returns [] and does not query the DB when query embedding is null', async () => {
+			createEmbeddingMock.mockResolvedValue(null);
+
+			const service = new MemoryService();
+			const result = await service.recallForContext('what do you know', 'USER123', 'GUILD_A');
+
+			expect(result).toEqual([]);
+			expect(selectMock).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('searchMemories', () => {
+		it('returns [] and does not query the DB when query embedding is null', async () => {
+			createEmbeddingMock.mockResolvedValue(null);
+
+			const service = new MemoryService();
+			const result = await service.searchMemories('what do you know', 'USER123', null);
+
+			expect(result).toEqual([]);
+			expect(selectMock).not.toHaveBeenCalled();
+		});
+	});
+});
