@@ -197,7 +197,8 @@
             "fishing": "fishing",
             "shop": "shop",
             "buy": "buy",
-            "inventory": "inventory"
+            "inventory": "inventory",
+            "memories": "memories"
         },
         "userCommands": {
             "viewDateJoined": "View Date Joined"
@@ -211,7 +212,10 @@
             "prompt": "prompt",
             "fishing": "fishing",
             "buy": "shop_item_id",
-            "buyQuantity": "quantity"
+            "buyQuantity": "quantity",
+            "memoriesAction": "action",
+            "memoriesScope": "scope",
+            "memoriesId": "id"
         },
         "commandDescs": {
             "dev": "Developer use only.",
@@ -223,7 +227,8 @@
             "fishing": "Manage fishing.",
             "shop": "Browse items in the shop.",
             "buy": "Purchase an item from the shop.",
-            "inventory": "View your inventory."
+            "inventory": "View your inventory.",
+            "memories": "View or forget what I remember about you."
         },
         "argDescs": {
             "devCommand": "Command.",
@@ -232,7 +237,10 @@
             "generateImagePrompt": "Prompt for the image command.",
             "fishing": "Choose a subcommand",
             "buy": "The shop item ID or slug to purchase",
-            "buyQuantity": "The number of items to purchase (default: 1)"
+            "buyQuantity": "The number of items to purchase (default: 1)",
+            "memoriesAction": "What to do: list, forget one, or forget all.",
+            "memoriesScope": "Whose memories: mine (default) or server (admins).",
+            "memoriesId": "The memory ID to forget (from the list)."
         },
         "fields": {
             "commands": "Commands",

@@ -8,3 +8,4 @@ export { FishingCommand } from './fishing-command.js';
 export { ShopCommand } from './shop-command.js';
 export { BuyCommand } from './buy-command.js';
 export { InventoryCommand } from './inventory-command.js';
+export { MemoriesCommand } from './memories-command.js';

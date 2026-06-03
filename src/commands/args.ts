@@ -5,6 +5,7 @@ import {
 	FishingOption,
 	HelpOption,
 	InfoOption,
+	MemoryOption,
 } from '../enums/index.js';
 import { Language } from '../models/enum-helpers/index.js';
 import { Lang } from '../services/index.js';
@@ -93,5 +94,37 @@ export class Args {
 		type: ApplicationCommandOptionType.Integer,
 		required: false,
 		min_value: 1,
+	};
+	public static readonly MEMORIES_ACTION: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.memoriesAction', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.memoriesAction'),
+		description: Lang.getRef('argDescs.memoriesAction', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.memoriesAction'),
+		type: ApplicationCommandOptionType.String,
+		choices: [
+			{ name: 'List', value: MemoryOption.LIST },
+			{ name: 'Forget', value: MemoryOption.FORGET },
+			{ name: 'Forget All', value: MemoryOption.FORGET_ALL },
+		],
+	};
+	public static readonly MEMORIES_SCOPE: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.memoriesScope', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.memoriesScope'),
+		description: Lang.getRef('argDescs.memoriesScope', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.memoriesScope'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		choices: [
+			{ name: 'Mine', value: 'mine' },
+			{ name: 'Server', value: 'server' },
+		],
+	};
+	public static readonly MEMORIES_ID: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.memoriesId', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.memoriesId'),
+		description: Lang.getRef('argDescs.memoriesId', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.memoriesId'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
 	};
 }

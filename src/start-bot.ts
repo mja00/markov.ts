@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { REST } from '@discordjs/rest';
 import { Options, Partials } from 'discord.js';
 
-import { Button, ShopButton } from './buttons/index.js';
+import { Button, MemoriesButton, ShopButton } from './buttons/index.js';
 import {
 	BuyCommand,
 	DevCommand,
@@ -15,6 +15,7 @@ import {
 	HelpCommand,
 	InfoCommand,
 	InventoryCommand,
+	MemoriesCommand,
 	ShopCommand,
 	TestCommand,
 } from './commands/chat/index.js';
@@ -83,6 +84,7 @@ async function start(): Promise<void> {
 		new ShopCommand(),
 		new BuyCommand(),
 		new InventoryCommand(),
+		new MemoriesCommand(),
 
 		// Message Context Commands
 		new ViewDateSent(),
@@ -96,6 +98,7 @@ async function start(): Promise<void> {
 	// Buttons
 	const buttons: Button[] = [
 		new ShopButton(),
+		new MemoriesButton(),
 		// TODO: Add new buttons here
 	];
 

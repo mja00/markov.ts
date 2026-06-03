@@ -93,11 +93,13 @@ export class MessageHandler implements EventHandler {
 							referencedMessage.author.displayName,
 							referencedMessageContent,
 							userTag,
+							msg.author.id,
+							msg.guild?.id ?? null,
 							referencedImageUrl,
 						);
 					} else {
 						// Fallback to regular message if referenced message not found
-						response = await openAI.sendMessage(channelID, message, userTag);
+						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null);
 					}
 				} else if (msg.attachments.size > 0) {
 					// If there's attachments on the message, grab the first image and add it to the thread
@@ -109,13 +111,13 @@ export class MessageHandler implements EventHandler {
 						}
 					}
 					if (imageUrl) {
-						response = await openAI.sendMessageWithImage(channelID, message, imageUrl, userTag);
+						response = await openAI.sendMessageWithImage(channelID, message, imageUrl, userTag, msg.author.id, msg.guild?.id ?? null);
 					} else {
-						response = await openAI.sendMessage(channelID, message, userTag);
+						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null);
 					}
 				} else {
 					// Regular message without attachments or replies
-					response = await openAI.sendMessage(channelID, message, userTag);
+					response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null);
 				}
 
 				clearInterval(typingInterval);

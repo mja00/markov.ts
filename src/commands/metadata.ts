@@ -146,6 +146,20 @@ export const ChatCommandMetadata: {
 		dm_permission: true,
 		default_member_permissions: undefined,
 	},
+	MEMORIES: {
+		type: ApplicationCommandType.ChatInput,
+		name: Lang.getRef('chatCommands.memories', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('chatCommands.memories'),
+		description: Lang.getRef('commandDescs.memories', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('commandDescs.memories'),
+		dm_permission: true,
+		default_member_permissions: undefined,
+		options: [
+			{ ...Args.MEMORIES_ACTION, required: true },
+			{ ...Args.MEMORIES_SCOPE, required: false },
+			{ ...Args.MEMORIES_ID, required: false },
+		],
+	},
 };
 
 export const MessageCommandMetadata: {

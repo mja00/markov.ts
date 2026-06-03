@@ -185,6 +185,15 @@ const seed = async (): Promise<void> => {
 		// Connect to database
 		await DatabaseService.getInstance().connect();
 
+		// Skip if already seeded so re-running (e.g. on every `docker compose up`)
+		// doesn't duplicate the base game data.
+		const db = DatabaseService.getInstance().getDb();
+		const existing = await db.select({ id: catchables.id }).from(catchables).limit(1);
+		if (existing.length > 0) {
+			Logger.info('[DatabaseSeed] Database already seeded, skipping.');
+			return;
+		}
+
 		// Seed data
 		await seedCatchables();
 		await seedShopItems();

@@ -192,7 +192,8 @@
             "dev": "dev",
             "help": "help",
             "info": "info",
-            "test": "test"
+            "test": "test",
+            "memories": "memories"
         },
         "userCommands": {
             "viewDateJoined": "View Date Joined"
@@ -202,18 +203,25 @@
         },
         "arguments": {
             "command": "command",
-            "option": "option"
+            "option": "option",
+            "memoriesAction": "action",
+            "memoriesScope": "scope",
+            "memoriesId": "id"
         },
         "commandDescs": {
             "dev": "Developer use only.",
             "help": "Find help or contact support.",
             "info": "View bot info.",
-            "test": "Run the test command."
+            "test": "Run the test command.",
+            "memories": "View or forget what I remember about you."
         },
         "argDescs": {
             "devCommand": "Command.",
             "helpOption": "Option.",
-            "infoOption": "Option."
+            "infoOption": "Option.",
+            "memoriesAction": "What to do: list, forget one, or forget all.",
+            "memoriesScope": "Whose memories: mine (default) or server (admins).",
+            "memoriesId": "The memory ID to forget (from the list)."
         },
         "fields": {
             "commands": "Commands",

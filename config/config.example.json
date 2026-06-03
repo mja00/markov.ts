@@ -76,5 +76,32 @@
         "rateLimit": {
             "minTimeout": 30
         }
+    },
+    "openai": {
+        "apiKey": "<OPENAI_API_KEY>"
+    },
+    "memory": {
+        "enabled": true,
+        "embeddingModel": "text-embedding-3-small",
+        "similarityThreshold": 0.35,
+        "recallLimit": 8,
+        "maxContentLength": 1000,
+        "dedupeThreshold": 0.9
+    },
+    "imageUpload": {
+        "baseUrl": "<IMAGE_UPLOAD_BASE_URL>",
+        "username": "<IMAGE_UPLOAD_USERNAME>",
+        "password": "<IMAGE_UPLOAD_PASSWORD>"
+    },
+    "db": {
+        "host": "<DB_HOST>",
+        "port": 5432,
+        "user": "<DB_USER>",
+        "password": "<DB_PASSWORD>",
+        "database": "<DB_NAME>",
+        "connectionString": "<DB_CONNECTION_STRING>"
+    },
+    "fal": {
+        "apiKey": "<FAL_API_KEY>"
     }
 }
