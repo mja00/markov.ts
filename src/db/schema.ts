@@ -155,3 +155,35 @@ export const memories = pgTable('memories', {
 
 export type Memory = InferSelectModel<typeof memories>;
 export type MemoryInsert = InferInsertModel<typeof memories>;
+
+export const scheduledMessageStatusEnum = pgEnum('scheduled_message_status_enum', [
+	'PENDING',
+	'SENT',
+	'CANCELLED',
+	'FAILED',
+]);
+
+// Messages Markov chooses to post to a channel at a future time. Persisted (not
+// just an in-memory timer) so they survive restarts, and claimed atomically by
+// the processing job so they fire exactly once even with multiple shards running.
+export const scheduledMessages = pgTable('scheduled_messages', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	channelSnowflake: varchar('channel_snowflake', { length: 255 }).notNull(),
+	guildSnowflake: varchar('guild_snowflake', { length: 255 }),
+	createdBySnowflake: varchar('created_by_snowflake', { length: 255 }),
+	content: text('content').notNull(),
+	scheduledAt: timestamp('scheduled_at').notNull(),
+	status: scheduledMessageStatusEnum('status').default('PENDING').notNull(),
+	sentAt: timestamp('sent_at'),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+	return {
+		// Drives the job's "due and pending" sweep and the per-channel pending list.
+		dueIdx: index('scheduled_messages_due_idx').on(table.status, table.scheduledAt),
+		channelIdx: index('scheduled_messages_channel_idx').on(table.channelSnowflake, table.status),
+	};
+});
+
+export type ScheduledMessage = InferSelectModel<typeof scheduledMessages>;
+export type ScheduledMessageInsert = InferInsertModel<typeof scheduledMessages>;

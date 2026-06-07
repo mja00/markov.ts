@@ -38,7 +38,7 @@ import {
 	TriggerHandler,
 } from './events/index.js';
 import { CustomClient } from './extensions/index.js';
-import { Job } from './jobs/index.js';
+import { Job, ProcessScheduledMessagesJob } from './jobs/index.js';
 import { Bot } from './models/bot.js';
 import { Reaction } from './reactions/index.js';
 import {
@@ -124,6 +124,9 @@ async function start(): Promise<void> {
 
 	// Jobs
 	const jobs: Job[] = [
+		// Runs per instance so it has a gateway client to send with; safe across
+		// shards because each due message is claimed atomically (exactly-once).
+		new ProcessScheduledMessagesJob(client),
 		// TODO: Add new jobs here
 	];
 
