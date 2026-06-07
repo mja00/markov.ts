@@ -51,6 +51,12 @@
             "log": false,
             "runOnce": false,
             "initialDelaySecs": 0
+        },
+        "processScheduledMessages": {
+            "schedule": "0 * * * * *",
+            "log": false,
+            "runOnce": false,
+            "initialDelaySecs": 10
         }
     },
     "rateLimiting": {

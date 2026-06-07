@@ -7,4 +7,5 @@ export { Lang } from './lang.js';
 export { Logger } from './logger.js';
 export { MasterApiService } from './master-api-service.js';
 export { OpenAIService } from './openai.js';
+export { ScheduledMessageService } from './scheduled-message.service.js';
 export { ImageUpload } from './image-upload.js';

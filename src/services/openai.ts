@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import path from 'node:path';
 
 import * as fal from '@fal-ai/serverless-client';
+import { DateTime } from 'luxon';
 import fetch from 'node-fetch';
 import OpenAI from 'openai';
 
@@ -11,6 +12,7 @@ import OpenAI from 'openai';
 import { ImageUpload } from './image-upload.js';
 import { Logger } from './logger.js';
 import { MemoryService } from './memory.service.js';
+import { ScheduledMessageService } from './scheduled-message.service.js';
 import { Memory } from '../db/schema.js';
 
 const require = createRequire(import.meta.url);
@@ -67,6 +69,7 @@ export class OpenAIService {
 	private conversations: Map<string, ConversationState> = new Map();
 	private imageUploadInstance: ImageUpload = ImageUpload.getInstance();
 	private readonly memoryService = new MemoryService();
+	private readonly scheduledMessageService = new ScheduledMessageService();
 	// Track generated image info by response ID for later extraction
 	private imageDataByResponseId: Map<string, GeneratedImageInfo[]> = new Map();
 
@@ -119,6 +122,78 @@ export class OpenAIService {
 				} catch (error) {
 					Logger.error('[OpenAI] recall_memory failed:', error);
 					return 'No matching memories.';
+				}
+			}
+			case 'schedule_message': {
+				try {
+					// The model must supply exactly one timing field; reject ambiguity
+					// so it can correct itself rather than us guessing.
+					const hasDelay = typeof args.delay_minutes === 'number';
+					const hasRunAt = typeof args.run_at === 'string' && args.run_at.length > 0;
+					if (hasDelay === hasRunAt) {
+						return 'Provide exactly one of delay_minutes or run_at (set the other to null).';
+					}
+
+					let scheduledAt: Date;
+					if (hasDelay) {
+						scheduledAt = DateTime.now().plus({ minutes: args.delay_minutes }).toJSDate();
+					} else {
+						// luxon accepts offset-less strings by falling back to the host's
+						// local zone, which would schedule at the wrong absolute instant.
+						// A parsed offset yields a 'fixed' zone, so anything else means the
+						// model omitted the offset and we make it try again.
+						const parsed = DateTime.fromISO(args.run_at, { setZone: true });
+						if (!parsed.isValid || parsed.zone.type !== 'fixed') {
+							return 'I couldn\'t understand that time. Use an ISO-8601 string with a timezone offset, e.g. 2026-06-07T18:30:00-04:00.';
+						}
+						scheduledAt = parsed.toJSDate();
+					}
+
+					const created = await this.scheduledMessageService.schedule({
+						channelSnowflake: ctx.channelId,
+						guildSnowflake: ctx.guildSnowflake,
+						createdBySnowflake: ctx.userSnowflake,
+						content: args.content,
+						scheduledAt,
+					});
+
+					const when = DateTime.fromJSDate(created.scheduledAt).toUTC().toISO();
+					return `Scheduled (id ${created.id}). I'll post it at ${when}.`;
+				} catch (error) {
+					// schedule() throws guardrail messages meant for the user/model.
+					Logger.error('[OpenAI] schedule_message failed:', error);
+					return error instanceof Error ? error.message : 'I could not schedule that right now.';
+				}
+			}
+			case 'list_scheduled_messages': {
+				try {
+					const pending = await this.scheduledMessageService.listPending(ctx.channelId);
+					if (pending.length === 0) {
+						return 'Nothing scheduled in this channel.';
+					}
+					return pending
+						.map((message) => {
+							const when = DateTime.fromJSDate(message.scheduledAt).toUTC().toISO();
+							const preview = message.content.length > 80
+								? `${message.content.slice(0, 80)}…`
+								: message.content;
+							return `- ${message.id} @ ${when}: ${preview}`;
+						})
+						.join('\n');
+				} catch (error) {
+					Logger.error('[OpenAI] list_scheduled_messages failed:', error);
+					return 'I could not look up scheduled messages right now.';
+				}
+			}
+			case 'cancel_scheduled_message': {
+				try {
+					const cancelled = await this.scheduledMessageService.cancel(args.id, ctx.channelId);
+					return cancelled
+						? 'Cancelled that scheduled message.'
+						: 'I couldn\'t find a pending scheduled message with that ID in this channel.';
+				} catch (error) {
+					Logger.error('[OpenAI] cancel_scheduled_message failed:', error);
+					return 'I could not cancel that right now.';
 				}
 			}
 			default: {
@@ -207,6 +282,60 @@ Each Discord channel maintains its own conversation context. Always be helpful, 
 					},
 				},
 				additionalProperties: false,
+			},
+		},
+		{
+			name: 'schedule_message',
+			type: 'function',
+			strict: true,
+			description: 'Schedule a message to be posted to THIS channel at a future time. Provide exactly one of delay_minutes (relative) or run_at (absolute), and set the other to null. Use this when someone asks you to remind them later, post something at a certain time, or follow up after a while.',
+			parameters: {
+				type: 'object',
+				required: ['content', 'delay_minutes', 'run_at'],
+				additionalProperties: false,
+				properties: {
+					content: {
+						type: 'string',
+						description: 'The message text to post when the time arrives.',
+					},
+					delay_minutes: {
+						type: ['number', 'null'],
+						description: 'How many minutes from now to post (e.g. 90 for an hour and a half). Null if using run_at.',
+					},
+					run_at: {
+						type: ['string', 'null'],
+						description: 'Absolute time to post as an ISO-8601 string that INCLUDES a timezone offset (e.g. 2026-06-07T18:30:00-04:00). Null if using delay_minutes.',
+					},
+				},
+			},
+		},
+		{
+			name: 'list_scheduled_messages',
+			type: 'function',
+			strict: true,
+			description: 'List the messages you currently have scheduled to post in this channel, with their IDs and times. Use this before cancelling, or when asked what is scheduled.',
+			parameters: {
+				type: 'object',
+				required: [],
+				additionalProperties: false,
+				properties: {},
+			},
+		},
+		{
+			name: 'cancel_scheduled_message',
+			type: 'function',
+			strict: true,
+			description: 'Cancel a message you previously scheduled in this channel, by its ID. Use list_scheduled_messages first to find the ID.',
+			parameters: {
+				type: 'object',
+				required: ['id'],
+				additionalProperties: false,
+				properties: {
+					id: {
+						type: 'string',
+						description: 'The ID of the scheduled message to cancel.',
+					},
+				},
 			},
 		},
 		{
