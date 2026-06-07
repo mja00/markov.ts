@@ -138,9 +138,12 @@ export class OpenAIService {
 					if (hasDelay) {
 						scheduledAt = DateTime.now().plus({ minutes: args.delay_minutes }).toJSDate();
 					} else {
-						// setZone keeps the offset the model provided; reject if it omitted one.
+						// luxon accepts offset-less strings by falling back to the host's
+						// local zone, which would schedule at the wrong absolute instant.
+						// A parsed offset yields a 'fixed' zone, so anything else means the
+						// model omitted the offset and we make it try again.
 						const parsed = DateTime.fromISO(args.run_at, { setZone: true });
-						if (!parsed.isValid) {
+						if (!parsed.isValid || parsed.zone.type !== 'fixed') {
 							return 'I couldn\'t understand that time. Use an ISO-8601 string with a timezone offset, e.g. 2026-06-07T18:30:00-04:00.';
 						}
 						scheduledAt = parsed.toJSDate();

@@ -14,8 +14,10 @@ const Config = require('../../config/config.json');
  * Posts due scheduled messages. Runs inside each bot instance (it needs a
  * gateway client to send), so it must be registered in start-bot.ts, not the
  * manager. With multiple shards every instance runs this; correctness comes from
- * the atomic claim, not from which shard runs first: each due row is claimed
- * exactly once, and only the winning instance sends it.
+ * the atomic claim, not from which shard runs first: a due row can be claimed by
+ * at most one instance, so it is never posted twice. The claim happens before the
+ * send, so delivery is at-most-once - a crash between claim and send drops the
+ * message rather than risking a double-post.
  */
 export class ProcessScheduledMessagesJob extends Job {
 	public name = 'Process Scheduled Messages';

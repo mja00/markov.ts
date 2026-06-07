@@ -28,7 +28,9 @@ export interface ScheduleMessageInput {
 /**
  * Service for messages Markov schedules to post later. The DB row is the source
  * of truth; {@link claimDue} provides the atomic, shard-safe handoff to the
- * sender so a message fires exactly once.
+ * sender. Delivery is at-most-once: the claim guarantees no more than one
+ * instance ever sends a given message (no double-posting), at the cost of
+ * dropping it if a claimed message's process crashes before it sends.
  */
 export class ScheduledMessageService {
 	/**
@@ -79,8 +81,15 @@ export class ScheduledMessageService {
 				})
 				.returning();
 
-			Logger.debug(`[ScheduledMessageService] Scheduled message ${created[0]?.id} for ${target.toISO()}`);
-			return created[0];
+			const row = created[0];
+			if (!row) {
+				// returning() should yield the inserted row; an empty result means the
+				// insert silently did nothing, so fail loudly rather than return undefined.
+				throw new Error('The scheduled message could not be saved.');
+			}
+
+			Logger.debug(`[ScheduledMessageService] Scheduled message ${row.id} for ${target.toISO()}`);
+			return row;
 		} catch (error) {
 			// Re-throw guardrail errors verbatim; wrap unexpected DB failures.
 			if (error instanceof Error && error.message.startsWith('This channel already has')) {
@@ -171,8 +180,9 @@ export class ScheduledMessageService {
 
 	/**
 	 * Atomically claim a due message for sending. The status guard makes this the
-	 * exactly-once primitive: when several shards run the job concurrently, only
-	 * the one whose UPDATE flips PENDING -> SENT gets a row back and proceeds to send.
+	 * at-most-once primitive: when several shards run the job concurrently, only
+	 * the one whose UPDATE flips PENDING -> SENT gets a row back and proceeds to
+	 * send, so a message is never posted twice.
 	 *
 	 * @param id - The scheduled message UUID
 	 * @returns true if this caller won the claim
@@ -208,7 +218,9 @@ export class ScheduledMessageService {
 		try {
 			await db
 				.update(scheduledMessages)
-				.set({ status: 'FAILED', updatedAt: new Date() })
+				// claimDue() set sentAt when it flipped the row to SENT; clear it so a
+				// FAILED row never looks like it was actually delivered.
+				.set({ status: 'FAILED', sentAt: null, updatedAt: new Date() })
 				.where(eq(scheduledMessages.id, id));
 		} catch (error) {
 			Logger.error(`[ScheduledMessageService] Failed to mark message ${id} as failed:`, error);

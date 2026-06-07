@@ -125,7 +125,8 @@ async function start(): Promise<void> {
 	// Jobs
 	const jobs: Job[] = [
 		// Runs per instance so it has a gateway client to send with; safe across
-		// shards because each due message is claimed atomically (exactly-once).
+		// shards because each due message is claimed atomically, so it is never
+		// posted twice (at-most-once delivery).
 		new ProcessScheduledMessagesJob(client),
 		// TODO: Add new jobs here
 	];
