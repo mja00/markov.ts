@@ -198,7 +198,8 @@
             "shop": "shop",
             "buy": "buy",
             "inventory": "inventory",
-            "memories": "memories"
+            "memories": "memories",
+            "prompt": "prompt"
         },
         "userCommands": {
             "viewDateJoined": "View Date Joined"
@@ -215,7 +216,12 @@
             "buyQuantity": "quantity",
             "memoriesAction": "action",
             "memoriesScope": "scope",
-            "memoriesId": "id"
+            "memoriesId": "id",
+            "promptAction": "action",
+            "promptModel": "model",
+            "promptEffort": "effort",
+            "promptVerbosity": "verbosity",
+            "promptSummary": "summary"
         },
         "commandDescs": {
             "dev": "Developer use only.",
@@ -228,7 +234,8 @@
             "shop": "Browse items in the shop.",
             "buy": "Purchase an item from the shop.",
             "inventory": "View your inventory.",
-            "memories": "View or forget what I remember about you."
+            "memories": "View or forget what I remember about you.",
+            "prompt": "Owner-only: view and tune my prompt settings."
         },
         "argDescs": {
             "devCommand": "Command.",
@@ -240,7 +247,12 @@
             "buyQuantity": "The number of items to purchase (default: 1)",
             "memoriesAction": "What to do: list, forget one, or forget all.",
             "memoriesScope": "Whose memories: mine (default) or server (admins).",
-            "memoriesId": "The memory ID to forget (from the list)."
+            "memoriesId": "The memory ID to forget (from the list).",
+            "promptAction": "What to do: view, edit the prompt, set, or reset.",
+            "promptModel": "Model to use (e.g. gpt-5.4-mini).",
+            "promptEffort": "Reasoning effort (or off to omit).",
+            "promptVerbosity": "Response verbosity (or off to omit).",
+            "promptSummary": "Reasoning summary mode (or off to omit)."
         },
         "fields": {
             "commands": "Commands",

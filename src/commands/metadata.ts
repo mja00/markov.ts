@@ -160,6 +160,24 @@ export const ChatCommandMetadata: {
 			{ ...Args.MEMORIES_ID, required: false },
 		],
 	},
+	PROMPT: {
+		type: ApplicationCommandType.ChatInput,
+		name: Lang.getRef('chatCommands.prompt', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('chatCommands.prompt'),
+		description: Lang.getRef('commandDescs.prompt', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('commandDescs.prompt'),
+		dm_permission: true,
+		default_member_permissions: PermissionsBitField.resolve([
+			PermissionFlagsBits.Administrator,
+		]).toString(),
+		options: [
+			{ ...Args.PROMPT_ACTION, required: true },
+			{ ...Args.PROMPT_MODEL, required: false },
+			{ ...Args.PROMPT_EFFORT, required: false },
+			{ ...Args.PROMPT_VERBOSITY, required: false },
+			{ ...Args.PROMPT_SUMMARY, required: false },
+		],
+	},
 };
 
 export const MessageCommandMetadata: {

@@ -6,6 +6,7 @@ import {
 	HelpOption,
 	InfoOption,
 	MemoryOption,
+	PromptOption,
 } from '../enums/index.js';
 import { Language } from '../models/enum-helpers/index.js';
 import { Lang } from '../services/index.js';
@@ -126,5 +127,69 @@ export class Args {
 		description_localizations: Lang.getRefLocalizationMap('argDescs.memoriesId'),
 		type: ApplicationCommandOptionType.String,
 		required: false,
+	};
+	public static readonly PROMPT_ACTION: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.promptAction', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.promptAction'),
+		description: Lang.getRef('argDescs.promptAction', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.promptAction'),
+		type: ApplicationCommandOptionType.String,
+		choices: [
+			{ name: 'View', value: PromptOption.VIEW },
+			{ name: 'Edit prompt', value: PromptOption.EDIT },
+			{ name: 'Set', value: PromptOption.SET },
+			{ name: 'Reset', value: PromptOption.RESET },
+		],
+	};
+	public static readonly PROMPT_MODEL: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.promptModel', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.promptModel'),
+		description: Lang.getRef('argDescs.promptModel', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.promptModel'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+	};
+	public static readonly PROMPT_EFFORT: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.promptEffort', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.promptEffort'),
+		description: Lang.getRef('argDescs.promptEffort', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.promptEffort'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		choices: [
+			{ name: 'Minimal', value: 'minimal' },
+			{ name: 'Low', value: 'low' },
+			{ name: 'Medium', value: 'medium' },
+			{ name: 'High', value: 'high' },
+			{ name: 'Off', value: 'off' },
+		],
+	};
+	public static readonly PROMPT_VERBOSITY: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.promptVerbosity', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.promptVerbosity'),
+		description: Lang.getRef('argDescs.promptVerbosity', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.promptVerbosity'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		choices: [
+			{ name: 'Low', value: 'low' },
+			{ name: 'Medium', value: 'medium' },
+			{ name: 'High', value: 'high' },
+			{ name: 'Off', value: 'off' },
+		],
+	};
+	public static readonly PROMPT_SUMMARY: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.promptSummary', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.promptSummary'),
+		description: Lang.getRef('argDescs.promptSummary', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.promptSummary'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		choices: [
+			{ name: 'Auto', value: 'auto' },
+			{ name: 'Concise', value: 'concise' },
+			{ name: 'Detailed', value: 'detailed' },
+			{ name: 'Off', value: 'off' },
+		],
 	};
 }

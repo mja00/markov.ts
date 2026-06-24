@@ -4,8 +4,9 @@ import { ModalSubmitInteraction } from 'discord.js';
 import { RateLimiter } from 'discord.js-rate-limiter';
 
 import { ShopLimits } from '../constants/shop-limits.js';
-import { EventDataService } from '../services/index.js';
+import { EventDataService, OpenAIService } from '../services/index.js';
 import { Logger } from '../services/logger.js';
+import { PromptSettingsService } from '../services/prompt-settings.service.js';
 import { ShopService } from '../services/shop.service.js';
 import { UserService } from '../services/user.service.js';
 import { InteractionUtils } from '../utils/index.js';
@@ -38,6 +39,46 @@ export class ModalHandler implements EventHandler {
 		// Handle shop buy modals
 		if (intr.customId.startsWith('shop:buy:')) {
 			await this.handleShopBuyModal(intr);
+			return;
+		}
+
+		// Handle the owner-only system prompt editor.
+		if (intr.customId === 'prompt:edit:system') {
+			await this.handlePromptEditModal(intr);
+		}
+	}
+
+	private async handlePromptEditModal(intr: ModalSubmitInteraction): Promise<void> {
+		// Re-check the owner gate — the modal can be submitted independently of the
+		// command that opened it.
+		if (!Config.developers.includes(intr.user.id)) {
+			await InteractionUtils.send(intr, { content: 'This is owner-only.' }, true);
+			return;
+		}
+
+		try {
+			const systemPrompt = intr.fields.getTextInputValue('systemPrompt');
+
+			if (!systemPrompt || systemPrompt.trim().length === 0) {
+				await InteractionUtils.send(intr, { content: 'System prompt cannot be empty.' }, true);
+				return;
+			}
+
+			await PromptSettingsService.getInstance().update({ systemPrompt });
+
+			// Clear conversation chains so the new persona takes effect immediately.
+			const openai = await OpenAIService.getInstance();
+			openai.clearConversation();
+
+			await InteractionUtils.send(
+				intr,
+				{ content: 'System prompt updated. Applies to new conversations; across shards within ~30s.' },
+				true,
+			);
+		} catch (error) {
+			Logger.error('[ModalHandler] Error handling prompt edit modal:', error);
+			const message = error instanceof Error ? error.message : 'An error occurred while saving the prompt.';
+			await InteractionUtils.send(intr, { content: message }, true);
 		}
 	}
 
