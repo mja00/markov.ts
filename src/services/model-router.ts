@@ -27,6 +27,13 @@ export interface ModelPrice {
 export interface ModelRoutingConfig {
 	enabled?: boolean;
 	rolloutPercent?: number;
+	dataProvenance?: {
+		modelAvailability?: string;
+		modelAvailabilityCheckedAt?: string;
+		pricing?: string;
+		pricingCheckedAt?: string;
+		usageBasedPolicy?: boolean;
+	};
 	tasks?: Partial<Record<AITaskType, ModelTaskSettings>>;
 	prices?: Record<string, ModelPrice>;
 	telemetry?: { enabled?: boolean; };

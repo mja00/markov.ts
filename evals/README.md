@@ -9,6 +9,10 @@ The initial categories are memory accuracy, privacy isolation, tool selection,
 fishing calculations, conversation continuity, and prompt-injection resistance.
 Add production-derived cases only after removing Discord IDs and private text.
 
-`aiRouting.prices` uses USD per million tokens. Keep those values synchronized
-with the account's current model pricing; a zero rate disables cost-to-token
-conversion while preserving usage telemetry and the explicit token cap.
+`aiRouting.prices` uses standard-tier USD per million tokens. The example model
+IDs were verified against the project's `GET /v1/models` response and prices
+against the official pricing page on the dates recorded in `dataProvenance`.
+Timeouts, output caps, rollout percentage, and per-task cost ceilings remain
+explicit product policies. They are not exposed by the Models API. Account usage
+could not be used for policy calibration because the project key is not an
+organization Admin API key and cannot access the Usage or Costs APIs.
