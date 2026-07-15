@@ -111,13 +111,7 @@ export class ConversationContextService {
 	}
 
 	public async resetAll(): Promise<void> {
-		await getDb().update(conversationContexts).set({
-			lastResponseId: null,
-			messageCount: 0,
-			lockToken: null,
-			lockedUntil: null,
-			updatedAt: new Date(),
-		});
+		await getDb().delete(conversationContexts);
 	}
 
 	public async resetChannel(channelSnowflake: string): Promise<void> {

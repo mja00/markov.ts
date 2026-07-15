@@ -68,15 +68,18 @@ export class MessageHandler implements EventHandler {
 		const channelName = 'name' in msg.channel ? msg.channel.name : 'DM';
 		const userTag = msg.author.displayName;
 		const message = msg.content;
+		const botMentioned = msg.mentions.has(msg.client.user?.id);
 		let persistedRecentMessages: RecentChannelMessage[] = [];
 		if (msg.guildId) {
 			try {
-				persistedRecentMessages = await this.channelContextService.recent(
-					msg.guildId,
-					channelID,
-					RECENT_CHANNEL_MESSAGE_LIMIT,
-					msg.client.user?.id,
-				);
+				if (botMentioned) {
+					persistedRecentMessages = await this.channelContextService.recent(
+						msg.guildId,
+						channelID,
+						RECENT_CHANNEL_MESSAGE_LIMIT,
+						msg.client.user?.id,
+					);
+				}
 				await this.channelContextService.record({
 					messageSnowflake: msg.id,
 					guildSnowflake: msg.guildId,
@@ -92,6 +95,9 @@ export class MessageHandler implements EventHandler {
 					}),
 					postedAt: msg.createdAt,
 				});
+				if (botMentioned) {
+					await this.channelContextService.summarize(msg.guildId, channelID);
+				}
 			} catch (error) {
 				Logger.warn('Failed to persist short-term channel context:', error);
 			}
@@ -106,7 +112,7 @@ export class MessageHandler implements EventHandler {
 		}
 
 		// Check if the message has mentions
-		if (msg.mentions.has(msg.client.user?.id)) {
+		if (botMentioned) {
 			// Filter out the bot's mention and any whitespace
 			const botMention = `<@${msg.client.user?.id}>`;
 			const message = msg.content.replace(botMention, '').trim();

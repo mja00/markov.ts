@@ -1,4 +1,5 @@
 import { ChatInputCommandInteraction, PermissionsString } from 'discord.js';
+import { DateTime, IANAZone } from 'luxon';
 
 import { areAutomationsEnabled } from '../../services/automation-settings.js';
 import { ProactiveFeature, ProactivePreferencesService } from '../../services/proactive-preferences.service.js';
@@ -6,8 +7,15 @@ import { InteractionUtils } from '../../utils/interaction-utils.js';
 import { Command, CommandDeferType } from '../index.js';
 
 const FEATURES = new Set<ProactiveFeature>([
-	'dailyFishingQuests', 'rareCatchAlerts', 'weeklyFishingSummaries', 'collectionReminders', 'personalReminders',
+	'dailyFishingQuests', 'rareCatchAlerts', 'weeklyFishingSummaries', 'collectionReminders',
 ]);
+
+function isValidTime(value: string): boolean {
+	const parsed = DateTime.fromFormat(value, 'HH:mm');
+	return /^\d{2}:\d{2}$/.test(value)
+		&& parsed.isValid
+		&& parsed.toFormat('HH:mm') === value;
+}
 
 export class AutomationsCommand implements Command {
 	public names = ['automations'];
@@ -35,18 +43,44 @@ export class AutomationsCommand implements Command {
 			await InteractionUtils.send(intr, 'Choose a feature to enable, disable, or configure.', true);
 			return;
 		}
+		const timezone = intr.options.getString('timezone') ?? undefined;
+		const quietHoursStart = intr.options.getString('quiet_start') ?? undefined;
+		const quietHoursEnd = intr.options.getString('quiet_end') ?? undefined;
+		if (timezone && !IANAZone.isValidZone(timezone)) {
+			await InteractionUtils.send(intr, 'Timezone must be a valid IANA timezone, such as America/New_York.', true);
+			return;
+		}
+		if ((quietHoursStart && !isValidTime(quietHoursStart)) || (quietHoursEnd && !isValidTime(quietHoursEnd))) {
+			await InteractionUtils.send(intr, 'Quiet hours must use strict 24-hour HH:mm values.', true);
+			return;
+		}
+		if (Boolean(quietHoursStart) !== Boolean(quietHoursEnd)) {
+			await InteractionUtils.send(intr, 'Set both quiet_start and quiet_end together.', true);
+			return;
+		}
+		const destinationOption = intr.options.getChannel('destination');
+		let destination;
+		try {
+			destination = await intr.client.channels.fetch(destinationOption?.id ?? intr.channelId);
+		} catch {
+			destination = null;
+		}
+		if (!destination?.isSendable()) {
+			await InteractionUtils.send(intr, 'Choose a destination channel where the bot can send messages.', true);
+			return;
+		}
 		const enabled = action !== 'disable';
 		const updated = await this.preferences.configure({
 			userSnowflake: intr.user.id,
 			guildSnowflake: intr.guildId,
 			feature,
 			enabled,
-			timezone: intr.options.getString('timezone') ?? undefined,
-			quietHoursStart: intr.options.getString('quiet_start') ?? undefined,
-			quietHoursEnd: intr.options.getString('quiet_end') ?? undefined,
+			timezone,
+			quietHoursStart,
+			quietHoursEnd,
 			frequency: intr.options.getString('frequency') ?? undefined,
-			destinationChannelSnowflake: intr.options.getChannel('destination')?.id ?? intr.channelId,
+			destinationChannelSnowflake: destination.id,
 		});
-		await InteractionUtils.send(intr, `${feature} is now ${enabled ? 'enabled' : 'disabled'}. Timezone: ${updated.timezone}.`, true);
+		await InteractionUtils.send(intr, `${feature} is now ${enabled ? 'enabled' : 'disabled'}. Timezone: ${updated?.timezone ?? 'not set'}.`, true);
 	}
 }

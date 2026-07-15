@@ -143,7 +143,7 @@ export class FishCommand implements Command {
 			// Build response embed
 			const rarityName = this.fishingService.getRarityName(caught.rarity);
 			if (caught.rarity >= 2) {
-				await this.proactivePreferences.enqueueRareCatchAlerts({
+				void this.proactivePreferences.enqueueRareCatchAlerts({
 					guildSnowflake: guildDiscordSnowflake,
 					catcherSnowflake: intr.user.id,
 					catchableName: caught.name,

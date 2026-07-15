@@ -1,5 +1,13 @@
 import { createRequire } from 'node:module';
 
+import {
+	and,
+	asc,
+	eq,
+	gt,
+	isNotNull,
+	or,
+} from 'drizzle-orm';
 import { DateTime } from 'luxon';
 
 import { Job } from './job.js';
@@ -11,22 +19,50 @@ import { ScheduledMessageService } from '../services/scheduled-message.service.j
 
 
 const require = createRequire(import.meta.url);
-const Config = require('../../config/config.json');
+type JobConfig = { jobs?: { enqueueProactiveMessages?: { schedule?: string; log?: boolean; initialDelaySecs?: number; }; }; };
+let Config: JobConfig = {};
+try {
+	Config = require('../../config/config.json') as JobConfig;
+} catch {
+	// Runtime configuration is intentionally absent in CI and unit tests.
+}
+
+const PREFERENCES_PER_RUN = 100;
 
 export class EnqueueProactiveMessagesJob extends Job {
 	public name = 'Enqueue Proactive Messages';
-	public schedule: string = Config.jobs.enqueueProactiveMessages?.schedule ?? '0 0 * * * *';
-	public log: boolean = Config.jobs.enqueueProactiveMessages?.log ?? false;
+	public schedule: string = Config.jobs?.enqueueProactiveMessages?.schedule ?? '0 0 * * * *';
+	public log: boolean = Config.jobs?.enqueueProactiveMessages?.log ?? false;
 	public runOnce = false;
-	public initialDelaySecs: number = Config.jobs.enqueueProactiveMessages?.initialDelaySecs ?? 20;
+	public initialDelaySecs: number = Config.jobs?.enqueueProactiveMessages?.initialDelaySecs ?? 20;
 	private readonly preferences = new ProactivePreferencesService();
 	private readonly scheduled = new ScheduledMessageService();
+	private cursor?: string;
 
 	public async run(): Promise<void> {
 		if (!areAutomationsEnabled()) {
 			return;
 		}
-		const preferences = await getDb().select().from(userAssistantPreferences);
+		const eligibility = and(
+			isNotNull(userAssistantPreferences.destinationChannelSnowflake),
+			or(
+				eq(userAssistantPreferences.dailyFishingQuests, true),
+				eq(userAssistantPreferences.weeklyFishingSummaries, true),
+				eq(userAssistantPreferences.collectionReminders, true),
+			),
+		);
+		let preferences = await getDb().select().from(userAssistantPreferences)
+			.where(this.cursor ? and(eligibility, gt(userAssistantPreferences.id, this.cursor)) : eligibility)
+			.orderBy(asc(userAssistantPreferences.id))
+			.limit(PREFERENCES_PER_RUN);
+		if (preferences.length === 0 && this.cursor) {
+			this.cursor = undefined;
+			preferences = await getDb().select().from(userAssistantPreferences)
+				.where(eligibility)
+				.orderBy(asc(userAssistantPreferences.id))
+				.limit(PREFERENCES_PER_RUN);
+		}
+		this.cursor = preferences.at(-1)?.id;
 		for (const preference of preferences) {
 			if (!preference.destinationChannelSnowflake || this.isQuiet(preference)) {
 				continue;
@@ -56,13 +92,18 @@ export class EnqueueProactiveMessagesJob extends Job {
 			|| !await this.preferences.claimDelivery(feature, preference.preferenceKey, period)) {
 			return;
 		}
-		await this.scheduled.schedule({
-			channelSnowflake: preference.destinationChannelSnowflake,
-			guildSnowflake: preference.guildSnowflake,
-			createdBySnowflake: preference.userSnowflake,
-			content: `<@${preference.userSnowflake}> ${content}`,
-			scheduledAt: DateTime.now().plus({ minutes: 1 }).toJSDate(),
-		});
+		try {
+			await this.scheduled.schedule({
+				channelSnowflake: preference.destinationChannelSnowflake,
+				guildSnowflake: preference.guildSnowflake,
+				createdBySnowflake: preference.userSnowflake,
+				content: `<@${preference.userSnowflake}> ${content}`,
+				scheduledAt: DateTime.now().plus({ minutes: 1 }).toJSDate(),
+			});
+		} catch (error) {
+			await this.preferences.releaseDelivery(feature, preference.preferenceKey, period);
+			throw error;
+		}
 	}
 
 	private isQuiet(preference: typeof userAssistantPreferences.$inferSelect): boolean {

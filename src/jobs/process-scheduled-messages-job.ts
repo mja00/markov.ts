@@ -2,7 +2,12 @@ import { createRequire } from 'node:module';
 
 import { Client } from 'discord.js';
 
-import { Logger, ScheduledMessageService, areAutomationsEnabled } from '../services/index.js';
+import {
+	ChannelContextService,
+	Logger,
+	ScheduledMessageService,
+	areAutomationsEnabled,
+} from '../services/index.js';
 import { ClientUtils, MessageUtils } from '../utils/index.js';
 
 import { Job } from './index.js';
@@ -27,12 +32,14 @@ export class ProcessScheduledMessagesJob extends Job {
 	public initialDelaySecs: number = Config.jobs.processScheduledMessages.initialDelaySecs;
 
 	private readonly scheduledMessageService = new ScheduledMessageService();
+	private readonly channelContextService = new ChannelContextService();
 
 	constructor(private client: Client) {
 		super();
 	}
 
 	public async run(): Promise<void> {
+		await this.channelContextService.deleteExpired();
 		if (!areAutomationsEnabled()) {
 			return;
 		}

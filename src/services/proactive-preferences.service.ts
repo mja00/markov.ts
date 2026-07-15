@@ -10,6 +10,10 @@ export type ProactiveFeature = 'dailyFishingQuests' | 'rareCatchAlerts' | 'weekl
 
 export class ProactivePreferencesService {
 	private readonly scheduledMessages = new ScheduledMessageService();
+	private static deliveryKey(feature: string, targetSnowflake: string, periodKey: string): string {
+		return `${feature}:${targetSnowflake}:${periodKey}`;
+	}
+
 	public static key(userSnowflake: string, guildSnowflake: string | null): string {
 		return `${guildSnowflake ?? 'dm'}:${userSnowflake}`;
 	}
@@ -60,11 +64,18 @@ export class ProactivePreferencesService {
 			return false;
 		}
 		const rows = await getDb().insert(automationDeliveries).values({
-			dedupeKey: `${feature}:${targetSnowflake}:${periodKey}`, feature, targetSnowflake,
+			dedupeKey: ProactivePreferencesService.deliveryKey(feature, targetSnowflake, periodKey), feature, targetSnowflake,
 		})
 			.onConflictDoNothing({ target: automationDeliveries.dedupeKey })
 			.returning();
 		return rows.length === 1;
+	}
+
+	public async releaseDelivery(feature: string, targetSnowflake: string, periodKey: string): Promise<void> {
+		await getDb().delete(automationDeliveries).where(eq(
+			automationDeliveries.dedupeKey,
+			ProactivePreferencesService.deliveryKey(feature, targetSnowflake, periodKey),
+		));
 	}
 
 	public async enqueueRareCatchAlerts(input: {
@@ -88,13 +99,18 @@ export class ProactivePreferencesService {
 					|| !await this.claimDelivery('rare_catch_alert', subscriber.preferenceKey, input.eventKey)) {
 					continue;
 				}
-				await this.scheduledMessages.schedule({
-					channelSnowflake: subscriber.destinationChannelSnowflake,
-					guildSnowflake: input.guildSnowflake,
-					createdBySnowflake: subscriber.userSnowflake,
-					content: `<@${subscriber.userSnowflake}> Rare catch alert: <@${input.catcherSnowflake}> caught **${input.catchableName}** (${input.rarityName})!`,
-					scheduledAt: new Date(Date.now() + 60000),
-				});
+				try {
+					await this.scheduledMessages.schedule({
+						channelSnowflake: subscriber.destinationChannelSnowflake,
+						guildSnowflake: input.guildSnowflake,
+						createdBySnowflake: subscriber.userSnowflake,
+						content: `<@${subscriber.userSnowflake}> Rare catch alert: <@${input.catcherSnowflake}> caught **${input.catchableName}** (${input.rarityName})!`,
+						scheduledAt: new Date(Date.now() + 60000),
+					});
+				} catch (error) {
+					await this.releaseDelivery('rare_catch_alert', subscriber.preferenceKey, input.eventKey);
+					throw error;
+				}
 			}
 		} catch (error) {
 			Logger.warn('[ProactivePreferencesService] Failed to enqueue rare catch alerts:', error);

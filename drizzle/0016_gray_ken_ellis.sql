@@ -68,8 +68,10 @@ ALTER TABLE "memories" ADD COLUMN "expires_at" timestamp;--> statement-breakpoin
 ALTER TABLE "memories" ADD COLUMN "last_confirmed_at" timestamp;--> statement-breakpoint
 ALTER TABLE "memories" ADD COLUMN "source_message_snowflake" varchar(255);--> statement-breakpoint
 ALTER TABLE "memories" ADD COLUMN "superseded_by" uuid;--> statement-breakpoint
+ALTER TABLE "memories" ADD CONSTRAINT "memories_superseded_by_memories_id_fk" FOREIGN KEY ("superseded_by") REFERENCES "public"."memories"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "automation_deliveries_dedupe_idx" ON "automation_deliveries" USING btree ("dedupe_key");--> statement-breakpoint
 CREATE INDEX "channel_messages_channel_time_idx" ON "channel_messages" USING btree ("guild_snowflake","channel_snowflake","posted_at");--> statement-breakpoint
 CREATE INDEX "channel_messages_expires_idx" ON "channel_messages" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "conversation_summaries_channel_idx" ON "conversation_summaries" USING btree ("guild_snowflake","channel_snowflake","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "conversation_summaries_through_message_idx" ON "conversation_summaries" USING btree ("channel_snowflake","through_message_snowflake");--> statement-breakpoint
 CREATE UNIQUE INDEX "user_assistant_preferences_key_idx" ON "user_assistant_preferences" USING btree ("preference_key");

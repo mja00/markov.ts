@@ -139,7 +139,7 @@ export class Bot {
 		try {
 			await this.messageHandler.delete(msg.id);
 		} catch (error) {
-			Logger.error('Failed to delete retained channel context:', error);
+			Logger.error(Logs.error.messageDelete, error);
 		}
 	}
 

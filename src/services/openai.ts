@@ -103,8 +103,8 @@ export class OpenAIService {
 			case 'save_memory': {
 				try {
 					const sensitive = /password|token|secret|credit card|social security|medical|diagnos/i.test(args.content);
-					const safeAutomatic = args.explicitly_requested === true
-						|| (args.confidence >= 0.9 && ['PREFERENCE', 'FACT'].includes(args.kind) && !sensitive);
+					const safeAutomatic = !sensitive && (args.explicitly_requested === true
+						|| (args.confidence >= 0.9 && ['PREFERENCE', 'FACT'].includes(args.kind)));
 					if (!safeAutomatic) {
 						return 'Memory not saved: only explicit requests or clearly stable, low-risk facts may be stored.';
 					}

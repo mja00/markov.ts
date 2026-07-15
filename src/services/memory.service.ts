@@ -361,29 +361,35 @@ export class MemoryService {
 			.where(and(
 				eq(memories.id, id),
 				eq(memories.userSnowflake, userSnowflake),
+				isNull(memories.supersededBy),
 				guildSnowflake === null ? isNull(memories.guildSnowflake) : eq(memories.guildSnowflake, guildSnowflake),
 			))
 			.limit(1);
 		if (!existing[0]) { return false; }
 		const embedding = await this.embeddingService.createEmbedding(content);
 		if (!embedding) { return false; }
-		const created = await getDb().insert(memories).values({
-			scope: existing[0].scope,
-			content,
-			userSnowflake,
-			guildSnowflake: existing[0].guildSnowflake,
-			kind: existing[0].kind,
-			confidence: '1.000',
-			importance: existing[0].importance,
-			createdByModel: false,
-			lastConfirmedAt: new Date(),
-			embedding,
-		})
-			.returning();
-		if (!created[0]) { return false; }
-		await getDb().update(memories).set({ supersededBy: created[0].id, updatedAt: new Date() })
-			.where(eq(memories.id, id));
-		return true;
+		return getDb().transaction(async (tx) => {
+			const created = await tx.insert(memories).values({
+				scope: existing[0].scope,
+				content,
+				userSnowflake,
+				guildSnowflake: existing[0].guildSnowflake,
+				kind: existing[0].kind,
+				confidence: '1.000',
+				importance: existing[0].importance,
+				createdByModel: false,
+				lastConfirmedAt: new Date(),
+				embedding,
+			}).returning();
+			if (!created[0]) { return false; }
+			const superseded = await tx.update(memories).set({ supersededBy: created[0].id, updatedAt: new Date() })
+				.where(and(eq(memories.id, id), isNull(memories.supersededBy)))
+				.returning({ id: memories.id });
+			if (superseded.length === 0) {
+				throw new Error('Memory was already superseded.');
+			}
+			return true;
+		});
 	}
 
 	/**
@@ -404,6 +410,7 @@ export class MemoryService {
 					and(
 						eq(memories.scope, 'USER'),
 						eq(memories.userSnowflake, userSnowflake),
+						isNull(memories.supersededBy),
 						guildSnowflake === null
 							? isNull(memories.guildSnowflake)
 							: eq(memories.guildSnowflake, guildSnowflake),
@@ -430,7 +437,11 @@ export class MemoryService {
 			const rows = await db
 				.select(MEMORY_LIST_COLUMNS)
 				.from(memories)
-				.where(and(eq(memories.scope, 'SERVER'), eq(memories.guildSnowflake, guildSnowflake)))
+				.where(and(
+					eq(memories.scope, 'SERVER'),
+					eq(memories.guildSnowflake, guildSnowflake),
+					isNull(memories.supersededBy),
+				))
 				.orderBy(desc(memories.createdAt));
 			return rows.map((row) => { return { ...row, embedding: null }; }) as Memory[];
 		} catch (error) {

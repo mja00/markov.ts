@@ -38,8 +38,14 @@ export class ChannelContextService {
 			attachments: input.attachments ?? [],
 			expiresAt: new Date(input.postedAt.getTime() + this.retentionMs),
 		}).onConflictDoNothing();
-		await db.delete(channelMessages).where(lt(channelMessages.expiresAt, new Date()));
-		await this.summarizeIfNeeded(input.guildSnowflake, input.channelSnowflake);
+	}
+
+	public async deleteExpired(): Promise<void> {
+		await getDb().delete(channelMessages).where(lt(channelMessages.expiresAt, new Date()));
+	}
+
+	public async summarize(guildSnowflake: string, channelSnowflake: string): Promise<void> {
+		await this.summarizeIfNeeded(guildSnowflake, channelSnowflake);
 	}
 
 	public async recent(guildSnowflake: string, channelSnowflake: string, limit = 5, botSnowflake?: string): Promise<RecentChannelMessage[]> {
@@ -92,13 +98,16 @@ export class ChannelContextService {
 		if (!throughMessage) { return; }
 		const summary = rows.map(row => `${row.authorName}: ${row.content || '[attachment]'}`).join('\n').slice(0, 8000);
 		await getDb().transaction(async (tx) => {
-			await tx.insert(conversationSummaries).values({
+			const inserted = await tx.insert(conversationSummaries).values({
 				guildSnowflake,
 				channelSnowflake,
 				summary,
 				throughMessageSnowflake: throughMessage.messageSnowflake,
 				messageCount: rows.length,
-			});
+			})
+				.onConflictDoNothing()
+				.returning({ id: conversationSummaries.id });
+			if (inserted.length === 0) { return; }
 			await tx.delete(channelMessages).where(inArray(
 				channelMessages.messageSnowflake,
 				rows.map(row => row.messageSnowflake),

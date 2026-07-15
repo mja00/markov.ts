@@ -1,5 +1,6 @@
 import { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import {
+	AnyPgColumn,
 	boolean,
 	index,
 	integer,
@@ -149,7 +150,7 @@ export const memories = pgTable('memories', {
 	expiresAt: timestamp('expires_at'),
 	lastConfirmedAt: timestamp('last_confirmed_at'),
 	sourceMessageSnowflake: varchar('source_message_snowflake', { length: 255 }),
-	supersededBy: uuid('superseded_by'),
+	supersededBy: uuid('superseded_by').references((): AnyPgColumn => memories.id, { onDelete: 'cascade' }),
 	embedding: vector('embedding', { dimensions: 1536 }),
 	sourceChannelSnowflake: varchar('source_channel_snowflake', { length: 255 }),
 	createdByModel: boolean('created_by_model').default(true).notNull(),
@@ -227,6 +228,7 @@ export const conversationSummaries = pgTable('conversation_summaries', {
 }, (table) => {
 	return {
 		channelIdx: index('conversation_summaries_channel_idx').on(table.guildSnowflake, table.channelSnowflake, table.createdAt),
+		throughMessageIdx: uniqueIndex('conversation_summaries_through_message_idx').on(table.channelSnowflake, table.throughMessageSnowflake),
 	};
 });
 

@@ -637,6 +637,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "conversation_summaries_through_message_idx": {
+          "name": "conversation_summaries_through_message_idx",
+          "columns": [
+            {
+              "expression": "channel_snowflake",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "through_message_snowflake",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1190,7 +1211,21 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "memories_superseded_by_memories_id_fk": {
+          "name": "memories_superseded_by_memories_id_fk",
+          "tableFrom": "memories",
+          "tableTo": "memories",
+          "columnsFrom": [
+            "superseded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
