@@ -65,6 +65,7 @@ export class AIToolRegistry {
 		if (!tool) {
 			throw new Error(`Unknown AI tool: ${name}`);
 		}
+		context.signal?.throwIfAborted();
 		const timeoutMs = tool.timeoutMs ?? 10000;
 		const controller = new AbortController();
 		const upstreamSignal = context.signal;

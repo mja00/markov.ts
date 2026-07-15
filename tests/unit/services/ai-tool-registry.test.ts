@@ -151,10 +151,11 @@ describe('AIToolRegistry', () => {
 		expect(observedAbort).toBe(true);
 	});
 
-	it('passes an already-aborted caller signal to the handler', async () => {
+	it('rejects an already-aborted caller signal without invoking the handler', async () => {
 		const registry = new AIToolRegistry();
 		const controller = new AbortController();
 		controller.abort(new Error('already cancelled'));
+		const handler = vi.fn(async () => { return { success: true }; });
 		registry.register({
 			definition: {
 				type: 'function',
@@ -163,14 +164,13 @@ describe('AIToolRegistry', () => {
 				strict: true,
 				parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
 			},
-			handler: async (_arguments, context) => {
-				return { aborted: context.signal?.aborted, reason: context.signal?.reason?.message };
-			},
+			handler,
 		});
 
 		await expect(registry.execute('pre_cancelled', {}, {
 			userSnowflake: 'trusted', guildSnowflake: null, username: 'Alice', channelId: 'dm', signal: controller.signal,
-		})).resolves.toBe('{"aborted":true,"reason":"already cancelled"}');
+		})).rejects.toThrow('already cancelled');
+		expect(handler).not.toHaveBeenCalled();
 	});
 
 	it('never authorizes a purchase from model-controlled confirmation data', async () => {
@@ -258,14 +258,38 @@ describe('AIToolRegistry', () => {
 		pickCatchableMock.mockResolvedValue({ id: 'fish-id', name: 'Fish', rarity: 1, worth: 20 });
 		calculateWorthMock.mockResolvedValue(20);
 		let attemptCount = 0;
-		let lockCount = 0;
-		let queue = Promise.resolve();
-		transactionMock.mockImplementation((callback) => {
-			const run = queue.then(async () => {
+		let transactionCount = 0;
+		let executeCount = 0;
+		let lockTail = Promise.resolve();
+		let releaseExecuteBarrier: (() => void) | undefined;
+		const executeBarrier = new Promise<void>((resolve) => {
+			releaseExecuteBarrier = resolve;
+		});
+		const events: string[] = [];
+		transactionMock.mockImplementation(async (callback) => {
+			const transactionId = ++transactionCount;
+			events.push(`begin:${transactionId}`);
+			let releaseLock: (() => void) | undefined;
+			let hasLock = false;
+			try {
 				let insertCount = 0;
 				let selectCount = 0;
 				const tx = {
-					execute: vi.fn(() => { lockCount++; }),
+					execute: vi.fn(async () => {
+						events.push(`lock-wait:${transactionId}`);
+						const previousLock = lockTail;
+						lockTail = new Promise<void>((resolve) => {
+							releaseLock = resolve;
+						});
+						executeCount++;
+						if (executeCount === 2) {
+							releaseExecuteBarrier?.();
+						}
+						await executeBarrier;
+						await previousLock;
+						hasLock = true;
+						events.push(`lock-acquired:${transactionId}`);
+					}),
 					select: vi.fn(() => {
 						selectCount++;
 						return {
@@ -278,6 +302,7 @@ describe('AIToolRegistry', () => {
 											}] };
 										}
 										if (selectCount === 2) {
+											events.push(`cooldown-read:${transactionId}`);
 											return Promise.resolve([{ count: attemptCount }]);
 										}
 										return {
@@ -302,10 +327,13 @@ describe('AIToolRegistry', () => {
 						return { set: () => { return { where: () => { return { returning: async () => [{ id: 'user-id', money: 30 }] }; } }; } };
 					}),
 				};
-				return callback(tx);
-			});
-			queue = run.then(() => {}, () => {});
-			return run;
+				return await callback(tx);
+			} finally {
+				if (hasLock) {
+					events.push(`lock-released:${transactionId}`);
+					releaseLock?.();
+				}
+			}
 		});
 		const registry = createDomainToolRegistry();
 
@@ -322,6 +350,9 @@ describe('AIToolRegistry', () => {
 		expect(parsed.filter(result => result.success)).toHaveLength(1);
 		expect(parsed.filter(result => result.reason === 'cooldown')).toHaveLength(1);
 		expect(attemptCount).toBe(1);
-		expect(lockCount).toBe(2);
+		expect(events.slice(0, 4)).toEqual(['begin:1', 'lock-wait:1', 'begin:2', 'lock-wait:2']);
+		expect(events.indexOf('lock-acquired:1')).toBeLessThan(events.indexOf('cooldown-read:1'));
+		expect(events.indexOf('lock-released:1')).toBeLessThan(events.indexOf('lock-acquired:2'));
+		expect(events.indexOf('lock-acquired:2')).toBeLessThan(events.indexOf('cooldown-read:2'));
 	});
 });
