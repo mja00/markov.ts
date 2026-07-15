@@ -14,6 +14,7 @@ import { Job } from './job.js';
 import { userAssistantPreferences } from '../db/schema.js';
 import { areAutomationsEnabled } from '../services/automation-settings.js';
 import { getDb } from '../services/database.service.js';
+import { Logger } from '../services/logger.js';
 import { ProactivePreferencesService } from '../services/proactive-preferences.service.js';
 import { ScheduledMessageService } from '../services/scheduled-message.service.js';
 
@@ -101,8 +102,12 @@ export class EnqueueProactiveMessagesJob extends Job {
 				scheduledAt: DateTime.now().plus({ minutes: 1 }).toJSDate(),
 			});
 		} catch (error) {
-			await this.preferences.releaseDelivery(feature, preference.preferenceKey, period);
-			throw error;
+			try {
+				await this.preferences.releaseDelivery(feature, preference.preferenceKey, period);
+			} catch (releaseError) {
+				Logger.warn(`[EnqueueProactiveMessagesJob] Failed to release ${feature} delivery:`, releaseError);
+			}
+			Logger.warn(`[EnqueueProactiveMessagesJob] Failed to schedule ${feature}:`, error);
 		}
 	}
 

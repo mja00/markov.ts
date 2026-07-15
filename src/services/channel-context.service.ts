@@ -3,6 +3,7 @@ import {
 	asc,
 	desc,
 	eq,
+	gt,
 	ilike,
 	inArray,
 	lt,
@@ -53,6 +54,7 @@ export class ChannelContextService {
 			.where(and(
 				eq(channelMessages.guildSnowflake, guildSnowflake),
 				eq(channelMessages.channelSnowflake, channelSnowflake),
+				gt(channelMessages.expiresAt, new Date()),
 			))
 			.orderBy(desc(channelMessages.postedAt))
 			.limit(limit);
@@ -66,6 +68,7 @@ export class ChannelContextService {
 			.where(and(
 				eq(channelMessages.guildSnowflake, guildSnowflake),
 				eq(channelMessages.channelSnowflake, channelSnowflake),
+				gt(channelMessages.expiresAt, new Date()),
 				ilike(channelMessages.content, `%${query}%`),
 			))
 			.orderBy(desc(channelMessages.postedAt))
@@ -90,6 +93,7 @@ export class ChannelContextService {
 			.where(and(
 				eq(channelMessages.guildSnowflake, guildSnowflake),
 				eq(channelMessages.channelSnowflake, channelSnowflake),
+				gt(channelMessages.expiresAt, new Date()),
 			))
 			.orderBy(asc(channelMessages.postedAt))
 			.limit(this.summaryThreshold);

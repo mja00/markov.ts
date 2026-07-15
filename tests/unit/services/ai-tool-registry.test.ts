@@ -8,7 +8,6 @@ import {
 
 const {
 	calculateWorthMock,
-	checkCooldownMock,
 	determineRarityMock,
 	ensureUserMock,
 	getRarityNameMock,
@@ -20,7 +19,6 @@ const {
 } = vi.hoisted(() => {
 	return {
 		calculateWorthMock: vi.fn(),
-		checkCooldownMock: vi.fn(),
 		determineRarityMock: vi.fn(),
 		ensureUserMock: vi.fn(),
 		getRarityNameMock: vi.fn(),
@@ -48,13 +46,6 @@ vi.mock('../../../src/services/user.service.js', () => {
 	return {
 		UserService: class {
 			public ensureUserExists = ensureUserMock;
-		},
-	};
-});
-vi.mock('../../../src/services/fishing-cooldown.service.js', () => {
-	return {
-		FishingCooldownService: class {
-			public checkCooldown = checkCooldownMock;
 		},
 	};
 });
@@ -128,6 +119,60 @@ describe('AIToolRegistry', () => {
 		})).rejects.toThrow('slow timed out');
 	});
 
+	it('propagates caller cancellation to the handler signal', async () => {
+		const registry = new AIToolRegistry();
+		const controller = new AbortController();
+		let observedAbort = false;
+		registry.register({
+			definition: {
+				type: 'function',
+				name: 'cancelled',
+				description: 'test',
+				strict: true,
+				parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+			},
+			handler: async (_arguments, context) => {
+				await new Promise<void>((_resolve, reject) => {
+					context.signal?.addEventListener('abort', () => {
+						observedAbort = true;
+						reject(context.signal?.reason);
+					}, { once: true });
+				});
+			},
+		});
+
+		const executing = registry.execute('cancelled', {}, {
+			userSnowflake: 'trusted', guildSnowflake: null, username: 'Alice', channelId: 'dm', signal: controller.signal,
+		});
+		await Promise.resolve();
+		controller.abort(new Error('caller cancelled'));
+
+		await expect(executing).rejects.toThrow('caller cancelled');
+		expect(observedAbort).toBe(true);
+	});
+
+	it('passes an already-aborted caller signal to the handler', async () => {
+		const registry = new AIToolRegistry();
+		const controller = new AbortController();
+		controller.abort(new Error('already cancelled'));
+		registry.register({
+			definition: {
+				type: 'function',
+				name: 'pre_cancelled',
+				description: 'test',
+				strict: true,
+				parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+			},
+			handler: async (_arguments, context) => {
+				return { aborted: context.signal?.aborted, reason: context.signal?.reason?.message };
+			},
+		});
+
+		await expect(registry.execute('pre_cancelled', {}, {
+			userSnowflake: 'trusted', guildSnowflake: null, username: 'Alice', channelId: 'dm', signal: controller.signal,
+		})).resolves.toBe('{"aborted":true,"reason":"already cancelled"}');
+	});
+
 	it('never authorizes a purchase from model-controlled confirmation data', async () => {
 		getShopItemMock.mockResolvedValue({ item: { name: 'Lucky Rod' }, shop: { cost: 25 } });
 		const registry = createDomainToolRegistry();
@@ -159,23 +204,39 @@ describe('AIToolRegistry', () => {
 
 	it('keeps fishing mutations in one transaction when the cooldown write fails', async () => {
 		ensureUserMock.mockResolvedValue({ id: 'user-id', money: 10 });
-		checkCooldownMock.mockResolvedValue({ allowed: true });
 		determineRarityMock.mockResolvedValue(2);
 		pickCatchableMock.mockResolvedValue({ id: 'fish-id', name: 'Rare Fish', rarity: 2, worth: 20 });
 		calculateWorthMock.mockResolvedValue(20);
+		const updateMock = vi.fn();
 		let insertCount = 0;
 		transactionMock.mockImplementation(async (callback) => {
+			let selectCount = 0;
 			const tx = {
+				execute: vi.fn(),
 				select: vi.fn(() => {
-					return { from: () => { return { where: () => { return { limit: async () => [{ id: 'guild-id' }] }; } }; } };
+					selectCount++;
+					return {
+						from: () => {
+							return {
+								where: () => {
+									const result = selectCount === 1
+										? { limit: async () => [{
+											id: 'guild-id', fishingCooldownLimit: 10, fishingCooldownWindowSeconds: 3600,
+										}] }
+										: Promise.resolve([{ count: 0 }]);
+									return result;
+								},
+							};
+						},
+					};
 				}),
-				update: vi.fn(() => {
+				update: updateMock.mockImplementation(() => {
 					return { set: () => { return { where: () => { return { returning: async () => [{ id: 'user-id', money: 30 }] }; } }; } };
 				}),
 				insert: vi.fn(() => {
 					insertCount++;
 					if (insertCount === 1) {
-						return { values: () => { return { returning: async () => [{ id: 'catch-id' }] }; } };
+						return { values: () => { return { onConflictDoNothing: vi.fn() }; } };
 					}
 					return { values: async () => { throw new Error('cooldown write failed'); } };
 				}),
@@ -188,5 +249,79 @@ describe('AIToolRegistry', () => {
 			userSnowflake: 'trusted', guildSnowflake: 'guild', username: 'Alice', channelId: 'channel',
 		})).rejects.toThrow('cooldown write failed');
 		expect(transactionMock).toHaveBeenCalledTimes(1);
+		expect(updateMock).not.toHaveBeenCalled();
+	});
+
+	it('serializes concurrent fishing attempts at the cooldown limit', async () => {
+		ensureUserMock.mockResolvedValue({ id: 'user-id', money: 10 });
+		determineRarityMock.mockResolvedValue(1);
+		pickCatchableMock.mockResolvedValue({ id: 'fish-id', name: 'Fish', rarity: 1, worth: 20 });
+		calculateWorthMock.mockResolvedValue(20);
+		let attemptCount = 0;
+		let lockCount = 0;
+		let queue = Promise.resolve();
+		transactionMock.mockImplementation((callback) => {
+			const run = queue.then(async () => {
+				let insertCount = 0;
+				let selectCount = 0;
+				const tx = {
+					execute: vi.fn(() => { lockCount++; }),
+					select: vi.fn(() => {
+						selectCount++;
+						return {
+							from: () => {
+								return {
+									where: () => {
+										if (selectCount === 1) {
+											return { limit: async () => [{
+												id: 'guild-id', fishingCooldownLimit: 1, fishingCooldownWindowSeconds: 3600,
+											}] };
+										}
+										if (selectCount === 2) {
+											return Promise.resolve([{ count: attemptCount }]);
+										}
+										return {
+											orderBy: () => { return { limit: async () => [{ attemptedAt: new Date() }] }; },
+										};
+									},
+								};
+							},
+						};
+					}),
+					insert: vi.fn(() => {
+						insertCount++;
+						if (insertCount === 1) {
+							return { values: () => { return { onConflictDoNothing: vi.fn() }; } };
+						}
+						if (insertCount === 2) {
+							return { values: async () => { attemptCount++; } };
+						}
+						return { values: () => { return { returning: async () => [{ id: 'catch-id' }] }; } };
+					}),
+					update: vi.fn(() => {
+						return { set: () => { return { where: () => { return { returning: async () => [{ id: 'user-id', money: 30 }] }; } }; } };
+					}),
+				};
+				return callback(tx);
+			});
+			queue = run.then(() => {}, () => {});
+			return run;
+		});
+		const registry = createDomainToolRegistry();
+
+		const results = await Promise.all([
+			registry.execute('fish', {}, {
+				userSnowflake: 'trusted', guildSnowflake: 'guild', username: 'Alice', channelId: 'channel',
+			}),
+			registry.execute('fish', {}, {
+				userSnowflake: 'trusted', guildSnowflake: 'guild', username: 'Alice', channelId: 'channel',
+			}),
+		]);
+		const parsed = results.map(result => JSON.parse(result));
+
+		expect(parsed.filter(result => result.success)).toHaveLength(1);
+		expect(parsed.filter(result => result.reason === 'cooldown')).toHaveLength(1);
+		expect(attemptCount).toBe(1);
+		expect(lockCount).toBe(2);
 	});
 });

@@ -1,10 +1,19 @@
-import { eq, ilike, sql } from 'drizzle-orm';
+import {
+	and,
+	asc,
+	eq,
+	gte,
+	ilike,
+	isNull,
+	sql,
+} from 'drizzle-orm';
 import OpenAI from 'openai';
 
 import { ChannelContextService } from './channel-context.service.js';
 import { getDb } from './database.service.js';
-import { FishingCooldownService } from './fishing-cooldown.service.js';
 import { FishingService } from './fishing.service.js';
+import { DEFAULT_FISHING_COOLDOWN_LIMIT, DEFAULT_FISHING_COOLDOWN_WINDOW_SECONDS } from './guild.service.js';
+import { Logger } from './logger.js';
 import { ProactivePreferencesService } from './proactive-preferences.service.js';
 import { ShopService } from './shop.service.js';
 import { UserService } from './user.service.js';
@@ -58,6 +67,15 @@ export class AIToolRegistry {
 		}
 		const timeoutMs = tool.timeoutMs ?? 10000;
 		const controller = new AbortController();
+		const upstreamSignal = context.signal;
+		const abortFromUpstream = () => {
+			controller.abort(upstreamSignal?.reason);
+		};
+		if (upstreamSignal?.aborted) {
+			abortFromUpstream();
+		} else {
+			upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
+		}
 		let timer: NodeJS.Timeout | undefined;
 		const timeout = new Promise<never>((_resolve, reject) => {
 			timer = setTimeout(() => {
@@ -71,6 +89,7 @@ export class AIToolRegistry {
 				timeout,
 			]));
 		} finally {
+			upstreamSignal?.removeEventListener('abort', abortFromUpstream);
 			if (timer) {
 				clearTimeout(timer);
 			}
@@ -97,7 +116,6 @@ export function createDomainToolRegistry(): AIToolRegistry {
 	const registry = new AIToolRegistry();
 	const users = new UserService();
 	const fishing = new FishingService();
-	const cooldowns = new FishingCooldownService();
 	const shop = new ShopService();
 	const channels = new ChannelContextService();
 	const proactive = new ProactivePreferencesService();
@@ -161,11 +179,6 @@ export function createDomainToolRegistry(): AIToolRegistry {
 		handler: async (_arguments, context) => {
 			context.signal?.throwIfAborted();
 			const user = await currentUser(context);
-			context.signal?.throwIfAborted();
-			const cooldown = await cooldowns.checkCooldown(user.id, context.guildSnowflake);
-			if (!cooldown.allowed) {
-				return { success: false, reason: 'cooldown', ...cooldown };
-			}
 			const rarity = await fishing.determineRarity(user.id);
 			context.signal?.throwIfAborted();
 			const caught = await fishing.pickCatchableByRarity(rarity);
@@ -174,8 +187,19 @@ export function createDomainToolRegistry(): AIToolRegistry {
 			context.signal?.throwIfAborted();
 			const outcome = await getDb().transaction(async (tx) => {
 				context.signal?.throwIfAborted();
+				const lockKey = `fish:${user.id}:${context.guildSnowflake ?? 'dm'}`;
+				await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+				context.signal?.throwIfAborted();
+				if (context.guildSnowflake) {
+					await tx.insert(guilds).values({ discordSnowflake: context.guildSnowflake })
+						.onConflictDoNothing({ target: guilds.discordSnowflake });
+				}
 				const guildRows = context.guildSnowflake
-					? await tx.select({ id: guilds.id }).from(guilds)
+					? await tx.select({
+						id: guilds.id,
+						fishingCooldownLimit: guilds.fishingCooldownLimit,
+						fishingCooldownWindowSeconds: guilds.fishingCooldownWindowSeconds,
+					}).from(guilds)
 						.where(eq(guilds.discordSnowflake, context.guildSnowflake))
 						.limit(1)
 					: [];
@@ -183,6 +207,46 @@ export function createDomainToolRegistry(): AIToolRegistry {
 				if (context.guildSnowflake && !guild) {
 					throw new Error(`Guild ${context.guildSnowflake} not found`);
 				}
+				const limit = guild?.fishingCooldownLimit ?? DEFAULT_FISHING_COOLDOWN_LIMIT;
+				const windowSeconds = guild?.fishingCooldownWindowSeconds ?? DEFAULT_FISHING_COOLDOWN_WINDOW_SECONDS;
+				const cutoff = new Date(Date.now() - (windowSeconds * 1000));
+				const scope = guild
+					? eq(fishingAttempts.guildId, guild.id)
+					: isNull(fishingAttempts.guildId);
+				const attemptFilter = and(
+					eq(fishingAttempts.userId, user.id),
+					gte(fishingAttempts.attemptedAt, cutoff),
+					scope,
+				);
+				const attemptCounts = await tx.select({ count: sql<number>`count(*)::int` })
+					.from(fishingAttempts)
+					.where(attemptFilter);
+				const attemptCount = attemptCounts[0]?.count ?? 0;
+				if (attemptCount >= limit) {
+					const oldestAttempts = await tx.select({ attemptedAt: fishingAttempts.attemptedAt })
+						.from(fishingAttempts)
+						.where(attemptFilter)
+						.orderBy(asc(fishingAttempts.attemptedAt))
+						.limit(1);
+					const oldest = oldestAttempts[0]?.attemptedAt;
+					return {
+						success: false as const,
+						cooldown: {
+							remainingAttempts: 0,
+							timeUntilNextAttempt: oldest
+								? Math.max(0, Math.ceil((oldest.getTime() + (windowSeconds * 1000) - Date.now()) / 1000))
+								: windowSeconds,
+							limit,
+							windowSeconds,
+						},
+					};
+				}
+				context.signal?.throwIfAborted();
+				await tx.insert(fishingAttempts).values({
+					userId: user.id,
+					guildId: guild?.id ?? null,
+					attemptedAt: new Date(),
+				});
 				context.signal?.throwIfAborted();
 				const updatedUsers = await tx.update(usersTable).set({
 					money: sql`${usersTable.money} + ${worth}`,
@@ -198,14 +262,11 @@ export function createDomainToolRegistry(): AIToolRegistry {
 				}).returning();
 				context.signal?.throwIfAborted();
 				if (!catchRecords[0]) { throw new Error('Failed to record catch'); }
-				await tx.insert(fishingAttempts).values({
-					userId: user.id,
-					guildId: guild?.id ?? null,
-					attemptedAt: new Date(),
-				});
-				context.signal?.throwIfAborted();
-				return { user: updatedUsers[0], catchRecord: catchRecords[0] };
+				return { success: true as const, user: updatedUsers[0], catchRecord: catchRecords[0] };
 			});
+			if (!outcome.success) {
+				return { success: false, reason: 'cooldown', ...outcome.cooldown };
+			}
 			if (caught.rarity >= 2) {
 				void proactive.enqueueRareCatchAlerts({
 					guildSnowflake: context.guildSnowflake,
@@ -213,6 +274,8 @@ export function createDomainToolRegistry(): AIToolRegistry {
 					catchableName: caught.name,
 					rarityName: fishing.getRarityName(caught.rarity),
 					eventKey: outcome.catchRecord.id ?? `${user.id}:${caught.id}:${Date.now()}`,
+				}).catch((error) => {
+					Logger.warn('[AIToolRegistry] Failed to enqueue rare catch alerts:', error);
 				});
 			}
 			return { success: true, catch: caught, worth, balance: outcome.user.money };
