@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 
 
+import { ChannelContextService } from '../services/channel-context.service.js';
 import { Logger } from '../services/logger.js';
 import { OpenAIService } from '../services/openai.js';
 import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
@@ -28,7 +29,12 @@ function prettyMs(ms: number): string {
 }
 
 export class MessageHandler implements EventHandler {
+	private readonly channelContextService = new ChannelContextService();
 	constructor(private triggerHandler: TriggerHandler) {}
+
+	public async delete(messageSnowflake: string): Promise<void> {
+		await this.channelContextService.deleteMessage(messageSnowflake);
+	}
 
 	private async getRecentChannelMessages(msg: Message): Promise<RecentChannelMessage[]> {
 		try {
@@ -62,6 +68,34 @@ export class MessageHandler implements EventHandler {
 		const channelName = 'name' in msg.channel ? msg.channel.name : 'DM';
 		const userTag = msg.author.displayName;
 		const message = msg.content;
+		let persistedRecentMessages: RecentChannelMessage[] = [];
+		if (msg.guildId) {
+			try {
+				persistedRecentMessages = await this.channelContextService.recent(
+					msg.guildId,
+					channelID,
+					RECENT_CHANNEL_MESSAGE_LIMIT,
+					msg.client.user?.id,
+				);
+				await this.channelContextService.record({
+					messageSnowflake: msg.id,
+					guildSnowflake: msg.guildId,
+					channelSnowflake: channelID,
+					authorSnowflake: msg.author.id,
+					authorName: msg.author.displayName,
+					content: msg.content,
+					replyTargetSnowflake: msg.reference?.messageId ?? null,
+					attachments: [...msg.attachments.values()].map((attachment) => {
+						return {
+							url: attachment.url, contentType: attachment.contentType,
+						};
+					}),
+					postedAt: msg.createdAt,
+				});
+			} catch (error) {
+				Logger.warn('Failed to persist short-term channel context:', error);
+			}
+		}
 		Logger.info(
 			`[Message]: ${serverName} - ${channelName} - ${userTag} - ${message}`,
 		);
@@ -83,7 +117,9 @@ export class MessageHandler implements EventHandler {
 				msg.channel.sendTyping();
 			}, 5000);
 			const openAI = await OpenAIService.getInstance();
-			const recentMessages = await this.getRecentChannelMessages(msg);
+			const recentMessages = persistedRecentMessages.length > 0
+				? persistedRecentMessages
+				: await this.getRecentChannelMessages(msg);
 
 			try {
 				const startTime = Date.now();
@@ -119,10 +155,11 @@ export class MessageHandler implements EventHandler {
 							msg.guild?.id ?? null,
 							referencedImageUrl,
 							recentMessages,
+							msg.id,
 						);
 					} else {
 						// Fallback to regular message if referenced message not found
-						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages);
+						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
 					}
 				} else if (msg.attachments.size > 0) {
 					// If there's attachments on the message, grab the first image and add it to the thread
@@ -134,13 +171,13 @@ export class MessageHandler implements EventHandler {
 						}
 					}
 					if (imageUrl) {
-						response = await openAI.sendMessageWithImage(channelID, message, imageUrl, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages);
+						response = await openAI.sendMessageWithImage(channelID, message, imageUrl, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
 					} else {
-						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages);
+						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
 					}
 				} else {
 					// Regular message without attachments or replies
-					response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages);
+					response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
 				}
 
 				clearInterval(typingInterval);
@@ -191,14 +228,35 @@ export class MessageHandler implements EventHandler {
 				}
 
 				// Send the response with images if any
+				let sentReply: Message;
 				if (attachments.length > 0) {
-					await msg.reply({
+					sentReply = await msg.reply({
 						content: replyMessage,
 						files: attachments,
 					});
 					Logger.info(`Sent response with ${attachments.length} image(s) to Discord`);
 				} else {
-					await msg.reply(replyMessage);
+					sentReply = await msg.reply(replyMessage);
+				}
+
+				if (sentReply.guildId) {
+					try {
+						await this.channelContextService.record({
+							messageSnowflake: sentReply.id,
+							guildSnowflake: sentReply.guildId,
+							channelSnowflake: sentReply.channelId,
+							authorSnowflake: sentReply.author.id,
+							authorName: sentReply.author.displayName,
+							content: sentReply.content,
+							replyTargetSnowflake: msg.id,
+							attachments: [...sentReply.attachments.values()].map((attachment) => {
+								return { url: attachment.url, contentType: attachment.contentType };
+							}),
+							postedAt: sentReply.createdAt,
+						});
+					} catch (error) {
+						Logger.warn('Failed to persist Markov channel response:', error);
+					}
 				}
 
 				if (images.length > 0) {

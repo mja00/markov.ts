@@ -7,6 +7,7 @@ import { EventData } from '../../models/internal-models.js';
 import { FishingCooldownService } from '../../services/fishing-cooldown.service.js';
 import { FishingService } from '../../services/fishing.service.js';
 import { Lang, Logger } from '../../services/index.js';
+import { ProactivePreferencesService } from '../../services/proactive-preferences.service.js';
 import { UserService } from '../../services/user.service.js';
 import { InteractionUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
@@ -20,6 +21,7 @@ export class FishCommand implements Command {
 	private readonly userService = new UserService();
 	private readonly fishingService = new FishingService();
 	private readonly cooldownService = new FishingCooldownService();
+	private readonly proactivePreferences = new ProactivePreferencesService();
 
 	/**
      * Execute the fish command
@@ -130,7 +132,7 @@ export class FishCommand implements Command {
 			await this.userService.addMoney(user.id, finalWorth);
 
 			// Record the catch
-			await this.fishingService.addCatch(user.id, caught.id);
+			const catchRecord = await this.fishingService.addCatch(user.id, caught.id);
 
 			// Record fishing attempt for cooldown tracking
 			await this.cooldownService.recordAttempt(user.id, guildDiscordSnowflake);
@@ -140,6 +142,15 @@ export class FishCommand implements Command {
 
 			// Build response embed
 			const rarityName = this.fishingService.getRarityName(caught.rarity);
+			if (caught.rarity >= 2) {
+				await this.proactivePreferences.enqueueRareCatchAlerts({
+					guildSnowflake: guildDiscordSnowflake,
+					catcherSnowflake: intr.user.id,
+					catchableName: caught.name,
+					rarityName,
+					eventKey: catchRecord.id ?? `${user.id}:${caught.id}:${Date.now()}`,
+				});
+			}
 			const rarityColor = this.fishingService.getRarityColor(caught.rarity);
 			const newBalance = user.money + finalWorth;
 

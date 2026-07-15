@@ -11,6 +11,7 @@ import {
 	Message,
 	MessageReaction,
 	ModalSubmitInteraction,
+	PartialMessage,
 	PartialMessageReaction,
 	PartialUser,
 	RESTEvents,
@@ -61,6 +62,7 @@ export class Bot {
 		this.client.on(Events.GuildCreate, (guild: Guild) => this.onGuildJoin(guild));
 		this.client.on(Events.GuildDelete, (guild: Guild) => this.onGuildLeave(guild));
 		this.client.on(Events.MessageCreate, (msg: Message) => this.onMessage(msg));
+		this.client.on(Events.MessageDelete, (msg: Message | PartialMessage) => this.onMessageDelete(msg));
 		this.client.on(Events.InteractionCreate, (intr: Interaction) => this.onInteraction(intr));
 		this.client.on(
 			Events.MessageReactionAdd,
@@ -130,6 +132,14 @@ export class Bot {
 			await this.messageHandler.process(msg);
 		} catch (error) {
 			Logger.error(Logs.error.message, error);
+		}
+	}
+
+	private async onMessageDelete(msg: Message | PartialMessage): Promise<void> {
+		try {
+			await this.messageHandler.delete(msg.id);
+		} catch (error) {
+			Logger.error('Failed to delete retained channel context:', error);
 		}
 	}
 

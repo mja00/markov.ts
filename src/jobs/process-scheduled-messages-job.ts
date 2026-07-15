@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 
 import { Client } from 'discord.js';
 
-import { Logger, ScheduledMessageService } from '../services/index.js';
+import { Logger, ScheduledMessageService, areAutomationsEnabled } from '../services/index.js';
 import { ClientUtils, MessageUtils } from '../utils/index.js';
 
 import { Job } from './index.js';
@@ -33,6 +33,9 @@ export class ProcessScheduledMessagesJob extends Job {
 	}
 
 	public async run(): Promise<void> {
+		if (!areAutomationsEnabled()) {
+			return;
+		}
 		const due = await this.scheduledMessageService.getDue(new Date());
 
 		for (const message of due) {

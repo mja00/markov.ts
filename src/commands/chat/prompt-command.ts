@@ -162,6 +162,6 @@ export class PromptCommand implements Command {
 	// instead of being shadowed by an in-flight previous_response_id.
 	private async clearConversations(): Promise<void> {
 		const openai = await OpenAIService.getInstance();
-		openai.clearConversation();
+		await openai.clearConversation();
 	}
 }

@@ -57,6 +57,11 @@
             "log": false,
             "runOnce": false,
             "initialDelaySecs": 10
+        },
+        "enqueueProactiveMessages": {
+            "schedule": "0 0 * * * *",
+            "log": false,
+            "initialDelaySecs": 20
         }
     },
     "rateLimiting": {
@@ -85,6 +90,33 @@
     },
     "openai": {
         "apiKey": "<OPENAI_API_KEY>"
+    },
+    "automations": {
+        "enabled": true
+    },
+    "conversationContext": {
+        "expiryHours": 24,
+        "maxMessages": 40
+    },
+    "aiRouting": {
+        "enabled": false,
+        "rolloutPercent": 0,
+        "telemetry": {
+            "enabled": true
+        },
+        "tasks": {
+            "intent_detection": { "model": "gpt-5.4-nano", "maxOutputTokens": 128, "timeoutMs": 5000, "maxCostUsd": 0.002 },
+            "memory_extraction": { "model": "gpt-5.4-nano", "maxOutputTokens": 256, "timeoutMs": 8000, "maxCostUsd": 0.004 },
+            "summarization": { "model": "gpt-5.4-mini", "maxOutputTokens": 512, "timeoutMs": 15000, "maxCostUsd": 0.01 },
+            "tool_selection": { "model": "gpt-5.4-mini", "fallbackModel": "gpt-5.4", "maxOutputTokens": 512, "timeoutMs": 15000, "maxCostUsd": 0.02 },
+            "final_response": { "model": "gpt-5.4-mini", "fallbackModel": "gpt-5.4", "maxOutputTokens": 1000, "timeoutMs": 30000, "maxCostUsd": 0.05 },
+            "image_analysis": { "model": "gpt-5.4", "fallbackModel": "gpt-5.4-mini", "maxOutputTokens": 1000, "timeoutMs": 30000, "maxCostUsd": 0.08 }
+        },
+        "prices": {
+            "gpt-5.4-nano": { "inputPerMillion": 0, "outputPerMillion": 0 },
+            "gpt-5.4-mini": { "inputPerMillion": 0, "outputPerMillion": 0 },
+            "gpt-5.4": { "inputPerMillion": 0, "outputPerMillion": 0 }
+        }
     },
     "memory": {
         "enabled": true,

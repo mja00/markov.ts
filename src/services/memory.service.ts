@@ -36,6 +36,13 @@ const MEMORY_LIST_COLUMNS = {
 	userSnowflake: memories.userSnowflake,
 	guildSnowflake: memories.guildSnowflake,
 	content: memories.content,
+	kind: memories.kind,
+	confidence: memories.confidence,
+	importance: memories.importance,
+	expiresAt: memories.expiresAt,
+	lastConfirmedAt: memories.lastConfirmedAt,
+	sourceMessageSnowflake: memories.sourceMessageSnowflake,
+	supersededBy: memories.supersededBy,
 	sourceChannelSnowflake: memories.sourceChannelSnowflake,
 	createdByModel: memories.createdByModel,
 	createdAt: memories.createdAt,
@@ -65,6 +72,11 @@ export interface SaveMemoryInput {
 	guildSnowflake: string | null;
 	sourceChannelSnowflake?: string | null;
 	createdByModel?: boolean;
+	kind?: 'PREFERENCE' | 'FACT' | 'QUOTE' | 'REMINDER';
+	confidence?: number;
+	importance?: number;
+	expiresAt?: Date | null;
+	sourceMessageSnowflake?: string | null;
 }
 
 /**
@@ -170,6 +182,13 @@ export class MemoryService {
 					userSnowflake: memories.userSnowflake,
 					guildSnowflake: memories.guildSnowflake,
 					content: memories.content,
+					kind: memories.kind,
+					confidence: memories.confidence,
+					importance: memories.importance,
+					expiresAt: memories.expiresAt,
+					lastConfirmedAt: memories.lastConfirmedAt,
+					sourceMessageSnowflake: memories.sourceMessageSnowflake,
+					supersededBy: memories.supersededBy,
 					embedding: memories.embedding,
 					sourceChannelSnowflake: memories.sourceChannelSnowflake,
 					createdByModel: memories.createdByModel,
@@ -201,6 +220,12 @@ export class MemoryService {
 					guildSnowflake: input.guildSnowflake,
 					sourceChannelSnowflake: input.sourceChannelSnowflake ?? null,
 					createdByModel: input.createdByModel ?? true,
+					kind: input.kind ?? (input.scope === 'QUOTE' ? 'QUOTE' : 'FACT'),
+					confidence: String(Math.min(1, Math.max(0, input.confidence ?? 0.75))),
+					importance: Math.min(100, Math.max(0, input.importance ?? 50)),
+					expiresAt: input.expiresAt ?? null,
+					lastConfirmedAt: input.createdByModel === false ? new Date() : null,
+					sourceMessageSnowflake: input.sourceMessageSnowflake ?? null,
 					embedding,
 				})
 				.returning();
@@ -272,6 +297,8 @@ export class MemoryService {
 			}
 
 			const similarity = sql<number>`1 - (${cosineDistance(memories.embedding, queryEmbedding)})`;
+			const exactBoost = sql<number>`case when lower(${memories.content}) like ${`%${queryText.toLowerCase()}%`} then 0.25 else 0 end`;
+			const rank = sql<number>`${similarity} + (${memories.importance} / 500.0) + ${exactBoost}`;
 
 			const results = await db
 				.select({
@@ -280,6 +307,13 @@ export class MemoryService {
 					userSnowflake: memories.userSnowflake,
 					guildSnowflake: memories.guildSnowflake,
 					content: memories.content,
+					kind: memories.kind,
+					confidence: memories.confidence,
+					importance: memories.importance,
+					expiresAt: memories.expiresAt,
+					lastConfirmedAt: memories.lastConfirmedAt,
+					sourceMessageSnowflake: memories.sourceMessageSnowflake,
+					supersededBy: memories.supersededBy,
 					sourceChannelSnowflake: memories.sourceChannelSnowflake,
 					createdByModel: memories.createdByModel,
 					createdAt: memories.createdAt,
@@ -287,8 +321,13 @@ export class MemoryService {
 					similarity,
 				})
 				.from(memories)
-				.where(and(buildMemoryScopeFilter(userSnowflake, guildSnowflake), gt(similarity, similarityThreshold)))
-				.orderBy(desc(similarity))
+				.where(and(
+					buildMemoryScopeFilter(userSnowflake, guildSnowflake),
+					gt(similarity, similarityThreshold),
+					isNull(memories.supersededBy),
+					or(isNull(memories.expiresAt), gt(memories.expiresAt, new Date())),
+				))
+				.orderBy(desc(rank), desc(memories.updatedAt))
 				.limit(limit);
 
 			Logger.debug(
@@ -300,6 +339,51 @@ export class MemoryService {
 			Logger.error('[MemoryService] Failed to recall memories:', error);
 			throw new Error(`Failed to recall memories: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });
 		}
+	}
+
+	public async editForUser(id: string, userSnowflake: string, guildSnowflake: string | null, content: string): Promise<boolean> {
+		const embedding = await this.embeddingService.createEmbedding(content);
+		if (!embedding) { return false; }
+		const updated = await getDb().update(memories).set({
+			content, embedding, lastConfirmedAt: new Date(), confidence: '1.000', updatedAt: new Date(),
+		})
+			.where(and(
+				eq(memories.id, id),
+				eq(memories.userSnowflake, userSnowflake),
+				guildSnowflake === null ? isNull(memories.guildSnowflake) : eq(memories.guildSnowflake, guildSnowflake),
+			))
+			.returning();
+		return updated.length > 0;
+	}
+
+	public async correctForUser(id: string, userSnowflake: string, guildSnowflake: string | null, content: string): Promise<boolean> {
+		const existing = await getDb().select().from(memories)
+			.where(and(
+				eq(memories.id, id),
+				eq(memories.userSnowflake, userSnowflake),
+				guildSnowflake === null ? isNull(memories.guildSnowflake) : eq(memories.guildSnowflake, guildSnowflake),
+			))
+			.limit(1);
+		if (!existing[0]) { return false; }
+		const embedding = await this.embeddingService.createEmbedding(content);
+		if (!embedding) { return false; }
+		const created = await getDb().insert(memories).values({
+			scope: existing[0].scope,
+			content,
+			userSnowflake,
+			guildSnowflake: existing[0].guildSnowflake,
+			kind: existing[0].kind,
+			confidence: '1.000',
+			importance: existing[0].importance,
+			createdByModel: false,
+			lastConfirmedAt: new Date(),
+			embedding,
+		})
+			.returning();
+		if (!created[0]) { return false; }
+		await getDb().update(memories).set({ supersededBy: created[0].id, updatedAt: new Date() })
+			.where(eq(memories.id, id));
+		return true;
 	}
 
 	/**
@@ -386,13 +470,17 @@ export class MemoryService {
 	 * @param userSnowflake - The Discord user ID that must own the memory
 	 * @returns true if a memory was deleted
 	 */
-	public async forgetByIdForUser(id: string, userSnowflake: string): Promise<boolean> {
+	public async forgetByIdForUser(id: string, userSnowflake: string, guildSnowflake: string | null): Promise<boolean> {
 		const db = getDb();
 
 		try {
 			const result = await db
 				.delete(memories)
-				.where(and(eq(memories.id, id), eq(memories.userSnowflake, userSnowflake)))
+				.where(and(
+					eq(memories.id, id),
+					eq(memories.userSnowflake, userSnowflake),
+					guildSnowflake === null ? isNull(memories.guildSnowflake) : eq(memories.guildSnowflake, guildSnowflake),
+				))
 				.returning();
 			return result.length > 0;
 		} catch (error) {
@@ -407,13 +495,16 @@ export class MemoryService {
 	 * @param userSnowflake - The Discord user ID
 	 * @returns The number of memories deleted
 	 */
-	public async forgetAllForUser(userSnowflake: string): Promise<number> {
+	public async forgetAllForUser(userSnowflake: string, guildSnowflake: string | null): Promise<number> {
 		const db = getDb();
 
 		try {
 			const result = await db
 				.delete(memories)
-				.where(eq(memories.userSnowflake, userSnowflake))
+				.where(and(
+					eq(memories.userSnowflake, userSnowflake),
+					guildSnowflake === null ? isNull(memories.guildSnowflake) : eq(memories.guildSnowflake, guildSnowflake),
+				))
 				.returning();
 			return result.length;
 		} catch (error) {

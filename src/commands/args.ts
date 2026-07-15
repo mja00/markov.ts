@@ -106,6 +106,8 @@ export class Args {
 			{ name: 'List', value: MemoryOption.LIST },
 			{ name: 'Forget', value: MemoryOption.FORGET },
 			{ name: 'Forget All', value: MemoryOption.FORGET_ALL },
+			{ name: 'Edit', value: MemoryOption.EDIT },
+			{ name: 'Correct', value: MemoryOption.CORRECT },
 		],
 	};
 	public static readonly MEMORIES_SCOPE: APIApplicationCommandBasicOption = {
@@ -127,6 +129,15 @@ export class Args {
 		description_localizations: Lang.getRefLocalizationMap('argDescs.memoriesId'),
 		type: ApplicationCommandOptionType.String,
 		required: false,
+	};
+	public static readonly MEMORIES_CONTENT: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.memoriesContent', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.memoriesContent'),
+		description: Lang.getRef('argDescs.memoriesContent', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.memoriesContent'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		max_length: 1000,
 	};
 	public static readonly PROMPT_ACTION: APIApplicationCommandBasicOption = {
 		name: Lang.getRef('arguments.promptAction', Language.Default),

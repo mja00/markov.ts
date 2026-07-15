@@ -40,6 +40,7 @@ export class MemoriesCommand implements Command {
 			) as MemoryOption;
 			const scope = intr.options.getString(Lang.getRef('arguments.memoriesScope', Language.Default)) ?? 'mine';
 			const id = intr.options.getString(Lang.getRef('arguments.memoriesId', Language.Default));
+			const content = intr.options.getString(Lang.getRef('arguments.memoriesContent', Language.Default));
 
 			const userSnowflake = intr.user.id;
 			const guildSnowflake = intr.guildId ?? null;
@@ -100,7 +101,7 @@ export class MemoriesCommand implements Command {
 					const ok =
 						scope === 'server'
 							? await this.memoryService.forgetByIdForGuild(id, guildSnowflake as string)
-							: await this.memoryService.forgetByIdForUser(id, userSnowflake);
+							: await this.memoryService.forgetByIdForUser(id, userSnowflake, guildSnowflake);
 
 					await InteractionUtils.send(
 						intr,
@@ -113,13 +114,29 @@ export class MemoriesCommand implements Command {
 					const count =
 						scope === 'server'
 							? await this.memoryService.forgetAllForGuild(guildSnowflake as string)
-							: await this.memoryService.forgetAllForUser(userSnowflake);
+							: await this.memoryService.forgetAllForUser(userSnowflake, guildSnowflake);
 					const target = scope === 'server' ? 'server ' : '';
 					await InteractionUtils.send(
 						intr,
 						`Forgot ${count} ${target}${count === 1 ? 'memory' : 'memories'}.`,
 						true,
 					);
+					return;
+				}
+				case MemoryOption.EDIT:
+				case MemoryOption.CORRECT: {
+					if (scope === 'server') {
+						await InteractionUtils.send(intr, 'Edit and correct currently apply only to your private memories.', true);
+						return;
+					}
+					if (!id || !content) {
+						await InteractionUtils.send(intr, 'Provide both the memory `id` and replacement `content`.', true);
+						return;
+					}
+					const ok = action === MemoryOption.EDIT
+						? await this.memoryService.editForUser(id, userSnowflake, guildSnowflake, content)
+						: await this.memoryService.correctForUser(id, userSnowflake, guildSnowflake, content);
+					await InteractionUtils.send(intr, ok ? 'Memory updated.' : 'No editable memory with that ID was found.', true);
 					return;
 				}
 				default: {
