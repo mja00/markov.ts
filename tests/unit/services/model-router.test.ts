@@ -50,6 +50,20 @@ describe('ModelRouter', () => {
 		expect(router.route('final_response', 'baseline').maxOutputTokens).toBe(500);
 	});
 
+	it('applies per-task reasoning only when routing is active', () => {
+		const enabled = new ModelRouter({
+			enabled: true,
+			tasks: { final_response: { model: 'candidate', reasoningEffort: 'high' } },
+		});
+		const disabled = new ModelRouter({
+			enabled: false,
+			tasks: { final_response: { model: 'candidate', reasoningEffort: 'high' } },
+		});
+
+		expect(enabled.route('final_response', 'baseline').reasoningEffort).toBe('high');
+		expect(disabled.route('final_response', 'baseline').reasoningEffort).toBeUndefined();
+	});
+
 	it('records usage, tool calls, latency, and cost', async () => {
 		const sink = new InMemoryModelTelemetrySink();
 		const router = new ModelRouter({

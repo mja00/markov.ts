@@ -112,12 +112,12 @@
             "enabled": true
         },
         "tasks": {
-            "intent_detection": { "model": "gpt-5.6-luna", "maxOutputTokens": 128, "timeoutMs": 5000, "maxCostUsd": 0.002 },
-            "memory_extraction": { "model": "gpt-5.6-luna", "maxOutputTokens": 256, "timeoutMs": 8000, "maxCostUsd": 0.004 },
-            "summarization": { "model": "gpt-5.6-terra", "maxOutputTokens": 512, "timeoutMs": 15000, "maxCostUsd": 0.01 },
-            "tool_selection": { "model": "gpt-5.6-terra", "fallbackModel": "gpt-5.6-sol", "maxOutputTokens": 512, "timeoutMs": 15000, "maxCostUsd": 0.02 },
-            "final_response": { "model": "gpt-5.6-terra", "fallbackModel": "gpt-5.6-sol", "maxOutputTokens": 1000, "timeoutMs": 30000, "maxCostUsd": 0.05 },
-            "image_analysis": { "model": "gpt-5.6-sol", "fallbackModel": "gpt-5.6-terra", "maxOutputTokens": 1000, "timeoutMs": 30000, "maxCostUsd": 0.08 }
+            "intent_detection": { "model": "gpt-5.6-luna", "reasoningEffort": "low", "maxOutputTokens": 96, "timeoutMs": 5000, "maxCostUsd": 0.0006 },
+            "memory_extraction": { "model": "gpt-5.6-luna", "reasoningEffort": "medium", "maxOutputTokens": 192, "timeoutMs": 8000, "maxCostUsd": 0.0012 },
+            "summarization": { "model": "gpt-5.6-luna", "reasoningEffort": "high", "maxOutputTokens": 320, "timeoutMs": 15000, "maxCostUsd": 0.002 },
+            "tool_selection": { "model": "gpt-5.6-luna", "reasoningEffort": "high", "maxOutputTokens": 256, "timeoutMs": 15000, "maxCostUsd": 0.0015 },
+            "final_response": { "model": "gpt-5.6-luna", "fallbackModel": "gpt-5.6-terra", "reasoningEffort": "high", "maxOutputTokens": 700, "timeoutMs": 30000, "maxCostUsd": 0.005 },
+            "image_analysis": { "model": "gpt-5.6-luna", "fallbackModel": "gpt-5.6-terra", "reasoningEffort": "high", "maxOutputTokens": 600, "timeoutMs": 30000, "maxCostUsd": 0.005 }
         },
         "prices": {
             "gpt-5.6-luna": { "inputPerMillion": 1, "outputPerMillion": 6 },

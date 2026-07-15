@@ -11,9 +11,12 @@ export const AI_TASK_TYPES = [
 
 export type AITaskType = typeof AI_TASK_TYPES[number];
 
+export type ModelReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface ModelTaskSettings {
 	model?: string;
 	fallbackModel?: string;
+	reasoningEffort?: ModelReasoningEffort;
 	maxOutputTokens?: number;
 	timeoutMs?: number;
 	maxCostUsd?: number;
@@ -43,6 +46,7 @@ export interface ModelRoute {
 	task: AITaskType;
 	model: string;
 	fallbackModel?: string;
+	reasoningEffort?: ModelReasoningEffort;
 	maxOutputTokens?: number;
 	timeoutMs?: number;
 	maxCostUsd?: number;
@@ -122,6 +126,7 @@ export class ModelRouter {
 			task,
 			model,
 			fallbackModel: routed ? taskSettings.fallbackModel : undefined,
+			reasoningEffort: activeSettings.reasoningEffort,
 			maxOutputTokens: this.costCappedOutputTokens(model, activeSettings),
 			timeoutMs: activeSettings.timeoutMs,
 			maxCostUsd: activeSettings.maxCostUsd,

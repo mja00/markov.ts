@@ -16,3 +16,8 @@ Timeouts, output caps, rollout percentage, and per-task cost ceilings remain
 explicit product policies. They are not exposed by the Models API. Account usage
 could not be used for policy calibration because the project key is not an
 organization Admin API key and cannot access the Usage or Costs APIs.
+
+The example policy is intentionally cost-conservative: Luna handles every route,
+with high reasoning reserved for tasks where additional deliberation is useful.
+Terra is only a fallback for final responses and image analysis, while Sol stays
+in the verified price table but is not selected by the example routing policy.

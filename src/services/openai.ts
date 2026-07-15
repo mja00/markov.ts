@@ -468,9 +468,16 @@ export class OpenAIService {
 	): Promise<OpenAI.Responses.Response> {
 		const baselineModel = String(params.model);
 		return this.modelRouter.execute(task, baselineModel, routingKey, async (route) => {
+			const routedReasoning = route.reasoningEffort === undefined
+				? params.reasoning
+				: {
+					...params.reasoning,
+					effort: route.reasoningEffort,
+				};
 			const request = {
 				...params,
 				model: route.model,
+				...(routedReasoning === undefined ? {} : { reasoning: routedReasoning }),
 				...(route.maxOutputTokens === undefined ? {} : { max_output_tokens: route.maxOutputTokens }),
 			};
 			return openai.responses.create(

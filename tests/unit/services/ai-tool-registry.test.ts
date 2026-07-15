@@ -1,4 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import {
+	describe,
+	expect,
+	it,
+	vi,
+} from 'vitest';
+
+vi.mock('../../../src/services/logger.js', () => {
+	return { Logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } };
+});
 
 import { AIToolRegistry } from '../../../src/services/ai-tool-registry.js';
 
