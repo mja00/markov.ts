@@ -8,7 +8,7 @@ import {
 	ScheduledMessageService,
 	areAutomationsEnabled,
 } from '../services/index.js';
-import { ClientUtils, MessageUtils } from '../utils/index.js';
+import { ClientUtils, MessageUtils, PermissionUtils } from '../utils/index.js';
 
 import { Job } from './index.js';
 
@@ -59,6 +59,21 @@ export class ProcessScheduledMessagesJob extends Job {
 					// PENDING, so record the failure instead of leaving it as "sent".
 					await this.scheduledMessageService.markFailed(message.id);
 					continue;
+				}
+
+				// The creator authorized this destination when scheduling; re-check so
+				// sends can't outlive revoked channel access or a guild departure.
+				if (message.createdBySnowflake && !channel.isDMBased()) {
+					let member = null;
+					try {
+						member = await channel.guild.members.fetch(message.createdBySnowflake);
+					} catch {
+						member = null;
+					}
+					if (!member || !PermissionUtils.memberCanSend(channel, member)) {
+						await this.scheduledMessageService.markFailed(message.id);
+						continue;
+					}
 				}
 
 				const sent = await MessageUtils.send(channel, {

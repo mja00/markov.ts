@@ -108,8 +108,15 @@ export class ProactivePreferencesService {
 						scheduledAt: new Date(Date.now() + 60000),
 					});
 				} catch (error) {
-					await this.releaseDelivery('rare_catch_alert', subscriber.preferenceKey, input.eventKey);
-					throw error;
+					// Failures are per-subscriber (e.g. their channel's pending cap), and
+					// the one-shot eventKey means a re-throw would permanently drop the
+					// remaining subscribers' alerts - release the claim and keep going.
+					try {
+						await this.releaseDelivery('rare_catch_alert', subscriber.preferenceKey, input.eventKey);
+					} catch (releaseError) {
+						Logger.warn('[ProactivePreferencesService] Failed to release rare catch delivery claim:', releaseError);
+					}
+					Logger.warn(`[ProactivePreferencesService] Failed to schedule rare catch alert for ${subscriber.preferenceKey}:`, error);
 				}
 			}
 		} catch (error) {

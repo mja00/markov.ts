@@ -2,11 +2,33 @@ import {
 	Channel,
 	DMChannel,
 	GuildChannel,
+	GuildMember,
 	PermissionFlagsBits,
 	ThreadChannel,
 } from 'discord.js';
 
 export class PermissionUtils {
+	public static memberCanSend(channel: Channel, member: GuildMember): boolean {
+		if (channel instanceof DMChannel) {
+			return true;
+		} else if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
+			const channelPerms = channel.permissionsFor(member);
+			if (!channelPerms) {
+				return false;
+			}
+
+			// VIEW_CHANNEL - Needed to view the channel
+			// SEND_MESSAGES / SEND_MESSAGES_IN_THREADS - Needed to send messages
+			return channelPerms.has([
+				PermissionFlagsBits.ViewChannel,
+				channel instanceof ThreadChannel
+					? PermissionFlagsBits.SendMessagesInThreads
+					: PermissionFlagsBits.SendMessages,
+			]);
+		}
+		return false;
+	}
+
 	public static canSend(channel: Channel, embedLinks: boolean = false): boolean {
 		if (channel instanceof DMChannel) {
 			return true;

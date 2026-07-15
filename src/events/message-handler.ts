@@ -29,7 +29,12 @@ function prettyMs(ms: number): string {
 }
 
 export class MessageHandler implements EventHandler {
-	private readonly channelContextService = new ChannelContextService();
+	private readonly channelContextService = new ChannelContextService({
+		summarizer: async (transcript, routingKey) => {
+			const openAI = await OpenAIService.getInstance();
+			return openAI.summarizeTranscript(transcript, routingKey);
+		},
+	});
 	constructor(private triggerHandler: TriggerHandler) {}
 
 	public async delete(messageSnowflake: string): Promise<void> {

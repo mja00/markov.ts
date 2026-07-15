@@ -195,7 +195,8 @@
             "test": "test",
             "memories": "memories",
             "prompt": "prompt",
-            "reset": "reset"
+            "reset": "reset",
+            "automations": "automations"
         },
         "userCommands": {
             "viewDateJoined": "View Date Joined"
@@ -214,7 +215,14 @@
             "promptModel": "model",
             "promptEffort": "effort",
             "promptVerbosity": "verbosity",
-            "promptSummary": "summary"
+            "promptSummary": "summary",
+            "automationsAction": "action",
+            "automationsFeature": "feature",
+            "automationsTimezone": "timezone",
+            "automationsQuietStart": "quiet_start",
+            "automationsQuietEnd": "quiet_end",
+            "automationsFrequency": "frequency",
+            "automationsDestination": "destination"
         },
         "commandDescs": {
             "dev": "Developer use only.",
@@ -223,7 +231,8 @@
             "test": "Run the test command.",
             "memories": "View or forget what I remember about you.",
             "prompt": "Owner-only: view and tune my prompt settings.",
-            "reset": "Reset your private AI conversation context in this channel."
+            "reset": "Reset your private AI conversation context in this channel.",
+            "automations": "Enable, disable, preview, or configure opt-in assistant automations."
         },
         "argDescs": {
             "devCommand": "Command.",
@@ -237,7 +246,14 @@
             "promptModel": "Model to use (e.g. gpt-5.4-mini).",
             "promptEffort": "Reasoning effort (or off to omit).",
             "promptVerbosity": "Response verbosity (or off to omit).",
-            "promptSummary": "Reasoning summary mode (or off to omit)."
+            "promptSummary": "Reasoning summary mode (or off to omit).",
+            "automationsAction": "What to do.",
+            "automationsFeature": "Opt-in feature.",
+            "automationsTimezone": "IANA timezone, e.g. America/New_York.",
+            "automationsQuietStart": "Quiet hours start (HH:mm).",
+            "automationsQuietEnd": "Quiet hours end (HH:mm).",
+            "automationsFrequency": "Delivery frequency.",
+            "automationsDestination": "Destination channel."
         },
         "fields": {
             "commands": "Commands",

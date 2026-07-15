@@ -224,11 +224,13 @@ export const conversationSummaries = pgTable('conversation_summaries', {
 	summary: text('summary').notNull(),
 	throughMessageSnowflake: varchar('through_message_snowflake', { length: 255 }).notNull(),
 	messageCount: integer('message_count').notNull(),
+	expiresAt: timestamp('expires_at').notNull(),
 	createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => {
 	return {
 		channelIdx: index('conversation_summaries_channel_idx').on(table.guildSnowflake, table.channelSnowflake, table.createdAt),
 		throughMessageIdx: uniqueIndex('conversation_summaries_through_message_idx').on(table.channelSnowflake, table.throughMessageSnowflake),
+		expiresIdx: index('conversation_summaries_expires_idx').on(table.expiresAt),
 	};
 });
 

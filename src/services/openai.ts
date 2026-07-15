@@ -26,6 +26,15 @@ const openai = new OpenAI({
 	apiKey: Config.openai.apiKey,
 });
 
+const SUMMARIZATION_INSTRUCTIONS = `You summarize Discord channel transcripts into short topical digests for later context retrieval.
+Rules:
+- Produce 3-6 short bullet points (under 150 words total) covering topics discussed, questions asked, decisions, and outcomes.
+- Paraphrase only. NEVER quote messages verbatim or near-verbatim.
+- Mention participant display names only when needed for coherence.
+- OMIT entirely any sensitive content: passwords, tokens, keys, addresses, phone numbers, emails, financial or medical details.
+- Do not include links, IDs, or attachment URLs.
+- Output only the summary, no preamble.`;
+
 fal.config({
 	credentials: Config.fal.apiKey,
 });
@@ -491,6 +500,27 @@ export class OpenAIService {
 	// models (e.g. gpt-4o) reject them, so we omit those params for such models.
 	private modelSupportsReasoning(model: string): boolean {
 		return /^(o\d|gpt-5)/i.test(model);
+	}
+
+	// Summarize a public channel transcript into an abstractive digest for
+	// long-term recall. Verbatim quotes are forbidden because the stored summary
+	// outlives the raw messages' retention window and their delete-purge path.
+	public async summarizeTranscript(transcript: string, routingKey: string): Promise<string | null> {
+		const settings = await this.promptSettingsService.get();
+		const params: OpenAI.Responses.ResponseCreateParams = {
+			model: settings.model,
+			instructions: SUMMARIZATION_INSTRUCTIONS,
+			input: transcript,
+			// One-shot utility call: no response chaining, so no server-side storage.
+			store: false,
+			// Cap output even when routing is disabled and supplies no token limit.
+			max_output_tokens: 400,
+			...(this.modelSupportsReasoning(settings.model)
+				? { reasoning: { effort: 'low' as const } }
+				: {}),
+		};
+		const response = await this.createRoutedResponse('summarization', routingKey, params);
+		return response.output_text?.trim() || null;
 	}
 
 	// Clear stored conversation chains so a freshly edited persona/setting takes
