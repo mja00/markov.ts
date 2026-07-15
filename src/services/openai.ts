@@ -15,6 +15,7 @@ import { MemoryService } from './memory.service.js';
 import { PromptSettingsService } from './prompt-settings.service.js';
 import { ScheduledMessageService } from './scheduled-message.service.js';
 import { Memory } from '../db/schema.js';
+import { RecentChannelMessage, formatRecentChannelContext } from '../utils/recent-channel-context.js';
 
 const require = createRequire(import.meta.url);
 const Config = require('../../config/config.json');
@@ -524,6 +525,7 @@ export class OpenAIService {
 		userSnowflake?: string | null,
 		guildSnowflake?: string | null,
 		referencedImageUrl?: string,
+		recentMessages: RecentChannelMessage[] = [],
 	): Promise<OpenAI.Responses.Response> {
 		const conversation = await this.getOrCreateConversation(channelId);
 
@@ -544,6 +546,8 @@ export class OpenAIService {
 		const promptConfig = await this.getPromptConfig();
 
 		const originalText = `${username} is replying to ${from}'s message "${referencedMessageContent}": ${message}`;
+		const recentChannelContext = formatRecentChannelContext(recentMessages);
+		const inputText = [preamble, recentChannelContext, originalText].filter(Boolean).join('\n\n');
 
 		// If there's an image from the referenced message, include it in the input
 		const input = referencedImageUrl
@@ -553,7 +557,7 @@ export class OpenAIService {
 					content: [
 						{
 							type: 'input_text' as const,
-							text: preamble ? `${preamble}\n\n${originalText}` : originalText,
+							text: inputText,
 						},
 						{
 							type: 'input_image' as const,
@@ -563,7 +567,7 @@ export class OpenAIService {
 					],
 				},
 			]
-			: (preamble ? `${preamble}\n\n${originalText}` : originalText);
+			: inputText;
 
 		const initialResponse = await openai.responses.create({
 			input: input,
@@ -589,6 +593,7 @@ export class OpenAIService {
 		username: string,
 		userSnowflake?: string | null,
 		guildSnowflake?: string | null,
+		recentMessages: RecentChannelMessage[] = [],
 	): Promise<OpenAI.Responses.Response> {
 		const conversation = await this.getOrCreateConversation(channelId);
 		const userInput = `${username}: ${message}`;
@@ -609,7 +614,8 @@ export class OpenAIService {
 
 		const promptConfig = await this.getPromptConfig();
 
-		const input = preamble ? `${preamble}\n\n${userInput}` : userInput;
+		const recentChannelContext = formatRecentChannelContext(recentMessages);
+		const input = [preamble, recentChannelContext, userInput].filter(Boolean).join('\n\n');
 
 		const initialResponse = await openai.responses.create({
 			input: input,
@@ -648,6 +654,7 @@ export class OpenAIService {
 		username: string,
 		userSnowflake?: string | null,
 		guildSnowflake?: string | null,
+		recentMessages: RecentChannelMessage[] = [],
 	): Promise<OpenAI.Responses.Response> {
 		const conversation = await this.getOrCreateConversation(channelId);
 
@@ -668,6 +675,8 @@ export class OpenAIService {
 		const promptConfig = await this.getPromptConfig();
 
 		const originalText = `${username}: ${message}`;
+		const recentChannelContext = formatRecentChannelContext(recentMessages);
+		const inputText = [preamble, recentChannelContext, originalText].filter(Boolean).join('\n\n');
 
 		const initialResponse = await openai.responses.create({
 			input: [
@@ -676,7 +685,7 @@ export class OpenAIService {
 					content: [
 						{
 							type: 'input_text',
-							text: preamble ? `${preamble}\n\n${originalText}` : originalText,
+							text: inputText,
 						},
 						{
 							type: 'input_image',

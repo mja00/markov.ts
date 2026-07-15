@@ -10,6 +10,7 @@ import {
 
 import { Logger } from '../services/logger.js';
 import { OpenAIService } from '../services/openai.js';
+import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
 
@@ -28,6 +29,26 @@ function prettyMs(ms: number): string {
 
 export class MessageHandler implements EventHandler {
 	constructor(private triggerHandler: TriggerHandler) {}
+
+	private async getRecentChannelMessages(msg: Message): Promise<RecentChannelMessage[]> {
+		try {
+			const messages = await msg.channel.messages.fetch({
+				limit: RECENT_CHANNEL_MESSAGE_LIMIT,
+				before: msg.id,
+			});
+
+			return [...messages.values()].reverse().map((message) => {
+				return {
+					author: message.author.displayName,
+					content: message.content,
+					isMarkov: message.author.id === msg.client.user?.id,
+				};
+			});
+		} catch (error) {
+			Logger.warn('Failed to fetch recent channel messages for context:', error);
+			return [];
+		}
+	}
 
 	public async process(msg: Message): Promise<void> {
 		// Don't respond to system messages or self
@@ -62,6 +83,7 @@ export class MessageHandler implements EventHandler {
 				msg.channel.sendTyping();
 			}, 5000);
 			const openAI = await OpenAIService.getInstance();
+			const recentMessages = await this.getRecentChannelMessages(msg);
 
 			try {
 				const startTime = Date.now();
@@ -96,10 +118,11 @@ export class MessageHandler implements EventHandler {
 							msg.author.id,
 							msg.guild?.id ?? null,
 							referencedImageUrl,
+							recentMessages,
 						);
 					} else {
 						// Fallback to regular message if referenced message not found
-						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null);
+						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages);
 					}
 				} else if (msg.attachments.size > 0) {
 					// If there's attachments on the message, grab the first image and add it to the thread
@@ -111,13 +134,13 @@ export class MessageHandler implements EventHandler {
 						}
 					}
 					if (imageUrl) {
-						response = await openAI.sendMessageWithImage(channelID, message, imageUrl, userTag, msg.author.id, msg.guild?.id ?? null);
+						response = await openAI.sendMessageWithImage(channelID, message, imageUrl, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages);
 					} else {
-						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null);
+						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages);
 					}
 				} else {
 					// Regular message without attachments or replies
-					response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null);
+					response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages);
 				}
 
 				clearInterval(typingInterval);
