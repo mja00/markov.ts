@@ -187,3 +187,21 @@ export const scheduledMessages = pgTable('scheduled_messages', {
 
 export type ScheduledMessage = InferSelectModel<typeof scheduledMessages>;
 export type ScheduledMessageInsert = InferInsertModel<typeof scheduledMessages>;
+
+// Global, single-row settings for Markov's OpenAI prompt. Migrated off OpenAI's
+// hosted prompt objects so the model/persona/tuning live in our database and can
+// be tweaked live by the bot owner. Always row id=1 (enforced as a singleton in
+// PromptSettingsService); nullable tuning columns are omitted from the request
+// when null or 'off'.
+export const botSettings = pgTable('bot_settings', {
+	id: integer('id').primaryKey().default(1),
+	systemPrompt: text('system_prompt').notNull(),
+	model: varchar('model', { length: 128 }).notNull(),
+	reasoningEffort: varchar('reasoning_effort', { length: 32 }),
+	verbosity: varchar('verbosity', { length: 32 }),
+	reasoningSummary: varchar('reasoning_summary', { length: 32 }),
+	updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export type BotSettings = InferSelectModel<typeof botSettings>;
+export type BotSettingsInsert = InferInsertModel<typeof botSettings>;

@@ -16,6 +16,7 @@ import {
 	InfoCommand,
 	InventoryCommand,
 	MemoriesCommand,
+	PromptCommand,
 	ShopCommand,
 	TestCommand,
 } from './commands/chat/index.js';
@@ -85,6 +86,7 @@ async function start(): Promise<void> {
 		new BuyCommand(),
 		new InventoryCommand(),
 		new MemoriesCommand(),
+		new PromptCommand(),
 
 		// Message Context Commands
 		new ViewDateSent(),
