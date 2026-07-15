@@ -106,6 +106,8 @@ export class Args {
 			{ name: 'List', value: MemoryOption.LIST },
 			{ name: 'Forget', value: MemoryOption.FORGET },
 			{ name: 'Forget All', value: MemoryOption.FORGET_ALL },
+			{ name: 'Edit', value: MemoryOption.EDIT },
+			{ name: 'Correct', value: MemoryOption.CORRECT },
 		],
 	};
 	public static readonly MEMORIES_SCOPE: APIApplicationCommandBasicOption = {
@@ -127,6 +129,15 @@ export class Args {
 		description_localizations: Lang.getRefLocalizationMap('argDescs.memoriesId'),
 		type: ApplicationCommandOptionType.String,
 		required: false,
+	};
+	public static readonly MEMORIES_CONTENT: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.memoriesContent', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.memoriesContent'),
+		description: Lang.getRef('argDescs.memoriesContent', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.memoriesContent'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		max_length: 1000,
 	};
 	public static readonly PROMPT_ACTION: APIApplicationCommandBasicOption = {
 		name: Lang.getRef('arguments.promptAction', Language.Default),
@@ -191,5 +202,77 @@ export class Args {
 			{ name: 'Detailed', value: 'detailed' },
 			{ name: 'Off', value: 'off' },
 		],
+	};
+	public static readonly AUTOMATIONS_ACTION: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.automationsAction', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.automationsAction'),
+		description: Lang.getRef('argDescs.automationsAction', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.automationsAction'),
+		type: ApplicationCommandOptionType.String,
+		choices: [
+			{ name: 'Enable', value: 'enable' },
+			{ name: 'Disable', value: 'disable' },
+			{ name: 'Configure', value: 'configure' },
+			{ name: 'Preview', value: 'preview' },
+		],
+	};
+	public static readonly AUTOMATIONS_FEATURE: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.automationsFeature', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.automationsFeature'),
+		description: Lang.getRef('argDescs.automationsFeature', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.automationsFeature'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		choices: [
+			{ name: 'Daily fishing quests', value: 'dailyFishingQuests' },
+			{ name: 'Rare catch alerts', value: 'rareCatchAlerts' },
+			{ name: 'Weekly fishing summaries', value: 'weeklyFishingSummaries' },
+			{ name: 'Collection reminders', value: 'collectionReminders' },
+		],
+	};
+	public static readonly AUTOMATIONS_TIMEZONE: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.automationsTimezone', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.automationsTimezone'),
+		description: Lang.getRef('argDescs.automationsTimezone', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.automationsTimezone'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+	};
+	public static readonly AUTOMATIONS_QUIET_START: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.automationsQuietStart', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.automationsQuietStart'),
+		description: Lang.getRef('argDescs.automationsQuietStart', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.automationsQuietStart'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+	};
+	public static readonly AUTOMATIONS_QUIET_END: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.automationsQuietEnd', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.automationsQuietEnd'),
+		description: Lang.getRef('argDescs.automationsQuietEnd', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.automationsQuietEnd'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+	};
+	public static readonly AUTOMATIONS_FREQUENCY: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.automationsFrequency', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.automationsFrequency'),
+		description: Lang.getRef('argDescs.automationsFrequency', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.automationsFrequency'),
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		choices: [
+			{ name: 'Daily', value: 'daily' },
+			{ name: 'Weekly', value: 'weekly' },
+			{ name: 'Monthly', value: 'monthly' },
+		],
+	};
+	public static readonly AUTOMATIONS_DESTINATION: APIApplicationCommandBasicOption = {
+		name: Lang.getRef('arguments.automationsDestination', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('arguments.automationsDestination'),
+		description: Lang.getRef('argDescs.automationsDestination', Language.Default),
+		description_localizations: Lang.getRefLocalizationMap('argDescs.automationsDestination'),
+		type: ApplicationCommandOptionType.Channel,
+		required: false,
 	};
 }

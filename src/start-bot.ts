@@ -7,6 +7,7 @@ import { Options, Partials } from 'discord.js';
 
 import { Button, MemoriesButton, ShopButton } from './buttons/index.js';
 import {
+	AutomationsCommand,
 	BuyCommand,
 	DevCommand,
 	FishCommand,
@@ -17,6 +18,7 @@ import {
 	InventoryCommand,
 	MemoriesCommand,
 	PromptCommand,
+	ResetCommand,
 	ShopCommand,
 	TestCommand,
 } from './commands/chat/index.js';
@@ -39,7 +41,7 @@ import {
 	TriggerHandler,
 } from './events/index.js';
 import { CustomClient } from './extensions/index.js';
-import { Job, ProcessScheduledMessagesJob } from './jobs/index.js';
+import { EnqueueProactiveMessagesJob, Job, ProcessScheduledMessagesJob } from './jobs/index.js';
 import { Bot } from './models/bot.js';
 import { Reaction } from './reactions/index.js';
 import {
@@ -87,6 +89,8 @@ async function start(): Promise<void> {
 		new InventoryCommand(),
 		new MemoriesCommand(),
 		new PromptCommand(),
+		new ResetCommand(),
+		new AutomationsCommand(),
 
 		// Message Context Commands
 		new ViewDateSent(),
@@ -130,6 +134,7 @@ async function start(): Promise<void> {
 		// shards because each due message is claimed atomically, so it is never
 		// posted twice (at-most-once delivery).
 		new ProcessScheduledMessagesJob(client),
+		new EnqueueProactiveMessagesJob(),
 		// TODO: Add new jobs here
 	];
 

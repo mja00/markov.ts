@@ -1,13 +1,16 @@
 import { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import {
+	AnyPgColumn,
 	boolean,
 	index,
 	integer,
+	jsonb,
 	numeric,
 	pgEnum,
 	pgTable,
 	text,
 	timestamp,
+	uniqueIndex,
 	uuid,
 	varchar,
 	vector,
@@ -133,6 +136,7 @@ export type FishingAttempt = InferSelectModel<typeof fishingAttempts>;
 export type FishingAttemptInsert = InferInsertModel<typeof fishingAttempts>;
 
 export const memoryScopeEnum = pgEnum('memory_scope_enum', ['USER', 'SERVER', 'QUOTE']);
+export const memoryKindEnum = pgEnum('memory_kind_enum', ['PREFERENCE', 'FACT', 'QUOTE', 'REMINDER']);
 
 export const memories = pgTable('memories', {
 	id: uuid('id').defaultRandom().primaryKey(),
@@ -140,6 +144,13 @@ export const memories = pgTable('memories', {
 	userSnowflake: varchar('user_snowflake', { length: 255 }),
 	guildSnowflake: varchar('guild_snowflake', { length: 255 }),
 	content: text('content').notNull(),
+	kind: memoryKindEnum('kind').default('FACT').notNull(),
+	confidence: numeric('confidence', { precision: 4, scale: 3 }).default('0.750').notNull(),
+	importance: integer('importance').default(50).notNull(),
+	expiresAt: timestamp('expires_at'),
+	lastConfirmedAt: timestamp('last_confirmed_at'),
+	sourceMessageSnowflake: varchar('source_message_snowflake', { length: 255 }),
+	supersededBy: uuid('superseded_by').references((): AnyPgColumn => memories.id, { onDelete: 'cascade' }),
 	embedding: vector('embedding', { dimensions: 1536 }),
 	sourceChannelSnowflake: varchar('source_channel_snowflake', { length: 255 }),
 	createdByModel: boolean('created_by_model').default(true).notNull(),
@@ -155,6 +166,111 @@ export const memories = pgTable('memories', {
 
 export type Memory = InferSelectModel<typeof memories>;
 export type MemoryInsert = InferInsertModel<typeof memories>;
+
+export const conversationContextTypeEnum = pgEnum('conversation_context_type_enum', ['PUBLIC', 'PRIVATE']);
+
+// Response-chain state is durable and privacy partitioned. PRIVATE rows always
+// include a user snowflake; PUBLIC rows are reserved for memory-free summaries.
+export const conversationContexts = pgTable('conversation_contexts', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	contextKey: varchar('context_key', { length: 800 }).notNull(),
+	type: conversationContextTypeEnum('type').notNull(),
+	guildSnowflake: varchar('guild_snowflake', { length: 255 }),
+	channelSnowflake: varchar('channel_snowflake', { length: 255 }).notNull(),
+	userSnowflake: varchar('user_snowflake', { length: 255 }),
+	lastResponseId: varchar('last_response_id', { length: 255 }),
+	messageCount: integer('message_count').default(0).notNull(),
+	publicSummary: text('public_summary'),
+	expiresAt: timestamp('expires_at').notNull(),
+	lockToken: uuid('lock_token'),
+	lockedUntil: timestamp('locked_until'),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+	return {
+		contextKeyIdx: uniqueIndex('conversation_contexts_key_idx').on(table.contextKey),
+		expiryIdx: index('conversation_contexts_expiry_idx').on(table.expiresAt),
+		channelIdx: index('conversation_contexts_channel_idx').on(table.guildSnowflake, table.channelSnowflake),
+	};
+});
+
+export type ConversationContext = InferSelectModel<typeof conversationContexts>;
+export type ConversationContextInsert = InferInsertModel<typeof conversationContexts>;
+
+export const channelMessages = pgTable('channel_messages', {
+	messageSnowflake: varchar('message_snowflake', { length: 255 }).primaryKey(),
+	guildSnowflake: varchar('guild_snowflake', { length: 255 }).notNull(),
+	channelSnowflake: varchar('channel_snowflake', { length: 255 }).notNull(),
+	authorSnowflake: varchar('author_snowflake', { length: 255 }).notNull(),
+	authorName: varchar('author_name', { length: 255 }).notNull(),
+	content: text('content').notNull(),
+	replyTargetSnowflake: varchar('reply_target_snowflake', { length: 255 }),
+	attachments: jsonb('attachments').$type<Array<{ url: string; contentType: string | null; }>>().default([])
+		.notNull(),
+	postedAt: timestamp('posted_at').notNull(),
+	expiresAt: timestamp('expires_at').notNull(),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => {
+	return {
+		channelTimeIdx: index('channel_messages_channel_time_idx').on(table.guildSnowflake, table.channelSnowflake, table.postedAt),
+		expiresIdx: index('channel_messages_expires_idx').on(table.expiresAt),
+	};
+});
+
+export const conversationSummaries = pgTable('conversation_summaries', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	guildSnowflake: varchar('guild_snowflake', { length: 255 }).notNull(),
+	channelSnowflake: varchar('channel_snowflake', { length: 255 }).notNull(),
+	summary: text('summary').notNull(),
+	throughMessageSnowflake: varchar('through_message_snowflake', { length: 255 }).notNull(),
+	messageCount: integer('message_count').notNull(),
+	expiresAt: timestamp('expires_at').notNull(),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => {
+	return {
+		channelIdx: index('conversation_summaries_channel_idx').on(table.guildSnowflake, table.channelSnowflake, table.createdAt),
+		throughMessageIdx: uniqueIndex('conversation_summaries_through_message_idx').on(table.channelSnowflake, table.throughMessageSnowflake),
+		expiresIdx: index('conversation_summaries_expires_idx').on(table.expiresAt),
+	};
+});
+
+export const userAssistantPreferences = pgTable('user_assistant_preferences', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	preferenceKey: varchar('preference_key', { length: 600 }).notNull(),
+	userSnowflake: varchar('user_snowflake', { length: 255 }).notNull(),
+	guildSnowflake: varchar('guild_snowflake', { length: 255 }),
+	dailyFishingQuests: boolean('daily_fishing_quests').default(false).notNull(),
+	rareCatchAlerts: boolean('rare_catch_alerts').default(false).notNull(),
+	weeklyFishingSummaries: boolean('weekly_fishing_summaries').default(false).notNull(),
+	collectionReminders: boolean('collection_reminders').default(false).notNull(),
+	personalReminders: boolean('personal_reminders').default(false).notNull(),
+	timezone: varchar('timezone', { length: 100 }).default('UTC').notNull(),
+	quietHoursStart: varchar('quiet_hours_start', { length: 5 }),
+	quietHoursEnd: varchar('quiet_hours_end', { length: 5 }),
+	frequency: varchar('frequency', { length: 32 }).default('weekly').notNull(),
+	destinationChannelSnowflake: varchar('destination_channel_snowflake', { length: 255 }),
+	updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => { return { preferenceKeyIdx: uniqueIndex('user_assistant_preferences_key_idx').on(table.preferenceKey) }; });
+
+export const guildAssistantPreferences = pgTable('guild_assistant_preferences', {
+	guildSnowflake: varchar('guild_snowflake', { length: 255 }).primaryKey(),
+	rareCatchAlerts: boolean('rare_catch_alerts').default(false).notNull(),
+	dailyFishingQuests: boolean('daily_fishing_quests').default(false).notNull(),
+	weeklyFishingSummaries: boolean('weekly_fishing_summaries').default(false).notNull(),
+	timezone: varchar('timezone', { length: 100 }).default('UTC').notNull(),
+	quietHoursStart: varchar('quiet_hours_start', { length: 5 }),
+	quietHoursEnd: varchar('quiet_hours_end', { length: 5 }),
+	destinationChannelSnowflake: varchar('destination_channel_snowflake', { length: 255 }),
+	updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const automationDeliveries = pgTable('automation_deliveries', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	dedupeKey: varchar('dedupe_key', { length: 800 }).notNull(),
+	feature: varchar('feature', { length: 100 }).notNull(),
+	targetSnowflake: varchar('target_snowflake', { length: 255 }).notNull(),
+	deliveredAt: timestamp('delivered_at').defaultNow().notNull(),
+}, (table) => { return { dedupeIdx: uniqueIndex('automation_deliveries_dedupe_idx').on(table.dedupeKey) }; });
 
 export const scheduledMessageStatusEnum = pgEnum('scheduled_message_status_enum', [
 	'PENDING',

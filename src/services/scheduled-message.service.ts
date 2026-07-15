@@ -6,6 +6,7 @@ import {
 } from 'drizzle-orm';
 import { DateTime } from 'luxon';
 
+import { areAutomationsEnabled } from './automation-settings.js';
 import { getDb } from './database.service.js';
 import { Logger } from './logger.js';
 import { ScheduledMessage, scheduledMessages } from '../db/schema.js';
@@ -42,6 +43,9 @@ export class ScheduledMessageService {
 	 * @returns The stored PENDING row
 	 */
 	public async schedule(input: ScheduleMessageInput): Promise<ScheduledMessage> {
+		if (!areAutomationsEnabled()) {
+			throw new Error('Automations are globally disabled.');
+		}
 		const db = getDb();
 
 		const content = input.content?.trim();

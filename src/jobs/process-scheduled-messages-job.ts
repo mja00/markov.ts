@@ -2,8 +2,13 @@ import { createRequire } from 'node:module';
 
 import { Client } from 'discord.js';
 
-import { Logger, ScheduledMessageService } from '../services/index.js';
-import { ClientUtils, MessageUtils } from '../utils/index.js';
+import {
+	ChannelContextService,
+	Logger,
+	ScheduledMessageService,
+	areAutomationsEnabled,
+} from '../services/index.js';
+import { ClientUtils, MessageUtils, PermissionUtils } from '../utils/index.js';
 
 import { Job } from './index.js';
 
@@ -27,12 +32,17 @@ export class ProcessScheduledMessagesJob extends Job {
 	public initialDelaySecs: number = Config.jobs.processScheduledMessages.initialDelaySecs;
 
 	private readonly scheduledMessageService = new ScheduledMessageService();
+	private readonly channelContextService = new ChannelContextService();
 
 	constructor(private client: Client) {
 		super();
 	}
 
 	public async run(): Promise<void> {
+		await this.channelContextService.deleteExpired();
+		if (!areAutomationsEnabled()) {
+			return;
+		}
 		const due = await this.scheduledMessageService.getDue(new Date());
 
 		for (const message of due) {
@@ -49,6 +59,21 @@ export class ProcessScheduledMessagesJob extends Job {
 					// PENDING, so record the failure instead of leaving it as "sent".
 					await this.scheduledMessageService.markFailed(message.id);
 					continue;
+				}
+
+				// The creator authorized this destination when scheduling; re-check so
+				// sends can't outlive revoked channel access or a guild departure.
+				if (message.createdBySnowflake && !channel.isDMBased()) {
+					let member = null;
+					try {
+						member = await channel.guild.members.fetch(message.createdBySnowflake);
+					} catch {
+						member = null;
+					}
+					if (!member || !PermissionUtils.memberCanSend(channel, member)) {
+						await this.scheduledMessageService.markFailed(message.id);
+						continue;
+					}
 				}
 
 				const sent = await MessageUtils.send(channel, {

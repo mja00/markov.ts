@@ -9,9 +9,12 @@ import fetch from 'node-fetch';
 import OpenAI from 'openai';
 
 
+import { createDomainToolRegistry } from './ai-tool-registry.js';
+import { ConversationContextService, PrivateContextIdentity } from './conversation-context.service.js';
 import { ImageUpload } from './image-upload.js';
 import { Logger } from './logger.js';
 import { MemoryService } from './memory.service.js';
+import { AITaskType, ModelRouter, ModelRoutingConfig } from './model-router.js';
 import { PromptSettingsService } from './prompt-settings.service.js';
 import { ScheduledMessageService } from './scheduled-message.service.js';
 import { Memory } from '../db/schema.js';
@@ -22,6 +25,15 @@ const Config = require('../../config/config.json');
 const openai = new OpenAI({
 	apiKey: Config.openai.apiKey,
 });
+
+const SUMMARIZATION_INSTRUCTIONS = `You summarize Discord channel transcripts into short topical digests for later context retrieval.
+Rules:
+- Produce 3-6 short bullet points (under 150 words total) covering topics discussed, questions asked, decisions, and outcomes.
+- Paraphrase only. NEVER quote messages verbatim or near-verbatim.
+- Mention participant display names only when needed for coherence.
+- OMIT entirely any sensitive content: passwords, tokens, keys, addresses, phone numbers, emails, financial or medical details.
+- Do not include links, IDs, or attachment URLs.
+- Output only the summary, no preamble.`;
 
 fal.config({
 	credentials: Config.fal.apiKey,
@@ -49,8 +61,6 @@ type ConversationState = {
 	createdAt: number;
 };
 
-type DumpedConversations = ConversationState[];
-
 export type GeneratedImageInfo = {
 	filePath: string;
 	filename: string;
@@ -62,17 +72,25 @@ export type RequestContext = {
 	userSnowflake: string;
 	guildSnowflake: string | null;
 	username: string;
+	messageSnowflake?: string;
 };
 
 export class OpenAIService {
 	// We want to store some state in the service
 	private static instance: OpenAIService;
 	private constructor() {}
-	private conversations: Map<string, ConversationState> = new Map();
+	private readonly conversationContextService = new ConversationContextService({
+		expiryMs: Config.conversationContext?.expiryHours
+			? Config.conversationContext.expiryHours * 60 * 60 * 1000
+			: undefined,
+		maxMessages: Config.conversationContext?.maxMessages,
+	});
 	private imageUploadInstance: ImageUpload = ImageUpload.getInstance();
 	private readonly memoryService = new MemoryService();
+	private readonly modelRouter = new ModelRouter((Config.aiRouting ?? {}) as ModelRoutingConfig);
 	private readonly scheduledMessageService = new ScheduledMessageService();
 	private readonly promptSettingsService = PromptSettingsService.getInstance();
+	private readonly domainToolRegistry = createDomainToolRegistry();
 	// Track generated image info by response ID for later extraction
 	private imageDataByResponseId: Map<string, GeneratedImageInfo[]> = new Map();
 
@@ -83,6 +101,9 @@ export class OpenAIService {
 	}
 
 	private async callFunction(name: string, args: any, ctx: RequestContext): Promise<string> {
+		if (this.domainToolRegistry.has(name)) {
+			return this.domainToolRegistry.execute(name, args, ctx);
+		}
 		switch (name) {
 			case 'random_number_generator': {
 				const result = this.randomNumberGenerator(args);
@@ -90,6 +111,12 @@ export class OpenAIService {
 			}
 			case 'save_memory': {
 				try {
+					const sensitive = /password|token|secret|credit card|social security|medical|diagnos/i.test(args.content);
+					const safeAutomatic = !sensitive && (args.explicitly_requested === true
+						|| (args.confidence >= 0.9 && ['PREFERENCE', 'FACT'].includes(args.kind)));
+					if (!safeAutomatic) {
+						return 'Memory not saved: only explicit requests or clearly stable, low-risk facts may be stored.';
+					}
 					// SERVER-scoped claims require attribution so they aren't treated as fact.
 					const content = args.scope === 'SERVER'
 						? `${ctx.username} claimed: ${args.content}`
@@ -101,7 +128,11 @@ export class OpenAIService {
 						userSnowflake: ctx.userSnowflake,
 						guildSnowflake: ctx.guildSnowflake,
 						sourceChannelSnowflake: ctx.channelId,
+						sourceMessageSnowflake: ctx.messageSnowflake ?? null,
 						createdByModel: true,
+						kind: args.kind,
+						confidence: args.confidence,
+						importance: args.importance,
 					});
 
 					if (status === 'saved') {
@@ -257,6 +288,7 @@ export class OpenAIService {
 
 	// Tool definitions - Using built-in function format for OpenAI Responses API
 	private readonly tools: OpenAI.Responses.Tool[] = [
+		...this.domainToolRegistry.definitions(),
 		{
 			name: 'random_number_generator',
 			type: 'function',
@@ -349,10 +381,10 @@ export class OpenAIService {
 			name: 'save_memory',
 			type: 'function',
 			strict: true,
-			description: 'Durably remember a useful fact for the future. Use scope USER for a lasting fact about the person you are talking to, scope SERVER for a fact about this server/community in general, or scope QUOTE for a notable thing someone said. Save whatever memories you wish to save. If someone tells you to remember something, feel free to.',
+			description: 'Durably remember information only when explicitly requested or when it is clearly stable, low-risk, and useful. Never store secrets, credentials, financial, medical, or similarly sensitive claims.',
 			parameters: {
 				type: 'object',
-				required: ['scope', 'content'],
+				required: ['scope', 'content', 'kind', 'confidence', 'importance', 'explicitly_requested'],
 				additionalProperties: false,
 				properties: {
 					scope: {
@@ -364,6 +396,10 @@ export class OpenAIService {
 						type: 'string',
 						description: 'The fact to remember, phrased concisely.',
 					},
+					kind: { type: 'string', enum: ['PREFERENCE', 'FACT', 'QUOTE', 'REMINDER'] },
+					confidence: { type: 'number', minimum: 0, maximum: 1 },
+					importance: { type: 'number', minimum: 0, maximum: 100 },
+					explicitly_requested: { type: 'boolean', description: 'True only if the user directly asked Markov to remember this.' },
 				},
 			},
 		},
@@ -434,79 +470,90 @@ export class OpenAIService {
 		return config;
 	}
 
+	private async createRoutedResponse(
+		task: AITaskType,
+		routingKey: string,
+		params: OpenAI.Responses.ResponseCreateParams,
+	): Promise<OpenAI.Responses.Response> {
+		const baselineModel = String(params.model);
+		return this.modelRouter.execute(task, baselineModel, routingKey, async (route) => {
+			const routedReasoning = route.reasoningEffort === undefined
+				? params.reasoning
+				: {
+					...params.reasoning,
+					effort: route.reasoningEffort,
+				};
+			const request = {
+				...params,
+				model: route.model,
+				...(routedReasoning === undefined ? {} : { reasoning: routedReasoning }),
+				...(route.maxOutputTokens === undefined ? {} : { max_output_tokens: route.maxOutputTokens }),
+			};
+			return openai.responses.create(
+				request,
+				route.timeoutMs === undefined ? undefined : { timeout: route.timeoutMs },
+			) as Promise<OpenAI.Responses.Response>;
+		});
+	}
+
 	// gpt-5-family and o-series models accept reasoning/verbosity controls; older
 	// models (e.g. gpt-4o) reject them, so we omit those params for such models.
 	private modelSupportsReasoning(model: string): boolean {
 		return /^(o\d|gpt-5)/i.test(model);
 	}
 
+	// Summarize a public channel transcript into an abstractive digest for
+	// long-term recall. Verbatim quotes are forbidden because the stored summary
+	// outlives the raw messages' retention window and their delete-purge path.
+	public async summarizeTranscript(transcript: string, routingKey: string): Promise<string | null> {
+		const settings = await this.promptSettingsService.get();
+		const params: OpenAI.Responses.ResponseCreateParams = {
+			model: settings.model,
+			instructions: SUMMARIZATION_INSTRUCTIONS,
+			input: transcript,
+			// One-shot utility call: no response chaining, so no server-side storage.
+			store: false,
+			// Cap output even when routing is disabled and supplies no token limit.
+			max_output_tokens: 400,
+			...(this.modelSupportsReasoning(settings.model)
+				? { reasoning: { effort: 'low' as const } }
+				: {}),
+		};
+		const response = await this.createRoutedResponse('summarization', routingKey, params);
+		return response.output_text?.trim() || null;
+	}
+
 	// Clear stored conversation chains so a freshly edited persona/setting takes
 	// effect on the next message rather than being shadowed by an in-flight
 	// previous_response_id. Called by the owner command after a prompt change;
 	// with no argument it resets every channel.
-	public clearConversation(channelId?: string): void {
-		if (channelId) {
-			const existing = this.conversations.get(channelId);
-			if (existing) {
-				existing.lastResponseId = null;
-			}
-			return;
-		}
-		for (const conversation of this.conversations.values()) {
-			conversation.lastResponseId = null;
-		}
+	public async clearConversation(): Promise<void> {
+		await this.conversationContextService.resetAll();
 	}
 
 	public static async getInstance(): Promise<OpenAIService> {
 		if (!OpenAIService.instance) {
 			OpenAIService.instance = new OpenAIService();
-			// Load conversation states from file
-			// If the file doesn't exist, we don't need to do anything
-			if (!fs.existsSync('conversations.json')) {
-				return OpenAIService.instance;
-			}
-			try {
-				const conversations: DumpedConversations = JSON.parse(fs.readFileSync('conversations.json', 'utf8'));
-				for (const conversation of conversations) {
-					Logger.debug(`Loaded conversation for channel ${conversation.channelId}`);
-					OpenAIService.instance.conversations.set(conversation.channelId, conversation);
-				}
-			} catch (error) {
-				Logger.error('Failed to load conversations:', error);
-			}
 		}
 		return OpenAIService.instance;
 	}
 
 	// On shutdown, dump all conversations to file
 	public async onShutdown(): Promise<void> {
-		Logger.info('Dumping all conversations to file');
-		const conversations = [...this.conversations.values()];
-		if (conversations.length === 0) {
-			Logger.debug('No conversations to dump');
-			return;
-		}
-		// Dump into a json file in the root of the project
-		fs.writeFileSync('conversations.json', JSON.stringify(conversations, null, 2));
+		Logger.debug('Conversation contexts are already persisted in PostgreSQL');
 	}
 
 	public async getOrCreateConversation(channelId: string): Promise<ConversationState> {
-		// If a conversation already exists for this channel ID, return it
-		const existingConversation = this.conversations.get(channelId);
-		if (existingConversation) {
-			return existingConversation;
-		}
-
-		// Create new conversation state
-		const newConversation: ConversationState = {
+		return {
 			channelId,
 			lastResponseId: null,
 			messageCount: 0,
 			createdAt: Date.now(),
 		};
+	}
 
-		this.conversations.set(channelId, newConversation);
-		return newConversation;
+	public async resetPrivateConversation(identity: PrivateContextIdentity): Promise<void> {
+		await this.conversationContextService.resetPrivate(identity);
 	}
 
 	// No longer needed with Responses API - conversations are stateless
@@ -526,10 +573,12 @@ export class OpenAIService {
 		guildSnowflake?: string | null,
 		referencedImageUrl?: string,
 		recentMessages: RecentChannelMessage[] = [],
+		messageSnowflake?: string,
 	): Promise<OpenAI.Responses.Response> {
-		const conversation = await this.getOrCreateConversation(channelId);
-
-		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username };
+		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username, messageSnowflake };
+		if (!ctx.userSnowflake) {
+			throw new Error('A user identity is required for a private conversation context.');
+		}
 		const memoryActive = Boolean(Config.memory?.enabled && userSnowflake);
 
 		let recalled: Memory[] = [];
@@ -569,22 +618,20 @@ export class OpenAIService {
 			]
 			: inputText;
 
-		const initialResponse = await openai.responses.create({
-			input: input,
-			tools,
-			...promptConfig,
-			previous_response_id: conversation.lastResponseId,
-		}) as OpenAI.Responses.Response;
-
-		// Process any function calls and get the final response
-		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
-
-		// Update conversation state
-		conversation.lastResponseId = response.id;
-		conversation.messageCount++;
-		this.conversations.set(channelId, conversation);
-
-		return response;
+		return this.conversationContextService.withPrivateContext({
+			guildSnowflake: ctx.guildSnowflake,
+			channelSnowflake: channelId,
+			userSnowflake: ctx.userSnowflake,
+		}, async (conversation) => {
+			const initialResponse = await this.createRoutedResponse('final_response', channelId, {
+				input,
+				tools,
+				...promptConfig,
+				previous_response_id: conversation.lastResponseId,
+			});
+			const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
+			return { result: response, lastResponseId: response.id };
+		});
 	}
 
 	public async sendMessage(
@@ -594,11 +641,14 @@ export class OpenAIService {
 		userSnowflake?: string | null,
 		guildSnowflake?: string | null,
 		recentMessages: RecentChannelMessage[] = [],
+		messageSnowflake?: string,
 	): Promise<OpenAI.Responses.Response> {
-		const conversation = await this.getOrCreateConversation(channelId);
 		const userInput = `${username}: ${message}`;
 
-		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username };
+		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username, messageSnowflake };
+		if (!ctx.userSnowflake) {
+			throw new Error('A user identity is required for a private conversation context.');
+		}
 		const memoryActive = Boolean(Config.memory?.enabled && userSnowflake);
 
 		let recalled: Memory[] = [];
@@ -617,34 +667,36 @@ export class OpenAIService {
 		const recentChannelContext = formatRecentChannelContext(recentMessages);
 		const input = [preamble, recentChannelContext, userInput].filter(Boolean).join('\n\n');
 
-		const initialResponse = await openai.responses.create({
-			input: input,
-			tools,
-			...promptConfig,
-			previous_response_id: conversation.lastResponseId,
-		}) as OpenAI.Responses.Response;
+		return this.conversationContextService.withPrivateContext({
+			guildSnowflake: ctx.guildSnowflake,
+			channelSnowflake: channelId,
+			userSnowflake: ctx.userSnowflake,
+		}, async (conversation) => {
+			const initialResponse = await this.createRoutedResponse('final_response', channelId, {
+				input: input,
+				tools,
+				...promptConfig,
+				previous_response_id: conversation.lastResponseId,
+			});
 
-		// Logger.info('Initial OpenAI response from sendMessage:', JSON.stringify({
-		//     id: initialResponse.id,
-		//     output_text: initialResponse.output_text,
-		//     output: initialResponse.output,
-		// }, null, 2));
+			// Logger.info('Initial OpenAI response from sendMessage:', JSON.stringify({
+			//     id: initialResponse.id,
+			//     output_text: initialResponse.output_text,
+			//     output: initialResponse.output,
+			// }, null, 2));
 
-		// Process any function calls and get the final response
-		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
+			// Process any function calls and get the final response
+			const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
 
-		// Logger.info('Final processed response from sendMessage:', JSON.stringify({
-		//     id: response.id,
-		//     output_text: response.output_text,
-		//     output: response.output,
-		// }, null, 2));
+			// Logger.info('Final processed response from sendMessage:', JSON.stringify({
+			//     id: response.id,
+			//     output_text: response.output_text,
+			//     output: response.output,
+			// }, null, 2));
 
-		// Update conversation state
-		conversation.lastResponseId = response.id;
-		conversation.messageCount++;
-		this.conversations.set(channelId, conversation);
-
-		return response;
+			// Update conversation state
+			return { result: response, lastResponseId: response.id };
+		});
 	}
 
 	public async sendMessageWithImage(
@@ -655,10 +707,12 @@ export class OpenAIService {
 		userSnowflake?: string | null,
 		guildSnowflake?: string | null,
 		recentMessages: RecentChannelMessage[] = [],
+		messageSnowflake?: string,
 	): Promise<OpenAI.Responses.Response> {
-		const conversation = await this.getOrCreateConversation(channelId);
-
-		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username };
+		const ctx: RequestContext = { channelId, userSnowflake: userSnowflake ?? '', guildSnowflake: guildSnowflake ?? null, username, messageSnowflake };
+		if (!ctx.userSnowflake) {
+			throw new Error('A user identity is required for a private conversation context.');
+		}
 		const memoryActive = Boolean(Config.memory?.enabled && userSnowflake);
 
 		let recalled: Memory[] = [];
@@ -678,37 +732,37 @@ export class OpenAIService {
 		const recentChannelContext = formatRecentChannelContext(recentMessages);
 		const inputText = [preamble, recentChannelContext, originalText].filter(Boolean).join('\n\n');
 
-		const initialResponse = await openai.responses.create({
-			input: [
-				{
-					role: 'user',
-					content: [
-						{
-							type: 'input_text',
-							text: inputText,
-						},
-						{
-							type: 'input_image',
-							image_url: imageUrl,
-							detail: 'auto',
-						},
-					],
-				},
-			],
-			tools,
-			...promptConfig,
-			previous_response_id: conversation.lastResponseId,
-		}) as OpenAI.Responses.Response;
+		return this.conversationContextService.withPrivateContext({
+			guildSnowflake: ctx.guildSnowflake,
+			channelSnowflake: channelId,
+			userSnowflake: ctx.userSnowflake,
+		}, async (conversation) => {
+			const initialResponse = await this.createRoutedResponse('image_analysis', channelId, {
+				input: [
+					{
+						role: 'user',
+						content: [
+							{
+								type: 'input_text',
+								text: inputText,
+							},
+							{
+								type: 'input_image',
+								image_url: imageUrl,
+								detail: 'auto',
+							},
+						],
+					},
+				],
+				tools,
+				...promptConfig,
+				previous_response_id: conversation.lastResponseId,
+			});
 
-		// Process any function calls and get the final response
-		const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
-
-		// Update conversation state
-		conversation.lastResponseId = response.id;
-		conversation.messageCount++;
-		this.conversations.set(channelId, conversation);
-
-		return response;
+			// Process any function calls and get the final response
+			const response = await this.processResponseWithFunctionCalls(initialResponse, promptConfig, ctx);
+			return { result: response, lastResponseId: response.id };
+		});
 	}
 
 	// Get response content from Responses API, handling function calls and image generation
@@ -821,7 +875,6 @@ export class OpenAIService {
 		let hasToolCalls = false;
 		const inputMessages: any[] = []; // Don't copy output items - only include function call outputs and new messages
 		const generatedImages: GeneratedImageInfo[] = [];
-		const conversation = await this.getOrCreateConversation(ctx.channelId);
 
 		Logger.trace('handleToolCalls - Processing response with output length:', response.output?.length || 0);
 
@@ -916,22 +969,18 @@ export class OpenAIService {
 		if (hasToolCalls) {
 			try {
 				Logger.trace('Making second request with function call results');
-				const followUpResponse = await openai.responses.create({
+				const followUpResponse = await this.createRoutedResponse('final_response', ctx.channelId, {
 					input: inputMessages,
 					tools: this.tools,
 					...promptConfig,
 					previous_response_id: response.id, // Maintain conversation context
-				}) as OpenAI.Responses.Response;
+				});
 
 				// Track generated images for this follow-up response as well
 				if (generatedImages.length > 0) {
 					this.imageDataByResponseId.set(followUpResponse.id, generatedImages);
 					this.imageDataByResponseId.delete(response.id);
 				}
-
-				// Update conversation state with the follow-up response ID
-				conversation.lastResponseId = followUpResponse.id;
-				this.conversations.set(ctx.channelId, conversation);
 
 				return followUpResponse;
 			} catch (error) {
@@ -1015,11 +1064,8 @@ export class OpenAIService {
 	}
 
 	public async deleteConversation(channelId: string): Promise<void> {
-		const conversation = this.conversations.get(channelId);
-		if (conversation) {
-			this.conversations.delete(channelId);
-			Logger.info(`Deleted conversation for channel ${channelId}`);
-		}
+		await this.conversationContextService.resetChannel(channelId);
+		Logger.info(`Deleted conversation contexts for channel ${channelId}`);
 	}
 
 	// Backwards compatibility methods for migration period
@@ -1042,7 +1088,7 @@ export class OpenAIService {
 	): Promise<{ id: string; object: string; created_at: number; role: string; content: Array<{ type: string; text: { value: string; }; }>; }> {
 		Logger.warn('addThreadMessage called - using compatibility mode, consider updating to sendMessage');
 		const channelId = thread.id.replace('conv_', '');
-		const _response = await this.sendMessage(channelId, message, username);
+		const _response = await this.sendMessage(channelId, message, username, `legacy:${username}`);
 		// Return a mock message object for compatibility
 		return {
 			id: `msg_${Date.now()}`,
@@ -1061,7 +1107,7 @@ export class OpenAIService {
 	): Promise<{ id: string; object: string; created_at: number; role: string; content: Array<{ type: string; text?: { value: string; }; image_url?: { url: string; }; }>; }> {
 		Logger.warn('addThreadMessageWithImage called - using compatibility mode, consider updating to sendMessageWithImage');
 		const channelId = thread.id.replace('conv_', '');
-		const _response = await this.sendMessageWithImage(channelId, message, imageUrl, username);
+		const _response = await this.sendMessageWithImage(channelId, message, imageUrl, username, `legacy:${username}`);
 		// Return a mock message object for compatibility
 		return {
 			id: `msg_${Date.now()}`,

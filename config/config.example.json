@@ -57,6 +57,11 @@
             "log": false,
             "runOnce": false,
             "initialDelaySecs": 10
+        },
+        "enqueueProactiveMessages": {
+            "schedule": "0 0 * * * *",
+            "log": false,
+            "initialDelaySecs": 20
         }
     },
     "rateLimiting": {
@@ -85,6 +90,40 @@
     },
     "openai": {
         "apiKey": "<OPENAI_API_KEY>"
+    },
+    "automations": {
+        "enabled": true
+    },
+    "conversationContext": {
+        "expiryHours": 24,
+        "maxMessages": 40
+    },
+    "aiRouting": {
+        "enabled": false,
+        "rolloutPercent": 0,
+        "dataProvenance": {
+            "modelAvailability": "GET /v1/models using this project's API key",
+            "modelAvailabilityCheckedAt": "2026-07-15",
+            "pricing": "https://developers.openai.com/api/docs/pricing (standard tier)",
+            "pricingCheckedAt": "2026-07-15",
+            "usageBasedPolicy": false
+        },
+        "telemetry": {
+            "enabled": true
+        },
+        "tasks": {
+            "intent_detection": { "model": "gpt-5.6-luna", "reasoningEffort": "low", "maxOutputTokens": 96, "timeoutMs": 5000, "maxCostUsd": 0.0006 },
+            "memory_extraction": { "model": "gpt-5.6-luna", "reasoningEffort": "medium", "maxOutputTokens": 192, "timeoutMs": 8000, "maxCostUsd": 0.0012 },
+            "summarization": { "model": "gpt-5.6-luna", "reasoningEffort": "high", "maxOutputTokens": 320, "timeoutMs": 15000, "maxCostUsd": 0.002 },
+            "tool_selection": { "model": "gpt-5.6-luna", "reasoningEffort": "high", "maxOutputTokens": 256, "timeoutMs": 15000, "maxCostUsd": 0.0015 },
+            "final_response": { "model": "gpt-5.6-luna", "fallbackModel": "gpt-5.6-terra", "reasoningEffort": "high", "maxOutputTokens": 700, "timeoutMs": 30000, "maxCostUsd": 0.005 },
+            "image_analysis": { "model": "gpt-5.6-luna", "fallbackModel": "gpt-5.6-terra", "reasoningEffort": "high", "maxOutputTokens": 600, "timeoutMs": 30000, "maxCostUsd": 0.005 }
+        },
+        "prices": {
+            "gpt-5.6-luna": { "inputPerMillion": 1, "outputPerMillion": 6 },
+            "gpt-5.6-terra": { "inputPerMillion": 2.5, "outputPerMillion": 15 },
+            "gpt-5.6-sol": { "inputPerMillion": 5, "outputPerMillion": 30 }
+        }
     },
     "memory": {
         "enabled": true,

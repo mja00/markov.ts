@@ -68,7 +68,7 @@ export class ModalHandler implements EventHandler {
 
 			// Clear conversation chains so the new persona takes effect immediately.
 			const openai = await OpenAIService.getInstance();
-			openai.clearConversation();
+			await openai.clearConversation();
 
 			await InteractionUtils.send(
 				intr,
@@ -146,4 +146,3 @@ export class ModalHandler implements EventHandler {
 		}
 	}
 }
-
