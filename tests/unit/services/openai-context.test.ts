@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatRecentChannelContext } from '../../../src/services/openai.js';
+import { formatRecentChannelContext } from '../../../src/utils/recent-channel-context.js';
 
 describe('formatRecentChannelContext', () => {
 	it('formats messages in chronological order and labels Markov responses', () => {

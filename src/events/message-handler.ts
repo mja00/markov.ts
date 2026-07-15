@@ -9,7 +9,8 @@ import {
 
 
 import { Logger } from '../services/logger.js';
-import { OpenAIService, RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../services/openai.js';
+import { OpenAIService } from '../services/openai.js';
+import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
 
