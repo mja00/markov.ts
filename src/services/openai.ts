@@ -36,6 +36,14 @@ Rules:
 - Do not include links, IDs, or attachment URLs.
 - Output only the summary, no preamble.`;
 
+// Appended in code rather than added to DEFAULT_SYSTEM_PROMPT because the
+// persona prompt is DB-backed and owner-editable — this rule must hold even
+// after the owner rewrites the persona via /prompt.
+const SPOILER_RULE = `
+
+# Spoilers
+Text wrapped in || double pipes || is spoiler-tagged. Never reveal spoilered content in plain text — if you reference it, wrap that part of your reply in ||...||. Avoid bringing up spoilered details unprompted.`;
+
 const MARKOV_INTENT_MODEL = Config.aiRouting?.tasks?.intent_detection?.model ?? 'gpt-5-nano';
 const MARKOV_INTENT_INSTRUCTIONS = `Decide whether the Discord bot named Markov should reply to the current message.
 The metadata booleans are authoritative: reply true when botMentioned, isDirectMessage, or isReplyToMarkov is true.
@@ -459,7 +467,7 @@ export class OpenAIService {
 
 		const config: OpenAI.Responses.ResponseCreateParams = {
 			model: settings.model,
-			instructions: settings.systemPrompt,
+			instructions: settings.systemPrompt + SPOILER_RULE,
 			// Explicit: previous_response_id chaining requires server-side storage.
 			store: true,
 		};

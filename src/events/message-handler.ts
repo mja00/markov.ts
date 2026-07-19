@@ -78,7 +78,11 @@ export class MessageHandler implements EventHandler {
 		const channelName = 'name' in msg.channel ? msg.channel.name : 'DM';
 		const userTag = msg.author.displayName;
 		const message = msg.content;
-		const botMentioned = msg.mentions.has(msg.client.user?.id);
+		// Only count an explicit @mention of the bot: without these options,
+		// @everyone/@here and role pings the bot holds also return true.
+		const botMentioned = msg.client.user
+			? msg.mentions.has(msg.client.user.id, { ignoreEveryone: true, ignoreRoles: true, ignoreRepliedUser: true })
+			: false;
 		let referencedMessage: Message | null = null;
 		if (msg.reference?.type === MessageReferenceType.Default && msg.reference.messageId) {
 			try {

@@ -19,6 +19,19 @@ export class MarkovIntentService {
 	public constructor(private readonly classify: MarkovIntentModel) {}
 
 	public async shouldReply(input: MarkovIntentInput, routingKey: string): Promise<boolean> {
+		// The metadata flags are authoritative, so skip the classifier: this saves a
+		// call and stops the fail-closed catch from ignoring genuine @mentions on timeout.
+		if (input.botMentioned || input.isDirectMessage || input.isReplyToMarkov) {
+			return true;
+		}
+
+		// Without a flag, a reply requires the bot's name — the classifier only exists
+		// to disambiguate "the Markov bot" from "Markov chain", so never send it
+		// messages it could only false-positive on.
+		if (!/markov/i.test(input.content)) {
+			return false;
+		}
+
 		try {
 			const output = await this.classify(input, routingKey);
 			if (!output) {
