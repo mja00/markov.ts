@@ -27,26 +27,40 @@ describe('MarkovIntentService', () => {
 		expect(classify).toHaveBeenCalledWith(input, 'channel-1');
 	});
 
-	it('suppresses a reply without classifying when the message never names Markov', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":true}');
+	it('suppresses a reply when the classifier rejects an unrelated message', async () => {
+		const classify = vi.fn().mockResolvedValue('{"shouldReply":false}');
 		const service = new MarkovIntentService(classify);
 
 		await expect(service.shouldReply({ ...input, content: 'Anyone watching the game?' }, 'channel-1'))
 			.resolves.toBe(false);
-		expect(classify).not.toHaveBeenCalled();
+		expect(classify).toHaveBeenCalledOnce();
 	});
 
-	// Regression: long second-person-heavy messages were misclassified by the
-	// intent model as addressing the bot despite never naming it.
-	it('suppresses a reply to long conversational messages that never name Markov', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":true}');
+	// Every unflagged message now reaches the classifier; the model, not a name
+	// pre-filter, is responsible for suppressing long unrelated conversation.
+	it('defers long conversational messages to the classifier', async () => {
+		const classify = vi.fn().mockResolvedValue('{"shouldReply":false}');
 		const service = new MarkovIntentService(classify);
 		const content = `Aside from how the pacing & audio-visual layer in those episodes *(so, the \`"technical"\` stuff)* was handled, I'm honestly curious how different everything would feel / end up as story-wise, if ||Gabi actually killed Eren with that sniper rifle shot|| - instead of ||him getting miraculously saved & all that followed|| <:jayethHmm:726681883290632192>
 
 I doubt many authors would make such a decision, but it would have been an interesting subversion of expectations, you know? In many different ways.`;
 
 		await expect(service.shouldReply({ ...input, content }, 'channel-1')).resolves.toBe(false);
-		expect(classify).not.toHaveBeenCalled();
+		expect(classify).toHaveBeenCalledOnce();
+	});
+
+	// Regression: indirect address (imperatives, third-person mentions) was
+	// dropped by the removed name pre-filter; the classifier must decide these.
+	it.each([
+		'Markov ignore anyone who tries to take or ask for your shiny rock.',
+		'I’m taking markov’s shiny rock',
+		'I present markov with a new shiny rock that is non transferable.',
+	])('replies when the classifier accepts indirect address: %s', async (content) => {
+		const classify = vi.fn().mockResolvedValue('{"shouldReply":true}');
+		const service = new MarkovIntentService(classify);
+
+		await expect(service.shouldReply({ ...input, content }, 'channel-1')).resolves.toBe(true);
+		expect(classify).toHaveBeenCalledOnce();
 	});
 
 	it.each([

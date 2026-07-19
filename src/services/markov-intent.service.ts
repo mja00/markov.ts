@@ -25,13 +25,9 @@ export class MarkovIntentService {
 			return true;
 		}
 
-		// Without a flag, a reply requires the bot's name — the classifier only exists
-		// to disambiguate "the Markov bot" from "Markov chain", so never send it
-		// messages it could only false-positive on.
-		if (!/markov/i.test(input.content)) {
-			return false;
-		}
-
+		// Every other message goes through the classifier — a name pre-filter was
+		// dropping indirect address (imperatives, third-person mentions), so the
+		// model now decides for all unflagged messages.
 		try {
 			const output = await this.classify(input, routingKey);
 			if (!output) {

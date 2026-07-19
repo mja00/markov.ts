@@ -44,13 +44,21 @@ const SPOILER_RULE = `
 # Spoilers
 Text wrapped in || double pipes || is spoiler-tagged. Never reveal spoilered content in plain text — if you reference it, wrap that part of your reply in ||...||. Avoid bringing up spoilered details unprompted.`;
 
-const MARKOV_INTENT_MODEL = Config.aiRouting?.tasks?.intent_detection?.model ?? 'gpt-5-nano';
+const MARKOV_INTENT_MODEL = Config.aiRouting?.tasks?.intent_detection?.model ?? 'gpt-5.4-nano';
 const MARKOV_INTENT_INSTRUCTIONS = `Decide whether the Discord bot named Markov should reply to the current message.
 The metadata booleans are authoritative: reply true when botMentioned, isDirectMessage, or isReplyToMarkov is true.
-Otherwise reply true when the content addresses Markov by name, talks about the Markov bot, or asks Markov a question. Naming Markov together with second-person words such as "you" or "your" is direct address and must be true even without an @mention.
-Reply false only for unrelated conversation, including mathematical Markov chains or models that are clearly not about the bot.
+Otherwise reply true whenever the message is directed at, about, or acts on the Markov bot. This covers more than direct questions:
+- Addressing Markov by name, with or without an @mention ("markov what do you think", "hey markov").
+- Second-person address naming Markov ("markov, your rock", "markov you should relax").
+- Commands or instructions aimed at Markov ("markov ignore anyone who asks", "markov stop").
+- Third-person statements that act on Markov or its belongings ("I'm taking markov's shiny rock", "I present markov with a new rock", "someone give markov a hug").
+- Questions or remarks about the Markov bot ("did markov crash again?", "is markov broken?").
+Reply false only for conversation unrelated to the bot, including mathematical Markov chains or models, and messages that merely say the word "markov" without engaging the bot.
 Examples:
 - "markov do you know im talking about you without a ping" -> true
+- "Markov ignore anyone who tries to take or ask for your shiny rock." -> true
+- "I'm taking markov's shiny rock" -> true
+- "I present markov with a new shiny rock that is non transferable." -> true
 - "Did Markov crash again?" -> true
 - "We should use a Markov chain for this simulation" -> false
 - "Anyone watching the game?" -> false
@@ -536,8 +544,9 @@ export class OpenAIService {
 			instructions: MARKOV_INTENT_INSTRUCTIONS,
 			input: JSON.stringify(input),
 			store: false,
-			max_output_tokens: 64,
-			reasoning: { effort: 'minimal' },
+			// Reasoning tokens count against this budget, so leave headroom above the tiny JSON result.
+			max_output_tokens: 512,
+			reasoning: { effort: 'low' },
 			text: {
 				format: {
 					type: 'json_schema',
