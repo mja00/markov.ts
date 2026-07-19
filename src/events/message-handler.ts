@@ -10,6 +10,7 @@ import {
 
 import { ChannelContextService } from '../services/channel-context.service.js';
 import { Logger } from '../services/logger.js';
+import { MarkovIntentService } from '../services/markov-intent.service.js';
 import { OpenAIService } from '../services/openai.js';
 import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
 
@@ -29,6 +30,10 @@ function prettyMs(ms: number): string {
 }
 
 export class MessageHandler implements EventHandler {
+	private readonly markovIntentService = new MarkovIntentService(async (input, routingKey) => {
+		const openAI = await OpenAIService.getInstance();
+		return openAI.classifyMarkovIntent(input, routingKey);
+	});
 	private readonly channelContextService = new ChannelContextService({
 		summarizer: async (transcript, routingKey) => {
 			const openAI = await OpenAIService.getInstance();
@@ -74,10 +79,24 @@ export class MessageHandler implements EventHandler {
 		const userTag = msg.author.displayName;
 		const message = msg.content;
 		const botMentioned = msg.mentions.has(msg.client.user?.id);
+		let referencedMessage: Message | null = null;
+		if (msg.reference?.type === MessageReferenceType.Default && msg.reference.messageId) {
+			try {
+				referencedMessage = await msg.channel.messages.fetch(msg.reference.messageId);
+			} catch (error) {
+				Logger.warn('Failed to fetch referenced message for intent detection:', error);
+			}
+		}
+		const shouldReply = await this.markovIntentService.shouldReply({
+			content: message,
+			botMentioned,
+			isDirectMessage: !msg.guildId,
+			isReplyToMarkov: referencedMessage?.author.id === msg.client.user?.id,
+		}, channelID);
 		let persistedRecentMessages: RecentChannelMessage[] = [];
 		if (msg.guildId) {
 			try {
-				if (botMentioned) {
+				if (shouldReply) {
 					persistedRecentMessages = await this.channelContextService.recent(
 						msg.guildId,
 						channelID,
@@ -100,7 +119,7 @@ export class MessageHandler implements EventHandler {
 					}),
 					postedAt: msg.createdAt,
 				});
-				if (botMentioned) {
+				if (shouldReply) {
 					await this.channelContextService.summarize(msg.guildId, channelID);
 				}
 			} catch (error) {
@@ -116,11 +135,9 @@ export class MessageHandler implements EventHandler {
 			return await this.triggerHandler.process(msg);
 		}
 
-		// Check if the message has mentions
-		if (botMentioned) {
+		if (shouldReply) {
 			// Filter out the bot's mention and any whitespace
-			const botMention = `<@${msg.client.user?.id}>`;
-			const message = msg.content.replace(botMention, '').trim();
+			const message = msg.content.replaceAll(new RegExp(`<@!?${msg.client.user?.id}>`, 'g'), '').trim();
 			// Trigger the bot to start typing in that channel
 			await msg.channel.sendTyping();
 			const typingInterval = setInterval(() => {
@@ -137,41 +154,34 @@ export class MessageHandler implements EventHandler {
 				let response;
 
 				// Check if the message has any referenced messages
-				if (msg.reference?.type === MessageReferenceType.Default) {
-					// Acquire the referenced message
-					const referencedMessage = await msg.channel.messages.fetch(msg.reference.messageId);
-					if (referencedMessage) {
-						Logger.debug(`Referenced message found: ${referencedMessage.id}`);
-						// Extract the referenced message content
-						const referencedMessageContent = referencedMessage.content || '';
-						// Check if the referenced message has image attachments
-						let referencedImageUrl: string | undefined;
-						if (referencedMessage.attachments.size > 0) {
-							for (const attachment of referencedMessage.attachments.values()) {
-								if (attachment.contentType?.startsWith('image/')) {
-									referencedImageUrl = attachment.url;
-									Logger.debug(`Found image attachment in referenced message: ${referencedImageUrl}`);
-									break;
-								}
+				if (msg.reference?.type === MessageReferenceType.Default && referencedMessage) {
+					Logger.debug(`Referenced message found: ${referencedMessage.id}`);
+					// Extract the referenced message content
+					const referencedMessageContent = referencedMessage.content || '';
+					// Check if the referenced message has image attachments
+					let referencedImageUrl: string | undefined;
+					if (referencedMessage.attachments.size > 0) {
+						for (const attachment of referencedMessage.attachments.values()) {
+							if (attachment.contentType?.startsWith('image/')) {
+								referencedImageUrl = attachment.url;
+								Logger.debug(`Found image attachment in referenced message: ${referencedImageUrl}`);
+								break;
 							}
 						}
-						// Send message with reply context using the new API
-						response = await openAI.sendMessageWithReplyContext(
-							channelID,
-							message,
-							referencedMessage.author.displayName,
-							referencedMessageContent,
-							userTag,
-							msg.author.id,
-							msg.guild?.id ?? null,
-							referencedImageUrl,
-							recentMessages,
-							msg.id,
-						);
-					} else {
-						// Fallback to regular message if referenced message not found
-						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
 					}
+					// Send message with reply context using the new API
+					response = await openAI.sendMessageWithReplyContext(
+						channelID,
+						message,
+						referencedMessage.author.displayName,
+						referencedMessageContent,
+						userTag,
+						msg.author.id,
+						msg.guild?.id ?? null,
+						referencedImageUrl,
+						recentMessages,
+						msg.id,
+					);
 				} else if (msg.attachments.size > 0) {
 					// If there's attachments on the message, grab the first image and add it to the thread
 					let imageUrl: string;
