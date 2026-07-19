@@ -80,7 +80,7 @@ export class MessageHandler implements EventHandler {
 		const message = msg.content;
 		const botMentioned = msg.mentions.has(msg.client.user?.id);
 		let referencedMessage: Message | null = null;
-		if (msg.reference?.type === MessageReferenceType.Default) {
+		if (msg.reference?.type === MessageReferenceType.Default && msg.reference.messageId) {
 			try {
 				referencedMessage = await msg.channel.messages.fetch(msg.reference.messageId);
 			} catch (error) {
@@ -154,39 +154,34 @@ export class MessageHandler implements EventHandler {
 				let response;
 
 				// Check if the message has any referenced messages
-				if (msg.reference?.type === MessageReferenceType.Default) {
-					if (referencedMessage) {
-						Logger.debug(`Referenced message found: ${referencedMessage.id}`);
-						// Extract the referenced message content
-						const referencedMessageContent = referencedMessage.content || '';
-						// Check if the referenced message has image attachments
-						let referencedImageUrl: string | undefined;
-						if (referencedMessage.attachments.size > 0) {
-							for (const attachment of referencedMessage.attachments.values()) {
-								if (attachment.contentType?.startsWith('image/')) {
-									referencedImageUrl = attachment.url;
-									Logger.debug(`Found image attachment in referenced message: ${referencedImageUrl}`);
-									break;
-								}
+				if (msg.reference?.type === MessageReferenceType.Default && referencedMessage) {
+					Logger.debug(`Referenced message found: ${referencedMessage.id}`);
+					// Extract the referenced message content
+					const referencedMessageContent = referencedMessage.content || '';
+					// Check if the referenced message has image attachments
+					let referencedImageUrl: string | undefined;
+					if (referencedMessage.attachments.size > 0) {
+						for (const attachment of referencedMessage.attachments.values()) {
+							if (attachment.contentType?.startsWith('image/')) {
+								referencedImageUrl = attachment.url;
+								Logger.debug(`Found image attachment in referenced message: ${referencedImageUrl}`);
+								break;
 							}
 						}
-						// Send message with reply context using the new API
-						response = await openAI.sendMessageWithReplyContext(
-							channelID,
-							message,
-							referencedMessage.author.displayName,
-							referencedMessageContent,
-							userTag,
-							msg.author.id,
-							msg.guild?.id ?? null,
-							referencedImageUrl,
-							recentMessages,
-							msg.id,
-						);
-					} else {
-						// Fallback to regular message if referenced message not found
-						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
 					}
+					// Send message with reply context using the new API
+					response = await openAI.sendMessageWithReplyContext(
+						channelID,
+						message,
+						referencedMessage.author.displayName,
+						referencedMessageContent,
+						userTag,
+						msg.author.id,
+						msg.guild?.id ?? null,
+						referencedImageUrl,
+						recentMessages,
+						msg.id,
+					);
 				} else if (msg.attachments.size > 0) {
 					// If there's attachments on the message, grab the first image and add it to the thread
 					let imageUrl: string;
