@@ -83,6 +83,10 @@
             "interval": 30
         }
     },
+    "messageReactions": {
+        "enabled": true,
+        "cooldownSeconds": 30
+    },
     "logging": {
         "pretty": true,
         "rateLimit": {
@@ -114,6 +118,7 @@
         },
         "tasks": {
             "intent_detection": { "model": "gpt-5.4-nano", "reasoningEffort": "low", "maxOutputTokens": 512, "timeoutMs": 3000, "maxCostUsd": 0.0006 },
+            "reaction_selection": { "model": "gpt-5.6-luna", "fallbackModel": "gpt-5.6-terra", "reasoningEffort": "low", "maxOutputTokens": 128, "timeoutMs": 15000, "maxCostUsd": 0.001 },
             "memory_extraction": { "model": "gpt-5.6-luna", "reasoningEffort": "medium", "maxOutputTokens": 192, "timeoutMs": 8000, "maxCostUsd": 0.0012 },
             "summarization": { "model": "gpt-5.6-luna", "reasoningEffort": "high", "maxOutputTokens": 320, "timeoutMs": 15000, "maxCostUsd": 0.002 },
             "tool_selection": { "model": "gpt-5.6-luna", "reasoningEffort": "high", "maxOutputTokens": 256, "timeoutMs": 15000, "maxCostUsd": 0.0015 },
