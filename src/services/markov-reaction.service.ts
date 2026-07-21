@@ -1,5 +1,3 @@
-import { createRequire } from 'node:module';
-
 import {
 	EmojiResolvable,
 	Guild,
@@ -11,10 +9,6 @@ import { Logger } from './logger.js';
 import { MessageUtils } from '../utils/message-utils.js';
 import { PermissionUtils } from '../utils/permission-utils.js';
 import { RecentChannelMessage } from '../utils/recent-channel-context.js';
-
-
-const require = createRequire(import.meta.url);
-const Config = require('../../config/config.json');
 
 const UNICODE_REACTIONS = [
 	'👍',
@@ -82,9 +76,8 @@ export class MarkovReactionService {
 		private readonly pickReaction: MarkovReactionPicker,
 		options: MarkovReactionServiceOptions = {},
 	) {
-		this.enabled = options.enabled ?? Config.messageReactions?.enabled ?? true;
-		this.cooldownMs = options.cooldownMs
-			?? Math.max(0, Config.messageReactions?.cooldownSeconds ?? 30) * 1000;
+		this.enabled = options.enabled ?? true;
+		this.cooldownMs = options.cooldownMs ?? 30000;
 		this.now = options.now ?? Date.now;
 	}
 

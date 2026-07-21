@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 
 import {
 	AttachmentBuilder,
@@ -16,6 +17,9 @@ import { OpenAIService } from '../services/openai.js';
 import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
+
+const require = createRequire(import.meta.url);
+const Config = require('../../config/config.json');
 
 function prettyMs(ms: number): string {
 	const seconds = Math.floor(ms / 1000);
@@ -44,6 +48,9 @@ export class MessageHandler implements EventHandler {
 	private readonly markovReactionService = new MarkovReactionService(async (input, candidates, routingKey) => {
 		const openAI = await OpenAIService.getInstance();
 		return openAI.chooseMarkovReaction(input, candidates, routingKey);
+	}, {
+		enabled: Config.messageReactions?.enabled ?? true,
+		cooldownMs: Math.max(0, Config.messageReactions?.cooldownSeconds ?? 30) * 1000,
 	});
 	constructor(private triggerHandler: TriggerHandler) {}
 
