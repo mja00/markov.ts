@@ -621,7 +621,7 @@ export class OpenAIService {
 			instructions: `${String(promptConfig.instructions ?? '')}\n\n${MARKOV_REACTION_INSTRUCTIONS}`,
 			input: responseInput,
 			store: false,
-			max_output_tokens: 256,
+			max_output_tokens: 128,
 			...(this.modelSupportsReasoning(settings.model)
 				? { reasoning: { effort: 'low' as const } }
 				: {}),

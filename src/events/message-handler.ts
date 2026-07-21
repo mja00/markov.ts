@@ -332,9 +332,11 @@ export class MessageHandler implements EventHandler {
 			}
 		}
 
-		await reactionPromise;
-
-		// Process trigger
-		await this.triggerHandler.process(msg);
+		// Reaction selection must not delay trigger execution. Keep both tasks
+		// supervised while allowing them to complete independently.
+		await Promise.all([
+			reactionPromise,
+			this.triggerHandler.process(msg),
+		]);
 	}
 }
