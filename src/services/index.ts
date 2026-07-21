@@ -8,6 +8,8 @@ export { Logger } from './logger.js';
 export { MasterApiService } from './master-api-service.js';
 export { ModelRouter } from './model-router.js';
 export { OpenAIService } from './openai.js';
+export { MarkovReactionService } from './markov-reaction.service.js';
+export type { MarkovReactionSelectionInput, ReactionCandidate } from './markov-reaction.service.js';
 export { ScheduledMessageService } from './scheduled-message.service.js';
 export { ConversationContextService } from './conversation-context.service.js';
 export { ChannelContextService } from './channel-context.service.js';

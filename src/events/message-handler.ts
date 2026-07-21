@@ -11,6 +11,7 @@ import {
 import { ChannelContextService } from '../services/channel-context.service.js';
 import { Logger } from '../services/logger.js';
 import { MarkovIntentService } from '../services/markov-intent.service.js';
+import { MarkovReactionService } from '../services/markov-reaction.service.js';
 import { OpenAIService } from '../services/openai.js';
 import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
 
@@ -40,6 +41,10 @@ export class MessageHandler implements EventHandler {
 			return openAI.summarizeTranscript(transcript, routingKey);
 		},
 	});
+	private readonly markovReactionService = new MarkovReactionService(async (input, candidates, routingKey) => {
+		const openAI = await OpenAIService.getInstance();
+		return openAI.chooseMarkovReaction(input, candidates, routingKey);
+	});
 	constructor(private triggerHandler: TriggerHandler) {}
 
 	public async delete(messageSnowflake: string): Promise<void> {
@@ -64,6 +69,12 @@ export class MessageHandler implements EventHandler {
 			Logger.warn('Failed to fetch recent channel messages for context:', error);
 			return [];
 		}
+	}
+
+	private firstImageUrl(msg: Message): string | undefined {
+		return [...msg.attachments.values()]
+			.find(attachment => attachment.contentType?.startsWith('image/'))
+			?.url;
 	}
 
 	public async process(msg: Message): Promise<void> {
@@ -91,16 +102,28 @@ export class MessageHandler implements EventHandler {
 				Logger.warn('Failed to fetch referenced message for intent detection:', error);
 			}
 		}
-		const shouldReply = await this.markovIntentService.shouldReply({
+		const currentImageUrl = this.firstImageUrl(msg);
+		const referencedImageUrl = referencedMessage
+			? this.firstImageUrl(referencedMessage)
+			: undefined;
+		const reactionImageUrl = currentImageUrl ?? referencedImageUrl;
+		const { shouldReply, shouldReact } = await this.markovIntentService.decide({
 			content: message,
 			botMentioned,
 			isDirectMessage: !msg.guildId,
 			isReplyToMarkov: referencedMessage?.author.id === msg.client.user?.id,
+			referencedMessage: referencedMessage
+				? {
+					author: referencedMessage.author.displayName,
+					content: referencedMessage.content,
+				}
+				: undefined,
+			imageUrl: reactionImageUrl,
 		}, channelID);
 		let persistedRecentMessages: RecentChannelMessage[] = [];
 		if (msg.guildId) {
 			try {
-				if (shouldReply) {
+				if (shouldReply || shouldReact) {
 					persistedRecentMessages = await this.channelContextService.recent(
 						msg.guildId,
 						channelID,
@@ -139,6 +162,26 @@ export class MessageHandler implements EventHandler {
 			return await this.triggerHandler.process(msg);
 		}
 
+		const recentMessages = shouldReply || shouldReact
+			? (persistedRecentMessages.length > 0
+				? persistedRecentMessages
+				: await this.getRecentChannelMessages(msg))
+			: [];
+		const reactionPromise = shouldReact
+			? this.markovReactionService.react(msg, {
+				content: message,
+				author: userTag,
+				referencedMessage: referencedMessage
+					? {
+						author: referencedMessage.author.displayName,
+						content: referencedMessage.content,
+					}
+					: undefined,
+				imageUrl: reactionImageUrl,
+				recentMessages,
+			})
+			: Promise.resolve(false);
+
 		if (shouldReply) {
 			// Filter out the bot's mention and any whitespace
 			const message = msg.content.replaceAll(new RegExp(`<@!?${msg.client.user?.id}>`, 'g'), '').trim();
@@ -149,9 +192,6 @@ export class MessageHandler implements EventHandler {
 				msg.channel.sendTyping();
 			}, 5000);
 			const openAI = await OpenAIService.getInstance();
-			const recentMessages = persistedRecentMessages.length > 0
-				? persistedRecentMessages
-				: await this.getRecentChannelMessages(msg);
 
 			try {
 				const startTime = Date.now();
@@ -163,15 +203,8 @@ export class MessageHandler implements EventHandler {
 					// Extract the referenced message content
 					const referencedMessageContent = referencedMessage.content || '';
 					// Check if the referenced message has image attachments
-					let referencedImageUrl: string | undefined;
-					if (referencedMessage.attachments.size > 0) {
-						for (const attachment of referencedMessage.attachments.values()) {
-							if (attachment.contentType?.startsWith('image/')) {
-								referencedImageUrl = attachment.url;
-								Logger.debug(`Found image attachment in referenced message: ${referencedImageUrl}`);
-								break;
-							}
-						}
+					if (referencedImageUrl) {
+						Logger.debug(`Found image attachment in referenced message: ${referencedImageUrl}`);
 					}
 					// Send message with reply context using the new API
 					response = await openAI.sendMessageWithReplyContext(
@@ -187,16 +220,8 @@ export class MessageHandler implements EventHandler {
 						msg.id,
 					);
 				} else if (msg.attachments.size > 0) {
-					// If there's attachments on the message, grab the first image and add it to the thread
-					let imageUrl: string;
-					for (const attachment of msg.attachments.values()) {
-						if (attachment.contentType?.startsWith('image/')) {
-							imageUrl = attachment.url;
-							break;
-						}
-					}
-					if (imageUrl) {
-						response = await openAI.sendMessageWithImage(channelID, message, imageUrl, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
+					if (currentImageUrl) {
+						response = await openAI.sendMessageWithImage(channelID, message, currentImageUrl, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
 					} else {
 						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
 					}
@@ -299,6 +324,8 @@ export class MessageHandler implements EventHandler {
 				throw err;
 			}
 		}
+
+		await reactionPromise;
 
 		// Process trigger
 		await this.triggerHandler.process(msg);

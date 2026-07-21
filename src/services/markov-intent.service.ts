@@ -5,6 +5,16 @@ export type MarkovIntentInput = {
 	botMentioned: boolean;
 	isDirectMessage: boolean;
 	isReplyToMarkov: boolean;
+	referencedMessage?: {
+		author: string;
+		content: string;
+	};
+	imageUrl?: string;
+};
+
+export type MarkovIntentResult = {
+	shouldReply: boolean;
+	shouldReact: boolean;
 };
 
 export type MarkovIntentModel = (
@@ -13,39 +23,46 @@ export type MarkovIntentModel = (
 ) => Promise<string | null>;
 
 /**
- * Applies the intent model as a fail-closed gate before Markov generates a reply.
+ * Applies the intent model as a fail-closed gate before Markov replies or reacts.
  */
 export class MarkovIntentService {
 	public constructor(private readonly classify: MarkovIntentModel) {}
 
-	public async shouldReply(input: MarkovIntentInput, routingKey: string): Promise<boolean> {
-		// The metadata flags are authoritative, so skip the classifier: this saves a
-		// call and stops the fail-closed catch from ignoring genuine @mentions on timeout.
-		if (input.botMentioned || input.isDirectMessage || input.isReplyToMarkov) {
-			return true;
+	public async decide(input: MarkovIntentInput, routingKey: string): Promise<MarkovIntentResult> {
+		// Reactions are intentionally guild-only. DMs keep their authoritative reply
+		// behavior without paying for a classifier that cannot enable another action.
+		if (input.isDirectMessage) {
+			return { shouldReply: true, shouldReact: false };
 		}
 
-		// Every other message goes through the classifier — a name pre-filter was
-		// dropping indirect address (imperatives, third-person mentions), so the
-		// model now decides for all unflagged messages.
+		const authoritativeReply = input.botMentioned || input.isReplyToMarkov;
 		try {
 			const output = await this.classify(input, routingKey);
 			if (!output) {
-				return false;
+				return { shouldReply: authoritativeReply, shouldReact: false };
 			}
 
 			const parsed: unknown = JSON.parse(output);
-			return this.isIntentResult(parsed) && parsed.shouldReply;
+			if (!this.isIntentResult(parsed)) {
+				return { shouldReply: authoritativeReply, shouldReact: false };
+			}
+
+			return {
+				shouldReply: authoritativeReply || parsed.shouldReply,
+				shouldReact: parsed.shouldReact,
+			};
 		} catch (error) {
-			Logger.warn('Markov intent detection failed; skipping AI reply:', error);
-			return false;
+			Logger.warn('Markov intent detection failed; skipping optional AI actions:', error);
+			return { shouldReply: authoritativeReply, shouldReact: false };
 		}
 	}
 
-	private isIntentResult(value: unknown): value is { shouldReply: boolean; } {
+	private isIntentResult(value: unknown): value is MarkovIntentResult {
 		return typeof value === 'object'
 			&& value !== null
 			&& 'shouldReply' in value
-			&& typeof value.shouldReply === 'boolean';
+			&& typeof value.shouldReply === 'boolean'
+			&& 'shouldReact' in value
+			&& typeof value.shouldReact === 'boolean';
 	}
 }
