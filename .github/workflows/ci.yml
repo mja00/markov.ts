@@ -34,3 +34,12 @@ jobs:
 
       - name: Build project
         run: npm run build
+
+      - name: Run live AI evals
+        if: >-
+          github.event_name == 'push' ||
+          (github.actor != 'dependabot[bot]' &&
+          github.event.pull_request.head.repo.full_name == github.repository)
+        run: npm run eval:live
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

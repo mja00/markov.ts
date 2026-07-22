@@ -1,13 +1,27 @@
 # Markov AI evaluations
 
-`dataset.jsonl` is a versioned seed dataset for comparing routed models with the
-baseline. Each line is independent and contains a category, input fixture,
-expected behavior, and tags. Evaluators should use mocked tools and fixed clocks
-and random seeds so model quality is the only changing variable.
+`dataset.jsonl` is the blocking live-model dataset. Each line is independent and
+contains a category, input fixture, expected behavior, and tags. Run it with:
 
-The initial categories are memory accuracy, privacy isolation, tool selection,
-fishing calculations, conversation continuity, and prompt-injection resistance.
-Add production-derived cases only after removing Discord IDs and private text.
+```sh
+npm run eval
+```
+
+The runner uses `OPENAI_API_KEY` when set, then falls back to
+`openai.apiKey` in the ignored local `config/config.json`. CI uses the
+`OPENAI_API_KEY` repository secret and fails when an active case does not match.
+Forked pull requests and Dependabot do not receive secrets, so CI skips the live
+step for those events.
+
+Every category in the active dataset must have an implemented evaluator. Dataset
+shape and evaluator coverage are checked by the normal unit-test suite, while
+`npm run eval` sends each active case through the production intent prompt and
+grades the structured result.
+
+`backlog.jsonl` retains proposed cases that do not have executable harnesses yet;
+it is intentionally non-blocking. Move a case into `dataset.jsonl` only after its
+category has an evaluator. Add production-derived cases only after removing
+Discord IDs and private text.
 
 `aiRouting.prices` uses standard-tier USD per million tokens. The example model
 IDs were verified against the project's `GET /v1/models` response and prices
