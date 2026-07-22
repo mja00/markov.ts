@@ -44,8 +44,17 @@ describe('MarkovIntentService', () => {
 		expect(classify).toHaveBeenCalledOnce();
 	});
 
-	// Every unflagged message now reaches the classifier; the model, not a name
-	// pre-filter, is responsible for suppressing long unrelated conversation.
+	it('suppresses an optional reply that does not explicitly name Markov', async () => {
+		const classify = vi.fn().mockResolvedValue('{"shouldReply":true,"shouldReact":true}');
+		const service = new MarkovIntentService(classify);
+
+		await expect(service.decide({ ...input, content: 'Now make him respond to everything' }, 'channel-1'))
+			.resolves.toEqual({ shouldReply: false, shouldReact: true });
+		expect(classify).toHaveBeenCalledOnce();
+	});
+
+	// Every unflagged message still reaches the classifier so reactions remain
+	// available, while the reply guard suppresses unrelated conversation.
 	it('defers long conversational messages to the classifier', async () => {
 		const classify = vi.fn().mockResolvedValue('{"shouldReply":false,"shouldReact":false}');
 		const service = new MarkovIntentService(classify);

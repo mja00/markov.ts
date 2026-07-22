@@ -48,13 +48,20 @@ export class MarkovIntentService {
 			}
 
 			return {
-				shouldReply: authoritativeReply || parsed.shouldReply,
+				// Without Discord's explicit addressing metadata, require the bot's
+				// name as a final guard against the classifier joining conversations
+				// based only on ambiguous pronouns or surrounding context.
+				shouldReply: authoritativeReply || (this.namesMarkov(input.content) && parsed.shouldReply),
 				shouldReact: parsed.shouldReact,
 			};
 		} catch (error) {
 			Logger.warn('Markov intent detection failed; skipping optional AI actions:', error);
 			return { shouldReply: authoritativeReply, shouldReact: false };
 		}
+	}
+
+	private namesMarkov(content: string): boolean {
+		return /\bmarkov\b/i.test(content);
 	}
 
 	private isIntentResult(value: unknown): value is MarkovIntentResult {
