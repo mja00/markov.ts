@@ -70,7 +70,17 @@ function validateEvalCase(value: unknown, lineNumber: number): EvalCase {
 		throw invalidCase(lineNumber, 'tags must be an array of strings');
 	}
 
-	return validateIntentDetectionCase(value, lineNumber);
+	switch (value.category) {
+		case 'intent_detection': {
+			return validateIntentDetectionCase(value, lineNumber);
+		}
+		default: {
+			throw invalidCase(
+				lineNumber,
+				`category does not have a validator: ${String(value.category)}`,
+			);
+		}
+	}
 }
 
 export function parseEvalDataset(source: string): EvalCase[] {

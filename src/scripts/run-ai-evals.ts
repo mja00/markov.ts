@@ -63,7 +63,14 @@ function grade(evalCase: EvalCase, actual: IntentResult): string[] {
 	return differences;
 }
 
-async function runEval(evalCase: EvalCase, runtime: EvalRuntime): Promise<IntentResult> {
+function assertNever(value: never): never {
+	throw new Error(`Eval category does not have a runner: ${JSON.stringify(value)}`);
+}
+
+async function runIntentDetectionEval(
+	evalCase: EvalCase,
+	runtime: EvalRuntime,
+): Promise<IntentResult> {
 	const response = await runtime.client.responses.create({
 		model: runtime.model,
 		instructions: MARKOV_INTENT_INSTRUCTIONS,
@@ -87,6 +94,17 @@ async function runEval(evalCase: EvalCase, runtime: EvalRuntime): Promise<Intent
 		throw new Error('model returned an invalid intent result');
 	}
 	return parsed;
+}
+
+async function runEval(evalCase: EvalCase, runtime: EvalRuntime): Promise<IntentResult> {
+	switch (evalCase.category) {
+		case 'intent_detection': {
+			return runIntentDetectionEval(evalCase, runtime);
+		}
+		default: {
+			return assertNever(evalCase.category);
+		}
+	}
 }
 
 async function main(): Promise<void> {
