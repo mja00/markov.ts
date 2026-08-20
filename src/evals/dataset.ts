@@ -10,6 +10,7 @@ export type IntentDetectionEvalCase = {
 		botMentioned: boolean;
 		isDirectMessage: boolean;
 		isReplyToMarkov: boolean;
+		isConversationFollowUp?: boolean;
 	};
 	expected: {
 		shouldReply: boolean;
@@ -42,6 +43,12 @@ function validateIntentDetectionCase(
 		if (typeof value.input[field] !== 'boolean') {
 			throw invalidCase(lineNumber, `input.${field} must be a boolean`);
 		}
+	}
+	if (
+		value.input.isConversationFollowUp !== undefined
+		&& typeof value.input.isConversationFollowUp !== 'boolean'
+	) {
+		throw invalidCase(lineNumber, 'input.isConversationFollowUp must be a boolean when provided');
 	}
 	if (!isRecord(value.expected) || typeof value.expected.shouldReply !== 'boolean') {
 		throw invalidCase(lineNumber, 'expected.shouldReply must be a boolean');

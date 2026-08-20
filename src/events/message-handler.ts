@@ -10,6 +10,7 @@ import {
 
 
 import { ChannelContextService } from '../services/channel-context.service.js';
+import { ConversationTurnService } from '../services/conversation-turn.service.js';
 import { Logger } from '../services/logger.js';
 import { MarkovIntentService } from '../services/markov-intent.service.js';
 import { MarkovReactionService } from '../services/markov-reaction.service.js';
@@ -51,6 +52,10 @@ export class MessageHandler implements EventHandler {
 	}, {
 		enabled: Config.messageReactions?.enabled ?? true,
 		cooldownMs: Math.max(0, Config.messageReactions?.cooldownSeconds ?? 30) * 1000,
+	});
+	private readonly conversationTurnService = new ConversationTurnService({
+		enabled: Config.conversationFollowUps?.enabled ?? true,
+		windowMs: Math.max(0, Config.conversationFollowUps?.windowSeconds ?? 120) * 1000,
 	});
 	constructor(private triggerHandler: TriggerHandler) {}
 
@@ -96,6 +101,9 @@ export class MessageHandler implements EventHandler {
 		const channelName = 'name' in msg.channel ? msg.channel.name : 'DM';
 		const userTag = msg.author.displayName;
 		const message = msg.content;
+		const isConversationFollowUp = msg.guildId && !msg.author.bot && !msg.webhookId
+			? this.conversationTurnService.consume(channelID, msg.author.id)
+			: false;
 		// Only count an explicit @mention of the bot: without these options,
 		// @everyone/@here and role pings the bot holds also return true.
 		const botMentioned = msg.client.user
@@ -119,6 +127,7 @@ export class MessageHandler implements EventHandler {
 			botMentioned,
 			isDirectMessage: !msg.guildId,
 			isReplyToMarkov: referencedMessage?.author.id === msg.client.user?.id,
+			isConversationFollowUp,
 			referencedMessage: referencedMessage
 				? {
 					author: referencedMessage.author.displayName,
@@ -297,6 +306,9 @@ export class MessageHandler implements EventHandler {
 				}
 
 				if (sentReply.guildId) {
+					if (!msg.author.bot && !msg.webhookId) {
+						this.conversationTurnService.open(sentReply.channelId, msg.author.id);
+					}
 					try {
 						await this.channelContextService.record({
 							messageSnowflake: sentReply.id,

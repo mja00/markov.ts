@@ -87,6 +87,10 @@
         "enabled": true,
         "cooldownSeconds": 30
     },
+    "conversationFollowUps": {
+        "enabled": true,
+        "windowSeconds": 120
+    },
     "logging": {
         "pretty": true,
         "rateLimit": {

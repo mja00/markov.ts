@@ -43,4 +43,23 @@ describe('eval dataset', () => {
 		expect(() => parseEvalDataset(evalCase))
 			.toThrow('category must have an implemented evaluator: future_category');
 	});
+
+	it('rejects invalid conversation follow-up metadata', () => {
+		const evalCase = JSON.stringify({
+			id: 'invalid-follow-up',
+			category: 'intent_detection',
+			input: {
+				message: 'tell me more',
+				botMentioned: false,
+				isDirectMessage: false,
+				isReplyToMarkov: false,
+				isConversationFollowUp: 'yes',
+			},
+			expected: { shouldReply: true },
+			tags: [],
+		});
+
+		expect(() => parseEvalDataset(evalCase))
+			.toThrow('input.isConversationFollowUp must be a boolean when provided');
+	});
 });
