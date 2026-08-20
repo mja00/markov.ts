@@ -16,6 +16,7 @@ const input = {
 	botMentioned: false,
 	isDirectMessage: false,
 	isReplyToMarkov: false,
+	isConversationFollowUp: false,
 };
 
 describe('MarkovIntentService', () => {
@@ -51,6 +52,28 @@ describe('MarkovIntentService', () => {
 		await expect(service.decide({ ...input, content: 'Now make him respond to everything' }, 'channel-1'))
 			.resolves.toEqual({ shouldReply: false, shouldReact: true });
 		expect(classify).toHaveBeenCalledOnce();
+	});
+
+	it('allows a classified continuation during an open conversation turn', async () => {
+		const classify = vi.fn().mockResolvedValue('{"shouldReply":true,"shouldReact":false}');
+		const service = new MarkovIntentService(classify);
+
+		await expect(service.decide({
+			...input,
+			content: 'yeah, tell me more',
+			isConversationFollowUp: true,
+		}, 'channel-1')).resolves.toEqual({ shouldReply: true, shouldReact: false });
+	});
+
+	it('still lets the classifier reject an unrelated message during an open turn', async () => {
+		const classify = vi.fn().mockResolvedValue('{"shouldReply":false,"shouldReact":false}');
+		const service = new MarkovIntentService(classify);
+
+		await expect(service.decide({
+			...input,
+			content: 'Anyone watching the game?',
+			isConversationFollowUp: true,
+		}, 'channel-1')).resolves.toEqual({ shouldReply: false, shouldReact: false });
 	});
 
 	// Every unflagged message still reaches the classifier so reactions remain

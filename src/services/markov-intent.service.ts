@@ -5,6 +5,7 @@ export type MarkovIntentInput = {
 	botMentioned: boolean;
 	isDirectMessage: boolean;
 	isReplyToMarkov: boolean;
+	isConversationFollowUp: boolean;
 	referencedMessage?: {
 		author: string;
 		content: string;
@@ -48,10 +49,8 @@ export class MarkovIntentService {
 			}
 
 			return {
-				// Without Discord's explicit addressing metadata, require the bot's
-				// name as a final guard against the classifier joining conversations
-				// based only on ambiguous pronouns or surrounding context.
-				shouldReply: authoritativeReply || (this.namesMarkov(input.content) && parsed.shouldReply),
+				shouldReply: authoritativeReply
+					|| ((this.namesMarkov(input.content) || input.isConversationFollowUp) && parsed.shouldReply),
 				shouldReact: parsed.shouldReact,
 			};
 		} catch (error) {

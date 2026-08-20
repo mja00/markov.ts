@@ -79,6 +79,7 @@ async function runIntentDetectionEval(
 			botMentioned: evalCase.input.botMentioned,
 			isDirectMessage: evalCase.input.isDirectMessage,
 			isReplyToMarkov: evalCase.input.isReplyToMarkov,
+			isConversationFollowUp: evalCase.input.isConversationFollowUp ?? false,
 			hasImage: false,
 		}),
 		store: false,

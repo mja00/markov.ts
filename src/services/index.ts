@@ -12,6 +12,7 @@ export { MarkovReactionService } from './markov-reaction.service.js';
 export type { MarkovReactionSelectionInput, ReactionCandidate } from './markov-reaction.service.js';
 export { ScheduledMessageService } from './scheduled-message.service.js';
 export { ConversationContextService } from './conversation-context.service.js';
+export { ConversationTurnService } from './conversation-turn.service.js';
 export { ChannelContextService } from './channel-context.service.js';
 export { ProactivePreferencesService } from './proactive-preferences.service.js';
 export { areAutomationsEnabled } from './automation-settings.js';
