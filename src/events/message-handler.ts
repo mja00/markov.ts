@@ -101,7 +101,7 @@ export class MessageHandler implements EventHandler {
 		const channelName = 'name' in msg.channel ? msg.channel.name : 'DM';
 		const userTag = msg.author.displayName;
 		const message = msg.content;
-		const isConversationFollowUp = msg.guildId
+		const isConversationFollowUp = msg.guildId && !msg.author.bot && !msg.webhookId
 			? this.conversationTurnService.consume(channelID, msg.author.id)
 			: false;
 		// Only count an explicit @mention of the bot: without these options,
@@ -306,7 +306,9 @@ export class MessageHandler implements EventHandler {
 				}
 
 				if (sentReply.guildId) {
-					this.conversationTurnService.open(sentReply.channelId, msg.author.id);
+					if (!msg.author.bot && !msg.webhookId) {
+						this.conversationTurnService.open(sentReply.channelId, msg.author.id);
+					}
 					try {
 						await this.channelContextService.record({
 							messageSnowflake: sentReply.id,

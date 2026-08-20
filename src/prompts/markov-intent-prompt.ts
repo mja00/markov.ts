@@ -3,7 +3,7 @@ import type OpenAI from 'openai';
 export const MARKOV_INTENT_INSTRUCTIONS = `Decide conservatively whether the Discord bot named Markov should reply to and/or react to the current message.
 The metadata booleans are authoritative: reply true when botMentioned, isDirectMessage, or isReplyToMarkov is true.
 Otherwise default shouldReply to false. Set it true only when the message explicitly addresses Markov by name as its intended recipient, such as a direct question, request, command, or greeting. The speaker must be talking to Markov, not merely talking about Markov.
-When isConversationFollowUp is true, Markov just replied to this speaker and no one else has spoken since. Also set shouldReply true for a clear continuation, such as answering Markov's question, asking a follow-up, requesting elaboration, or acknowledging the reply in a way that invites an answer. Keep it false when the new message starts an unrelated topic or appears addressed to the channel.
+When isConversationFollowUp is true, Markov recently replied directly to this speaker. Also set shouldReply true for a clear continuation, such as answering Markov's question, asking a follow-up, requesting elaboration, or acknowledging the reply in a way that invites an answer. Keep it false when the new message starts an unrelated topic or appears addressed to the channel.
 Keep shouldReply false for:
 - Third-person comments, jokes, criticism, or observations about Markov or its behavior.
 - Statements about what Markov can do, what someone will change, or what Markov owns.

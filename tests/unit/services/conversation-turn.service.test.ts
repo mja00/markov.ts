@@ -12,13 +12,23 @@ describe('ConversationTurnService', () => {
 		expect(service.consume('channel-1', 'user-1')).toBe(false);
 	});
 
-	it('closes the turn when another user speaks first', () => {
+	it('does not let another user claim or close a turn', () => {
 		const service = new ConversationTurnService();
 
 		service.open('channel-1', 'user-1');
 
 		expect(service.consume('channel-1', 'user-2')).toBe(false);
-		expect(service.consume('channel-1', 'user-1')).toBe(false);
+		expect(service.consume('channel-1', 'user-1')).toBe(true);
+	});
+
+	it('keeps concurrent user turns open in the same channel', () => {
+		const service = new ConversationTurnService();
+
+		service.open('channel-1', 'user-1');
+		service.open('channel-1', 'user-2');
+
+		expect(service.consume('channel-1', 'user-1')).toBe(true);
+		expect(service.consume('channel-1', 'user-2')).toBe(true);
 	});
 
 	it('expires an unused turn', () => {

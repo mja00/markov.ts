@@ -27,26 +27,31 @@ export class ConversationTurnService {
 		}
 		this.deleteExpiredTurns();
 
-		this.openTurns.set(channelSnowflake, {
+		this.openTurns.set(this.turnKey(channelSnowflake, userSnowflake), {
 			userSnowflake,
 			expiresAt: this.now() + this.windowMs,
 		});
 	}
 
 	public consume(channelSnowflake: string, userSnowflake: string): boolean {
-		const turn = this.openTurns.get(channelSnowflake);
-		this.openTurns.delete(channelSnowflake);
+		const key = this.turnKey(channelSnowflake, userSnowflake);
+		const turn = this.openTurns.get(key);
+		this.openTurns.delete(key);
 
 		return this.enabled
 			&& turn?.userSnowflake === userSnowflake
 			&& turn.expiresAt > this.now();
 	}
 
+	private turnKey(channelSnowflake: string, userSnowflake: string): string {
+		return `${channelSnowflake}:${userSnowflake}`;
+	}
+
 	private deleteExpiredTurns(): void {
 		const now = this.now();
-		for (const [channelSnowflake, turn] of this.openTurns) {
+		for (const [turnKey, turn] of this.openTurns) {
 			if (turn.expiresAt <= now) {
-				this.openTurns.delete(channelSnowflake);
+				this.openTurns.delete(turnKey);
 			}
 		}
 	}
