@@ -306,25 +306,26 @@ export class OpenAIService {
 
 		let currentResponse = initialResponse;
 		let rounds = 0;
+		let allowedToolNames: ReadonlySet<string> | undefined;
 		while (this.responseHasToolCalls(currentResponse)) {
 			ctx.web.round = rounds;
-			const terminal = rounds >= ctx.web.maxToolRounds;
-			const followUpTools = terminal
-				? []
-				: (ctx.web.webAvailable ? [...this.baseTools, ...this.webTools] : this.baseTools);
+			if (rounds >= ctx.web.maxToolRounds) {
+				ctx.web.markFallback();
+				break;
+			}
+			// Web results are untrusted, so later rounds may only request more web data.
+			const followUpTools = ctx.web.webAvailable ? this.webTools : [];
 			const followUpResponse = await this.handleToolCalls(currentResponse, promptConfig, ctx, {
 				followUpTools,
-				terminal,
+				...(allowedToolNames ? { allowedToolNames } : {}),
 			});
 			if (!followUpResponse) {
 				ctx.web.markFallback();
 				break;
 			}
 			currentResponse = followUpResponse;
+			allowedToolNames = new Set(followUpTools.flatMap(tool => ('name' in tool ? [tool.name] : [])));
 			rounds += 1;
-			if (terminal) {
-				break;
-			}
 		}
 
 		this.webProvenanceByResponse.set(currentResponse, ctx.web.provenance());
@@ -1123,7 +1124,7 @@ export class OpenAIService {
 		response: OpenAI.Responses.Response,
 		promptConfig: OpenAI.Responses.ResponseCreateParams,
 		ctx: RequestContext,
-		options: { followUpTools?: OpenAI.Responses.Tool[]; terminal?: boolean; } = {},
+		options: { followUpTools?: OpenAI.Responses.Tool[]; allowedToolNames?: ReadonlySet<string>; } = {},
 	): Promise<OpenAI.Responses.Response | null> {
 		let hasToolCalls = false;
 		const inputMessages: any[] = []; // Don't copy output items - only include function call outputs and new messages
@@ -1153,6 +1154,16 @@ export class OpenAIService {
 							call_id: callId,
 							output: 'Error: Tool arguments were not valid JSON.',
 						});
+						continue;
+					}
+
+					if (options.allowedToolNames && !options.allowedToolNames.has(name)) {
+						inputMessages.push({
+							type: 'function_call_output',
+							call_id: callId,
+							output: 'Error: This tool is not available during web research.',
+						});
+						Logger.warn(`Blocked unavailable tool during web research: ${name}`);
 						continue;
 					}
 
@@ -1242,7 +1253,6 @@ export class OpenAIService {
 				const followUpResponse = await this.createRoutedResponse('final_response', ctx.channelId, {
 					input: inputMessages,
 					tools: options.followUpTools ?? this.baseTools,
-					...(options.terminal ? { tool_choice: 'none' as const } : {}),
 					...promptConfig,
 					previous_response_id: response.id, // Maintain conversation context
 				}, undefined, ctx.signal);
