@@ -49,8 +49,11 @@ import {
 	DatabaseService,
 	EventDataService,
 	JobService,
+	KagiService,
 	Logger,
+	ModerationService,
 	OpenAIService,
+	resolveWebConfig,
 } from './services/index.js';
 import { Trigger } from './triggers/index.js';
 
@@ -125,7 +128,18 @@ async function start(): Promise<void> {
 	const buttonHandler = new ButtonHandler(buttons, eventDataService);
 	const modalHandler = new ModalHandler(eventDataService);
 	const triggerHandler = new TriggerHandler(triggers, eventDataService);
-	const messageHandler = new MessageHandler(triggerHandler);
+	const webConfig = resolveWebConfig(Config);
+	const moderationService = webConfig.moderation.enabled
+		? new ModerationService({ config: webConfig.moderation })
+		: undefined;
+	const kagiService = webConfig.kagi && moderationService
+		? new KagiService({ config: webConfig.kagi })
+		: undefined;
+	const openAI = await OpenAIService.getInstance({ kagiService });
+	const messageHandler = new MessageHandler(triggerHandler, {
+		openAI,
+		moderationService,
+	});
 	const reactionHandler = new ReactionHandler(reactions, eventDataService);
 
 	// Jobs
@@ -172,9 +186,6 @@ async function start(): Promise<void> {
 		});
 		process.exit();
 	}
-
-	// Start an OpenAI service
-	await OpenAIService.getInstance();
 
 	// Connect to database
 	try {

@@ -14,8 +14,10 @@ import { ConversationTurnService } from '../services/conversation-turn.service.j
 import { Logger } from '../services/logger.js';
 import { MarkovIntentService } from '../services/markov-intent.service.js';
 import { MarkovReactionService } from '../services/markov-reaction.service.js';
+import { ModerationService } from '../services/moderation.service.js';
 import { OpenAIService } from '../services/openai.js';
 import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
+import { assembleReply } from '../utils/web-source-utils.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
 
@@ -35,19 +37,28 @@ function prettyMs(ms: number): string {
 	return `${seconds}s`;
 }
 
+const SAFE_WEB_NOTICE = 'I couldn\'t safely deliver that web-assisted response. Please try again later.';
+
+export type MessageHandlerOptions = {
+	openAI?: OpenAIService;
+	moderationService?: ModerationService;
+};
+
 export class MessageHandler implements EventHandler {
+	private readonly configuredOpenAI?: OpenAIService;
+	private readonly moderationService?: ModerationService;
 	private readonly markovIntentService = new MarkovIntentService(async (input, routingKey) => {
-		const openAI = await OpenAIService.getInstance();
+		const openAI = this.configuredOpenAI ?? await OpenAIService.getInstance();
 		return openAI.classifyMarkovIntent(input, routingKey);
 	});
 	private readonly channelContextService = new ChannelContextService({
 		summarizer: async (transcript, routingKey) => {
-			const openAI = await OpenAIService.getInstance();
+			const openAI = this.configuredOpenAI ?? await OpenAIService.getInstance();
 			return openAI.summarizeTranscript(transcript, routingKey);
 		},
 	});
 	private readonly markovReactionService = new MarkovReactionService(async (input, candidates, routingKey) => {
-		const openAI = await OpenAIService.getInstance();
+		const openAI = this.configuredOpenAI ?? await OpenAIService.getInstance();
 		return openAI.chooseMarkovReaction(input, candidates, routingKey);
 	}, {
 		enabled: Config.messageReactions?.enabled ?? true,
@@ -57,7 +68,10 @@ export class MessageHandler implements EventHandler {
 		enabled: Config.conversationFollowUps?.enabled ?? true,
 		windowMs: Math.max(0, Config.conversationFollowUps?.windowSeconds ?? 120) * 1000,
 	});
-	constructor(private triggerHandler: TriggerHandler) {}
+	constructor(private triggerHandler: TriggerHandler, options: MessageHandlerOptions = {}) {
+		this.configuredOpenAI = options.openAI;
+		this.moderationService = options.moderationService;
+	}
 
 	public async delete(messageSnowflake: string): Promise<void> {
 		await this.channelContextService.deleteMessage(messageSnowflake);
@@ -207,7 +221,9 @@ export class MessageHandler implements EventHandler {
 				// @ts-expect-error - the channel is already validated to be able to be typed in
 				msg.channel.sendTyping();
 			}, 5000);
-			const openAI = await OpenAIService.getInstance();
+			const openAI = this.configuredOpenAI ?? await OpenAIService.getInstance();
+			const requestController = new AbortController();
+			const requestTimeout = setTimeout(() => requestController.abort(), 60000);
 
 			try {
 				const startTime = Date.now();
@@ -234,16 +250,17 @@ export class MessageHandler implements EventHandler {
 						referencedImageUrl,
 						recentMessages,
 						msg.id,
+						{ signal: requestController.signal },
 					);
 				} else if (msg.attachments.size > 0) {
 					if (currentImageUrl) {
-						response = await openAI.sendMessageWithImage(channelID, message, currentImageUrl, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
+						response = await openAI.sendMessageWithImage(channelID, message, currentImageUrl, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id, { signal: requestController.signal });
 					} else {
-						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
+						response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id, { signal: requestController.signal });
 					}
 				} else {
 					// Regular message without attachments or replies
-					response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id);
+					response = await openAI.sendMessage(channelID, message, userTag, msg.author.id, msg.guild?.id ?? null, recentMessages, msg.id, { signal: requestController.signal });
 				}
 
 				clearInterval(typingInterval);
@@ -252,24 +269,43 @@ export class MessageHandler implements EventHandler {
 
 				// Get the response content with images (function calls are already handled in the service)
 				const responseData = openAI.getResponseContentWithImages(response);
-				const responseContent = responseData.text;
-				const images = responseData.images;
+				let responseContent = responseData.text;
+				let images = responseData.images;
+				const imagesToCleanup = responseData.images;
+				let backupImages = true;
 
 				if (!responseContent && images.length === 0) {
-					Logger.error('No response content or images generated');
-					await msg.reply('An error occurred while processing your request. Please try again later.');
-					return;
+					if (responseData.web?.fallback) {
+						responseContent = 'I couldn\'t complete the web research right now. Please try again later.';
+					} else {
+						Logger.error('No response content or images generated');
+						clearTimeout(requestTimeout);
+						await msg.reply({ content: 'An error occurred while processing your request. Please try again later.', allowedMentions: { parse: [] } });
+						return;
+					}
 				}
 
 				// Send the response
-				Logger.debug(`[OpenAI Response]: ${responseContent}`);
+				Logger.debug(`[OpenAI Response]: ${responseContent.length} characters`);
 				Logger.debug(`[OpenAI Images]: ${images.length} image(s) to send`);
 
-				let replyMessage = responseContent || '';
-				if (replyMessage) {
-					replyMessage += `\n-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
-				} else {
-					replyMessage = `-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
+				const footer = `-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
+				let replyMessage = assembleReply({
+					modelText: responseContent,
+					sources: responseData.web?.used && !responseData.web.fallback ? responseData.web.sources : [],
+					footer,
+				});
+
+				if (responseData.web?.used && !responseData.web.fallback) {
+					const moderation = this.moderationService
+						? await this.moderationService.moderate(replyMessage, requestController.signal)
+						: { status: 'unavailable' as const };
+					if (moderation.status !== 'allowed') {
+						responseContent = '';
+						images = [];
+						backupImages = false;
+						replyMessage = SAFE_WEB_NOTICE;
+					}
 				}
 
 				// Prepare attachments for images
@@ -299,10 +335,11 @@ export class MessageHandler implements EventHandler {
 					sentReply = await msg.reply({
 						content: replyMessage,
 						files: attachments,
+						allowedMentions: { parse: [] },
 					});
 					Logger.info(`Sent response with ${attachments.length} image(s) to Discord`);
 				} else {
-					sentReply = await msg.reply(replyMessage);
+					sentReply = await msg.reply({ content: replyMessage, allowedMentions: { parse: [] } });
 				}
 
 				if (sentReply.guildId) {
@@ -328,18 +365,25 @@ export class MessageHandler implements EventHandler {
 					}
 				}
 
-				if (images.length > 0) {
-					Logger.info('Backing up generated images to Zipline and cleaning up local files');
+				if (imagesToCleanup.length > 0) {
+					Logger.info('Finalizing generated images');
 					try {
-						await openAI.backupAndCleanupImages(images);
+						if (backupImages) {
+							await openAI.backupAndCleanupImages(imagesToCleanup);
+						} else {
+							// Moderation failures should not upload an image that will never be delivered.
+							await openAI.cleanupGeneratedImages(imagesToCleanup);
+						}
 					} catch (error) {
 						Logger.error('Failed to backup or cleanup generated images:', error);
 					}
 				}
+				clearTimeout(requestTimeout);
 			} catch (err) {
 				clearInterval(typingInterval);
+				clearTimeout(requestTimeout);
 				Logger.error('Error processing message:', err);
-				await msg.reply('An error occurred while processing your request. Please try again later.');
+				await msg.reply({ content: 'An error occurred while processing your request. Please try again later.', allowedMentions: { parse: [] } });
 				throw err;
 			}
 		}

@@ -100,6 +100,25 @@
     "openai": {
         "apiKey": "<OPENAI_API_KEY>"
     },
+    "kagi": {
+        "enabled": false,
+        "apiKey": "",
+        "maxResults": 5,
+        "maxExtractChars": 12000,
+        "cacheEntries": 256,
+        "cacheTtlSeconds": 120,
+        "maxToolRounds": 3,
+        "maxUpstreamCallsPerMessage": 3,
+        "maxCallsPerUserPerHour": 10,
+        "requestTimeoutMs": 10000
+    },
+    "moderation": {
+        "webAssisted": {
+            "enabled": true,
+            "model": "omni-moderation-latest",
+            "timeoutMs": 5000
+        }
+    },
     "automations": {
         "enabled": true
     },

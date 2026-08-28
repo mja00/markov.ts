@@ -17,3 +17,7 @@ export { ChannelContextService } from './channel-context.service.js';
 export { ProactivePreferencesService } from './proactive-preferences.service.js';
 export { areAutomationsEnabled } from './automation-settings.js';
 export { ImageUpload } from './image-upload.js';
+export { KagiService } from './kagi.service.js';
+export { ModerationService } from './moderation.service.js';
+export { resolveWebConfig } from './web-config.js';
+export type { KagiConfig, ModerationConfig, WebProvenance, WebRequestState, WebSource } from './web-contracts.js';

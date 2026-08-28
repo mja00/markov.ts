@@ -95,6 +95,11 @@ A welcome message is sent to the server and owner when the bot is added.
         - `client.token` - Your discord bot's token.
 4. Install packages.
     - Navigate into the downloaded source files and type `npm install`.
+    - To enable Kagi-backed web research, set `kagi.enabled` to `true` and provide `KAGI_API_KEY` (or `kagi.apiKey`). API keys from the environment take precedence over the config file.
+    - Web research also requires `moderation.webAssisted.enabled` so every web-assisted reply is checked with OpenAI Moderation before it is sent.
+    - Kagi search and extraction are billed separately by Kagi. Markov applies per-message and per-process safety limits; sharded processes have independent limits.
+    - Markov stores the visible source links in the normal Discord context, but does not log or persist raw Kagi snippets/page Markdown. The existing OpenAI Responses conversation chain uses server-side response storage for `previous_response_id`, so enabling web research sends extracted content through that provider chain.
+    - Set `KAGI_ENABLED=false` or `kagi.enabled` to `false` and restart the bot to disable new web requests.
 5. Register commands.
     - In order to use slash commands, they first [have to be registered](https://discordjs.guide/creating-your-bot/command-deployment.html).
     - **Important:** Choose ONE approach (global OR guild-specific). Having both will show duplicate commands!
