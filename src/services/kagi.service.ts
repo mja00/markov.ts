@@ -41,6 +41,7 @@ const MAX_TITLE_LENGTH = 200;
 const MAX_SNIPPET_LENGTH = 500;
 const MAX_SOURCE_URL_LENGTH = 2048;
 const MAX_RESPONSE_BYTES = 2_000_000;
+const USER_CALL_SWEEP_SIZE = 1000;
 
 const textValue = (value: unknown): string | undefined => (
 	typeof value === 'string' && value.trim() ? value.trim() : undefined
@@ -420,8 +421,13 @@ export class KagiService {
 	}
 
 	private async readJson(response: Response): Promise<unknown> {
+		// Reject on the declared size first so an oversized body is never buffered.
+		const declaredBytes = Number(response.headers?.get('content-length') ?? 0);
+		if (Number.isFinite(declaredBytes) && declaredBytes > MAX_RESPONSE_BYTES) {
+			throw new Error('Kagi response exceeded the configured safety limit.');
+		}
 		const body = await response.text();
-		if (body.length > MAX_RESPONSE_BYTES) {
+		if (Buffer.byteLength(body) > MAX_RESPONSE_BYTES) {
 			throw new Error('Kagi response exceeded the configured safety limit.');
 		}
 		return JSON.parse(body) as unknown;
@@ -443,6 +449,14 @@ export class KagiService {
 	private reserveUserCall(userSnowflake: string): boolean {
 		const now = this.now();
 		const cutoff = now - 3_600_000;
+		// Entries only expire when their own user calls again, so sweep once the map grows.
+		if (this.userCalls.size > USER_CALL_SWEEP_SIZE) {
+			for (const [snowflake, timestamps] of this.userCalls) {
+				if (timestamps.every(timestamp => timestamp <= cutoff)) {
+					this.userCalls.delete(snowflake);
+				}
+			}
+		}
 		const calls = (this.userCalls.get(userSnowflake) ?? []).filter(timestamp => timestamp > cutoff);
 		if (calls.length >= this.config.maxCallsPerUserPerHour) {
 			this.userCalls.set(userSnowflake, calls);

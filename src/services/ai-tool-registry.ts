@@ -329,7 +329,15 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; } = {}):
 			scope: 'web',
 			handler: async (arguments_, context) => {
 				const result = await options.kagi?.search(String(arguments_.query), context.web);
-				return result ?? { available: false, sources: [], reason: 'Web search is unavailable.' };
+				if (!result) {
+					return { available: false, sources: [], reason: 'Web search is unavailable.' };
+				}
+				return {
+					...result,
+					sources: result.sources.map(source => (source.snippet
+						? { ...source, snippet: `<untrusted_web_content>\n${source.snippet}\n</untrusted_web_content>` }
+						: source)),
+				};
 			},
 		});
 		registry.register({

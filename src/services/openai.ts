@@ -308,22 +308,25 @@ export class OpenAIService {
 		let rounds = 0;
 		let allowedToolNames: ReadonlySet<string> | undefined;
 		while (this.responseHasToolCalls(currentResponse)) {
-			ctx.web.round = rounds;
-			if (rounds >= ctx.web.maxToolRounds) {
-				ctx.web.markFallback();
-				break;
-			}
+			// Past the cap we run no further tools, but still need one call to turn what we have into prose.
+			const terminal = rounds >= ctx.web.maxToolRounds;
 			// Web results are untrusted, so later rounds may only request more web data.
-			const followUpTools = ctx.web.webAvailable ? this.webTools : [];
+			const followUpTools = terminal || !ctx.web.webAvailable ? [] : this.webTools;
+			// An empty set on the terminal round blocks every pending call while still asking for a final answer.
+			const permittedTools = terminal ? new Set<string>() : allowedToolNames;
 			const followUpResponse = await this.handleToolCalls(currentResponse, promptConfig, ctx, {
 				followUpTools,
-				...(allowedToolNames ? { allowedToolNames } : {}),
+				terminal,
+				...(permittedTools ? { allowedToolNames: permittedTools } : {}),
 			});
 			if (!followUpResponse) {
 				ctx.web.markFallback();
 				break;
 			}
 			currentResponse = followUpResponse;
+			if (terminal) {
+				break;
+			}
 			allowedToolNames = new Set(followUpTools.flatMap(tool => ('name' in tool ? [tool.name] : [])));
 			rounds += 1;
 		}
@@ -1124,11 +1127,12 @@ export class OpenAIService {
 		response: OpenAI.Responses.Response,
 		promptConfig: OpenAI.Responses.ResponseCreateParams,
 		ctx: RequestContext,
-		options: { followUpTools?: OpenAI.Responses.Tool[]; allowedToolNames?: ReadonlySet<string>; } = {},
+		options: { followUpTools?: OpenAI.Responses.Tool[]; terminal?: boolean; allowedToolNames?: ReadonlySet<string>; } = {},
 	): Promise<OpenAI.Responses.Response | null> {
 		let hasToolCalls = false;
 		const inputMessages: any[] = []; // Don't copy output items - only include function call outputs and new messages
-		const generatedImages: GeneratedImageInfo[] = [];
+		// Seed from earlier rounds so images survive a multi-round tool loop instead of being re-keyed one hop.
+		const generatedImages: GeneratedImageInfo[] = [...(this.imageDataByResponseId.get(response.id) ?? [])];
 
 		Logger.trace('handleToolCalls - Processing response with output length:', response.output?.length || 0);
 
@@ -1253,6 +1257,7 @@ export class OpenAIService {
 				const followUpResponse = await this.createRoutedResponse('final_response', ctx.channelId, {
 					input: inputMessages,
 					tools: options.followUpTools ?? this.baseTools,
+					...(options.terminal ? { tool_choice: 'none' as const } : {}),
 					...promptConfig,
 					previous_response_id: response.id, // Maintain conversation context
 				}, undefined, ctx.signal);

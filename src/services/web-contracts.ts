@@ -33,7 +33,6 @@ export type WebRequestStateOptions = {
 
 /** Mutable state shared by every web tool call in one top-level chat request. */
 export class WebRequestState {
-	public round = 0;
 	public upstreamCalls = 0;
 	public attempted = false;
 	public successful = false;
@@ -88,8 +87,10 @@ export class WebRequestState {
 	public provenance(): WebProvenance {
 		return {
 			attempted: this.attempted,
-			used: this.successful && !this.fallback,
-			fallback: this.fallback,
+			// Web data reached the model, so the reply still needs moderation and citations even if a later round failed.
+			used: this.successful,
+			// A tool round can fail before any web call, which is not a web fallback.
+			fallback: this.fallback && this.attempted,
 			sources: [...this.sources.values()],
 		};
 	}

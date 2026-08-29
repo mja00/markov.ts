@@ -292,11 +292,11 @@ export class MessageHandler implements EventHandler {
 				const footer = `-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
 				let replyMessage = assembleReply({
 					modelText: responseContent,
-					sources: responseData.web?.used && !responseData.web.fallback ? responseData.web.sources : [],
+					sources: responseData.web?.used ? responseData.web.sources : [],
 					footer,
 				});
 
-				if (responseData.web?.used && !responseData.web.fallback) {
+				if (responseData.web?.used) {
 					const moderation = this.moderationService
 						? await this.moderationService.moderate(replyMessage, requestController.signal)
 						: { status: 'unavailable' as const };
