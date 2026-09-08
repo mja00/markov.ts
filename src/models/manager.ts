@@ -15,6 +15,14 @@ export class Manager {
 		private jobService: JobService,
 	) {}
 
+	private registerListeners(): void {
+		this.shardManager.on('shardCreate', shard => this.onShardCreate(shard));
+	}
+
+	private onShardCreate(shard: Shard): void {
+		Logger.info(Logs.info.managerLaunchedShard.replaceAll('{SHARD_ID}', shard.id.toString()));
+	}
+
 	public async start(): Promise<void> {
 		this.registerListeners();
 
@@ -42,13 +50,5 @@ export class Manager {
 		}
 
 		this.jobService.start();
-	}
-
-	private registerListeners(): void {
-		this.shardManager.on('shardCreate', shard => this.onShardCreate(shard));
-	}
-
-	private onShardCreate(shard: Shard): void {
-		Logger.info(Logs.info.managerLaunchedShard.replaceAll('{SHARD_ID}', shard.id.toString()));
 	}
 }

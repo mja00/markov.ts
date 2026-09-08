@@ -13,7 +13,7 @@ export class HttpService {
 		});
 	}
 
-	public async post(url: string | URL, authorization: string, body?: object): Promise<Response> {
+	public async post(url: string | URL, authorization: string, body?: unknown): Promise<Response> {
 		return await fetch(url.toString(), {
 			method: 'post',
 			headers: {
@@ -25,7 +25,7 @@ export class HttpService {
 		});
 	}
 
-	public async put(url: string | URL, authorization: string, body?: object): Promise<Response> {
+	public async put(url: string | URL, authorization: string, body?: unknown): Promise<Response> {
 		return await fetch(url.toString(), {
 			method: 'put',
 			headers: {
@@ -40,7 +40,7 @@ export class HttpService {
 	public async delete(
 		url: string | URL,
 		authorization: string,
-		body?: object,
+		body?: unknown,
 	): Promise<Response> {
 		return await fetch(url.toString(), {
 			method: 'delete',

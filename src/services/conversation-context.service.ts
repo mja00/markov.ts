@@ -34,6 +34,14 @@ const delay = async (milliseconds: number): Promise<void> => {
 };
 
 export class ConversationContextService {
+	public static privateKey(identity: PrivateContextIdentity): string {
+		return ['private', identity.guildSnowflake ?? 'dm', identity.channelSnowflake, identity.userSnowflake].join(':');
+	}
+
+	public static publicKey(guildSnowflake: string | null, channelSnowflake: string): string {
+		return ['public', guildSnowflake ?? 'dm', channelSnowflake].join(':');
+	}
+
 	private readonly expiryMs: number;
 	private readonly lockMs: number;
 	private readonly lockWaitMs: number;
@@ -48,12 +56,33 @@ export class ConversationContextService {
 		this.pollMs = options.pollMs ?? 100;
 	}
 
-	public static privateKey(identity: PrivateContextIdentity): string {
-		return ['private', identity.guildSnowflake ?? 'dm', identity.channelSnowflake, identity.userSnowflake].join(':');
-	}
+	private async claim(
+		contextKey: string,
+		identity: PrivateContextIdentity,
+		token: string,
+	): Promise<ConversationContext | undefined> {
+		const db = getDb();
+		const now = new Date();
+		await db.insert(conversationContexts).values({
+			contextKey,
+			type: 'PRIVATE',
+			guildSnowflake: identity.guildSnowflake,
+			channelSnowflake: identity.channelSnowflake,
+			userSnowflake: identity.userSnowflake,
+			expiresAt: new Date(Date.now() + this.expiryMs),
+		}).onConflictDoNothing({ target: conversationContexts.contextKey });
 
-	public static publicKey(guildSnowflake: string | null, channelSnowflake: string): string {
-		return ['public', guildSnowflake ?? 'dm', channelSnowflake].join(':');
+		const claimed = await db.update(conversationContexts).set({
+			lockToken: token,
+			lockedUntil: new Date(Date.now() + this.lockMs),
+			updatedAt: now,
+		}).where(and(
+			eq(conversationContexts.contextKey, contextKey),
+			or(isNull(conversationContexts.lockedUntil), lt(conversationContexts.lockedUntil, now)),
+		))
+			.returning();
+
+		return claimed[0];
 	}
 
 	public async withPrivateContext<T>(
@@ -116,34 +145,5 @@ export class ConversationContextService {
 
 	public async resetChannel(channelSnowflake: string): Promise<void> {
 		await getDb().delete(conversationContexts).where(eq(conversationContexts.channelSnowflake, channelSnowflake));
-	}
-
-	private async claim(
-		contextKey: string,
-		identity: PrivateContextIdentity,
-		token: string,
-	): Promise<ConversationContext | undefined> {
-		const db = getDb();
-		const now = new Date();
-		await db.insert(conversationContexts).values({
-			contextKey,
-			type: 'PRIVATE',
-			guildSnowflake: identity.guildSnowflake,
-			channelSnowflake: identity.channelSnowflake,
-			userSnowflake: identity.userSnowflake,
-			expiresAt: new Date(Date.now() + this.expiryMs),
-		}).onConflictDoNothing({ target: conversationContexts.contextKey });
-
-		const claimed = await db.update(conversationContexts).set({
-			lockToken: token,
-			lockedUntil: new Date(Date.now() + this.lockMs),
-			updatedAt: now,
-		}).where(and(
-			eq(conversationContexts.contextKey, contextKey),
-			or(isNull(conversationContexts.lockedUntil), lt(conversationContexts.lockedUntil, now)),
-		))
-			.returning();
-
-		return claimed[0];
 	}
 }

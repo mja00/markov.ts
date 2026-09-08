@@ -16,7 +16,9 @@ vi.mock('../../../src/utils/permission-utils.js', () => {
 });
 
 vi.mock('../../../src/utils/message-utils.js', () => {
-	return { MessageUtils: { react: vi.fn(async () => { return { emoji: {} }; }) } };
+	return { MessageUtils: { react: vi.fn(async () => {
+		return { emoji: {} };
+	}) } };
 });
 
 import { MarkovReactionService } from '../../../src/services/markov-reaction.service.js';
@@ -125,10 +127,7 @@ describe('MarkovReactionService', () => {
 	});
 
 	it('allows only one in-flight selection per channel', async () => {
-		let finishSelection: (key: string) => void = () => {};
-		const selected = new Promise<string>((resolve) => {
-			finishSelection = resolve;
-		});
+		const { promise: selected, resolve: finishSelection } = Promise.withResolvers<string>();
 		const picker = vi.fn(async () => selected);
 		const service = new MarkovReactionService(picker, { cooldownMs: 0 });
 		const message = createMessage(createGuild());

@@ -48,16 +48,14 @@ export interface PromptSettingsUpdate {
  */
 export class PromptSettingsService {
 	private static instance: PromptSettingsService | null = null;
+	public static getInstance(): PromptSettingsService {
+		this.instance ??= new PromptSettingsService();
+		return this.instance;
+	}
+
 	private cache: { value: BotSettings; fetchedAt: number; } | null = null;
 
 	private constructor() {}
-
-	public static getInstance(): PromptSettingsService {
-		if (!PromptSettingsService.instance) {
-			PromptSettingsService.instance = new PromptSettingsService();
-		}
-		return PromptSettingsService.instance;
-	}
 
 	/**
 	 * The in-code defaults as a settings row. Used to seed the DB on first run
@@ -73,6 +71,32 @@ export class PromptSettingsService {
 			reasoningSummary: DEFAULT_REASONING_SUMMARY,
 			updatedAt: new Date(),
 		};
+	}
+
+	/**
+	 * Validate an update before it reaches the database. Rejects empty text and
+	 * out-of-set tuning values (which would otherwise be sent to the API verbatim
+	 * and break every request).
+	 */
+	private validate(partial: PromptSettingsUpdate): void {
+		if (partial.systemPrompt !== undefined && partial.systemPrompt.trim().length === 0) {
+			throw new Error('System prompt cannot be empty.');
+		}
+		if (partial.model !== undefined && partial.model.trim().length === 0) {
+			throw new Error('Model cannot be empty.');
+		}
+		if (partial.reasoningEffort !== undefined
+			&& !(REASONING_EFFORT_VALUES as readonly string[]).includes(partial.reasoningEffort)) {
+			throw new Error(`Invalid reasoning effort. Allowed: ${REASONING_EFFORT_VALUES.join(', ')}.`);
+		}
+		if (partial.verbosity !== undefined
+			&& !(VERBOSITY_VALUES as readonly string[]).includes(partial.verbosity)) {
+			throw new Error(`Invalid verbosity. Allowed: ${VERBOSITY_VALUES.join(', ')}.`);
+		}
+		if (partial.reasoningSummary !== undefined
+			&& !(REASONING_SUMMARY_VALUES as readonly string[]).includes(partial.reasoningSummary)) {
+			throw new Error(`Invalid summary mode. Allowed: ${REASONING_SUMMARY_VALUES.join(', ')}.`);
+		}
 	}
 
 	/**
@@ -152,31 +176,5 @@ export class PromptSettingsService {
 			verbosity: DEFAULT_VERBOSITY,
 			reasoningSummary: DEFAULT_REASONING_SUMMARY,
 		});
-	}
-
-	/**
-	 * Validate an update before it reaches the database. Rejects empty text and
-	 * out-of-set tuning values (which would otherwise be sent to the API verbatim
-	 * and break every request).
-	 */
-	private validate(partial: PromptSettingsUpdate): void {
-		if (partial.systemPrompt !== undefined && partial.systemPrompt.trim().length === 0) {
-			throw new Error('System prompt cannot be empty.');
-		}
-		if (partial.model !== undefined && partial.model.trim().length === 0) {
-			throw new Error('Model cannot be empty.');
-		}
-		if (partial.reasoningEffort !== undefined
-			&& !(REASONING_EFFORT_VALUES as readonly string[]).includes(partial.reasoningEffort)) {
-			throw new Error(`Invalid reasoning effort. Allowed: ${REASONING_EFFORT_VALUES.join(', ')}.`);
-		}
-		if (partial.verbosity !== undefined
-			&& !(VERBOSITY_VALUES as readonly string[]).includes(partial.verbosity)) {
-			throw new Error(`Invalid verbosity. Allowed: ${VERBOSITY_VALUES.join(', ')}.`);
-		}
-		if (partial.reasoningSummary !== undefined
-			&& !(REASONING_SUMMARY_VALUES as readonly string[]).includes(partial.reasoningSummary)) {
-			throw new Error(`Invalid summary mode. Allowed: ${REASONING_SUMMARY_VALUES.join(', ')}.`);
-		}
 	}
 }

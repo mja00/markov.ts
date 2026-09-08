@@ -13,15 +13,15 @@ import { InteractionUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
 
 export class FishCommand implements Command {
-	public names = [Lang.getRef('chatCommands.fish', Language.Default)];
-	public cooldown = new RateLimiter(10, 30000);
-	public deferType = CommandDeferType.PUBLIC;
-	public requireClientPerms: PermissionsString[] = [];
-
 	private readonly userService = new UserService();
 	private readonly fishingService = new FishingService();
 	private readonly cooldownService = new FishingCooldownService();
 	private readonly proactivePreferences = new ProactivePreferencesService();
+
+	public names = [Lang.getRef('chatCommands.fish', Language.Default)];
+	public cooldown = new RateLimiter(10, 30000);
+	public deferType = CommandDeferType.PUBLIC;
+	public requireClientPerms: PermissionsString[] = [];
 
 	/**
      * Execute the fish command

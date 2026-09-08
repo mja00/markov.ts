@@ -42,10 +42,10 @@ describe('ModerationService', () => {
 		const service = new ModerationService({ config: config(false), client: { moderations: { create } } });
 
 		await expect(service.moderate('text')).resolves.toEqual({ status: 'disabled' });
-		await expect(service.moderate('   ')).resolves.toEqual({ status: 'disabled' });
+		await expect(service.moderate(' '.repeat(3))).resolves.toEqual({ status: 'disabled' });
 		expect(create).not.toHaveBeenCalled();
 
 		const enabledService = new ModerationService({ config: config(), client: { moderations: { create } } });
-		await expect(enabledService.moderate('   ')).resolves.toEqual({ status: 'allowed' });
+		await expect(enabledService.moderate(' '.repeat(3))).resolves.toEqual({ status: 'allowed' });
 	});
 });

@@ -15,13 +15,13 @@ const Config = require('../../config/config.json');
 const Logs = require('../../lang/logs.json');
 
 export class UpdateServerCountJob extends Job {
+	private botSites: BotSite[];
+
 	public name = 'Update Server Count';
 	public schedule: string = Config.jobs.updateServerCount.schedule;
 	public log: boolean = Config.jobs.updateServerCount.log;
 	public runOnce: boolean = Config.jobs.updateServerCount.runOnce;
 	public initialDelaySecs: number = Config.jobs.updateServerCount.initialDelaySecs;
-
-	private botSites: BotSite[];
 
 	constructor(
 		private shardManager: ShardingManager,

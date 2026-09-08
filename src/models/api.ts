@@ -21,12 +21,6 @@ export class Api {
 		this.app.use(handleError());
 	}
 
-	public async start(): Promise<void> {
-		const listen = promisify(this.app.listen.bind(this.app));
-		await listen(Config.api.port);
-		Logger.info(Logs.info.apiStarted.replaceAll('{PORT}', Config.api.port));
-	}
-
 	private setupControllers(): void {
 		for (const controller of this.controllers) {
 			if (controller.authToken) {
@@ -35,5 +29,11 @@ export class Api {
 			controller.register();
 			this.app.use(controller.path, controller.router);
 		}
+	}
+
+	public async start(): Promise<void> {
+		const listen = promisify(this.app.listen.bind(this.app));
+		await listen(Config.api.port);
+		Logger.info(Logs.info.apiStarted.replaceAll('{PORT}', Config.api.port));
 	}
 }

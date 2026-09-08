@@ -9,7 +9,6 @@ import { automationDeliveries, userAssistantPreferences } from '../db/schema.js'
 export type ProactiveFeature = 'dailyFishingQuests' | 'rareCatchAlerts' | 'weeklyFishingSummaries' | 'collectionReminders' | 'personalReminders';
 
 export class ProactivePreferencesService {
-	private readonly scheduledMessages = new ScheduledMessageService();
 	private static deliveryKey(feature: string, targetSnowflake: string, periodKey: string): string {
 		return `${feature}:${targetSnowflake}:${periodKey}`;
 	}
@@ -17,6 +16,8 @@ export class ProactivePreferencesService {
 	public static key(userSnowflake: string, guildSnowflake: string | null): string {
 		return `${guildSnowflake ?? 'dm'}:${userSnowflake}`;
 	}
+
+	private readonly scheduledMessages = new ScheduledMessageService();
 
 	public async get(userSnowflake: string, guildSnowflake: string | null) {
 		const key = ProactivePreferencesService.key(userSnowflake, guildSnowflake);
@@ -46,11 +47,11 @@ export class ProactivePreferencesService {
 			userSnowflake: input.userSnowflake,
 			guildSnowflake: input.guildSnowflake,
 			[input.feature]: input.enabled,
-			...(input.timezone ? { timezone: input.timezone } : {}),
-			...(input.quietHoursStart !== undefined ? { quietHoursStart: input.quietHoursStart } : {}),
-			...(input.quietHoursEnd !== undefined ? { quietHoursEnd: input.quietHoursEnd } : {}),
-			...(input.frequency ? { frequency: input.frequency } : {}),
-			...(input.destinationChannelSnowflake !== undefined ? { destinationChannelSnowflake: input.destinationChannelSnowflake } : {}),
+			...(input.timezone && { timezone: input.timezone }),
+			...((input.quietHoursStart !== undefined) && { quietHoursStart: input.quietHoursStart }),
+			...((input.quietHoursEnd !== undefined) && { quietHoursEnd: input.quietHoursEnd }),
+			...(input.frequency && { frequency: input.frequency }),
+			...((input.destinationChannelSnowflake !== undefined) && { destinationChannelSnowflake: input.destinationChannelSnowflake }),
 			updatedAt: new Date(),
 		};
 		const rows = await getDb().insert(userAssistantPreferences).values(values)

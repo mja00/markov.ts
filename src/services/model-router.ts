@@ -115,50 +115,6 @@ export class ModelRouter {
 		this.sink = sink ?? (config.telemetry?.enabled ? new LoggerModelTelemetrySink() : undefined);
 	}
 
-	public route(task: AITaskType, baselineModel: string, routingKey = ''): ModelRoute {
-		const taskSettings = this.config.tasks?.[task] ?? {};
-		const rolloutPercent = Math.max(0, Math.min(100, this.config.rolloutPercent ?? 100));
-		const routed = Boolean(this.config.enabled)
-			&& this.bucket(`${task}:${routingKey}`) < rolloutPercent;
-		const model = routed && taskSettings.model ? taskSettings.model : baselineModel;
-		const activeSettings = routed ? taskSettings : {};
-
-		return {
-			task,
-			model,
-			fallbackModel: routed ? taskSettings.fallbackModel : undefined,
-			reasoningEffort: activeSettings.reasoningEffort,
-			maxOutputTokens: this.costCappedOutputTokens(model, activeSettings),
-			timeoutMs: activeSettings.timeoutMs,
-			maxCostUsd: activeSettings.maxCostUsd,
-			routed,
-		};
-	}
-
-	public async execute<T extends ResponseLike>(
-		task: AITaskType,
-		baselineModel: string,
-		routingKey: string,
-		call: (route: ModelRoute) => Promise<T>,
-	): Promise<T> {
-		const route = this.route(task, baselineModel, routingKey);
-		try {
-			return await this.runAndRecord(route, call);
-		} catch (error) {
-			if (!route.fallbackModel || route.fallbackModel === route.model) {
-				throw error;
-			}
-
-			const fallbackRoute = {
-				...route,
-				model: route.fallbackModel,
-				fallbackModel: undefined,
-				maxOutputTokens: this.costCappedOutputTokens(route.fallbackModel, this.config.tasks?.[task] ?? {}),
-			};
-			return this.runAndRecord(fallbackRoute, call, route.model);
-		}
-	}
-
 	private async runAndRecord<T extends ResponseLike>(
 		route: ModelRoute,
 		call: (route: ModelRoute) => Promise<T>,
@@ -244,5 +200,49 @@ export class ModelRouter {
 			hash = Math.imul(hash, 16_777_619);
 		}
 		return (hash >>> 0) % 100;
+	}
+
+	public route(task: AITaskType, baselineModel: string, routingKey = ''): ModelRoute {
+		const taskSettings = this.config.tasks?.[task] ?? {};
+		const rolloutPercent = Math.max(0, Math.min(100, this.config.rolloutPercent ?? 100));
+		const routed = Boolean(this.config.enabled)
+			&& this.bucket(`${task}:${routingKey}`) < rolloutPercent;
+		const model = routed && taskSettings.model ? taskSettings.model : baselineModel;
+		const activeSettings = routed ? taskSettings : {};
+
+		return {
+			task,
+			model,
+			fallbackModel: routed ? taskSettings.fallbackModel : undefined,
+			reasoningEffort: activeSettings.reasoningEffort,
+			maxOutputTokens: this.costCappedOutputTokens(model, activeSettings),
+			timeoutMs: activeSettings.timeoutMs,
+			maxCostUsd: activeSettings.maxCostUsd,
+			routed,
+		};
+	}
+
+	public async execute<T extends ResponseLike>(
+		task: AITaskType,
+		baselineModel: string,
+		routingKey: string,
+		call: (route: ModelRoute) => Promise<T>,
+	): Promise<T> {
+		const route = this.route(task, baselineModel, routingKey);
+		try {
+			return await this.runAndRecord(route, call);
+		} catch (error) {
+			if (!route.fallbackModel || route.fallbackModel === route.model) {
+				throw error;
+			}
+
+			const fallbackRoute = {
+				...route,
+				model: route.fallbackModel,
+				fallbackModel: undefined,
+				maxOutputTokens: this.costCappedOutputTokens(route.fallbackModel, this.config.tasks?.[task] ?? {}),
+			};
+			return this.runAndRecord(fallbackRoute, call, route.model);
+		}
 	}
 }

@@ -20,7 +20,7 @@ export function canonicalizeSourceUrl(value: string): string | null {
 			return null;
 		}
 		url.hash = '';
-		const canonical = url.toString();
+		const canonical = url.href;
 		return canonical.length <= MAX_SOURCE_URL_LENGTH ? canonical : null;
 	} catch {
 		return null;
@@ -46,13 +46,7 @@ export function dedupeWebSources(sources: WebSource[], limit = MAX_SOURCES): Web
 
 const safeTitle = (title: string, url: string): string => {
 	const withoutControls = [...title].filter(character => !hasControlCharacters(character)).join('');
-	const cleaned = withoutControls
-		.replaceAll('[', '')
-		.replaceAll(']', '')
-		.replaceAll('`', '')
-		.replaceAll('*', '')
-		.replaceAll('_', '')
-		.replaceAll('~', '')
+	const cleaned = withoutControls.replaceAll(/[[\]`*_~]/g, '')
 		.replaceAll(/\s+/gu, ' ')
 		.trim()
 		.slice(0, 200);

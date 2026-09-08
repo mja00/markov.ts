@@ -13,12 +13,12 @@ import { EventData } from '../models/internal-models.js';
 import { Logger } from '../services/logger.js';
 
 export class ShopButton implements Button {
+	private readonly shopCommand = new ShopCommand();
+
 	public ids = ['shop:page', 'shop:buy'];
 	public deferType = ButtonDeferType.NONE; // We'll handle defer manually based on button type
 	public requireGuild = false;
 	public requireEmbedAuthorTag = false;
-
-	private readonly shopCommand = new ShopCommand();
 
 	public async execute(intr: ButtonInteraction, _data: EventData): Promise<void> {
 		const customId = intr.customId;
@@ -28,7 +28,7 @@ export class ShopButton implements Button {
 				// Handle page navigation - defer update
 				await intr.deferUpdate();
 
-				const pageStr = customId.split(':')[2];
+				const pageStr = customId.split(':', 3)[2];
 				const page = Number.parseInt(pageStr, 10);
 
 				if (Number.isNaN(page) || page < 1) {

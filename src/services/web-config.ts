@@ -38,6 +38,17 @@ const booleanValue = (value: unknown, fallback: boolean): boolean => (
 	typeof value === 'boolean' ? value : fallback
 );
 
+const MODERATION_MODELS: Record<ModerationConfig['model'], true> = {
+	'omni-moderation-latest': true,
+	'omni-moderation-2024-09-26': true,
+	'text-moderation-latest': true,
+	'text-moderation-stable': true,
+};
+
+const isModerationModel = (value: unknown): value is ModerationConfig['model'] => (
+	typeof value === 'string' && MODERATION_MODELS[value as ModerationConfig['model']] === true
+);
+
 export type ResolvedWebConfig = {
 	kagi: KagiConfig | null;
 	moderation: ModerationConfig;
@@ -54,9 +65,7 @@ export function resolveWebConfig(rawConfig: unknown, environment: NodeJS.Process
 		enabled: moderationConfigured
 			? booleanValue(rawModeration.enabled, DEFAULT_MODERATION_CONFIG.enabled)
 			: false,
-		model: rawModeration.model === 'omni-moderation-2024-09-26'
-			|| rawModeration.model === 'text-moderation-latest'
-			|| rawModeration.model === 'text-moderation-stable'
+		model: isModerationModel(rawModeration.model)
 			? rawModeration.model
 			: DEFAULT_MODERATION_CONFIG.model,
 		timeoutMs: boundedPositiveInteger(rawModeration.timeoutMs, DEFAULT_MODERATION_CONFIG.timeoutMs, 60000),

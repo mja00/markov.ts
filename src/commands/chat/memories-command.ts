@@ -23,11 +23,66 @@ const ITEMS_PER_PAGE = 5;
 const CONTENT_PREVIEW_LENGTH = 200;
 
 export class MemoriesCommand implements Command {
+	private readonly memoryService = new MemoryService();
+
 	public names = [Lang.getRef('chatCommands.memories', Language.Default)];
 	public deferType = CommandDeferType.HIDDEN;
 	public requireClientPerms: PermissionsString[] = [];
 
-	private readonly memoryService = new MemoryService();
+	/**
+	 * Build a single page of memories with navigation buttons.
+	 * @param memories - All memories for the current scope
+	 * @param page - Current page (1-based)
+	 * @param scope - The memory scope ('mine' or 'server')
+	 * @returns Embed and components for the page
+	 */
+	private buildMemoriesPage(
+		memories: Memory[],
+		page: number,
+		scope: string,
+	): { embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[]; } {
+		const totalPages = Math.max(1, Math.ceil(memories.length / ITEMS_PER_PAGE));
+		const currentPage = Math.max(1, Math.min(page, totalPages));
+		const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+		const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, memories.length);
+		const pageMemories = memories.slice(startIndex, endIndex);
+
+		const embed = new EmbedBuilder()
+			.setTitle(`🧠 Memories (${scope === 'server' ? 'server' : 'mine'})`)
+			.setDescription(`**Page ${currentPage}/${totalPages}**`)
+			.setColor(0x34_98_DB);
+
+		for (const [index, memory] of pageMemories.entries()) {
+			const globalIndex = startIndex + index + 1;
+			const content =
+				memory.content.length > CONTENT_PREVIEW_LENGTH
+					? `${memory.content.slice(0, CONTENT_PREVIEW_LENGTH)}…`
+					: memory.content;
+
+			embed.addFields({
+				name: `${globalIndex}. [${memory.scope}]`,
+				value: `${content}\nID: \`${memory.id}\``,
+				inline: false,
+			});
+		}
+
+		const navRow = new ActionRowBuilder<ButtonBuilder>();
+		const prevButton = new ButtonBuilder()
+			.setCustomId(`memories:page:${scope}:${currentPage - 1}`)
+			.setLabel('◀ Previous')
+			.setStyle(ButtonStyle.Secondary)
+			.setDisabled(currentPage <= 1);
+
+		const nextButton = new ButtonBuilder()
+			.setCustomId(`memories:page:${scope}:${currentPage + 1}`)
+			.setLabel('Next ▶')
+			.setStyle(ButtonStyle.Secondary)
+			.setDisabled(currentPage >= totalPages);
+
+		navRow.addComponents(prevButton, nextButton);
+
+		return { embed, components: [navRow] };
+	}
 
 	/**
 	 * Execute the memories command. Lets a user view or forget what the bot
@@ -153,61 +208,6 @@ export class MemoriesCommand implements Command {
 
 			await InteractionUtils.send(intr, errorEmbed, true);
 		}
-	}
-
-	/**
-	 * Build a single page of memories with navigation buttons.
-	 * @param memories - All memories for the current scope
-	 * @param page - Current page (1-based)
-	 * @param scope - The memory scope ('mine' or 'server')
-	 * @returns Embed and components for the page
-	 */
-	private buildMemoriesPage(
-		memories: Memory[],
-		page: number,
-		scope: string,
-	): { embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[]; } {
-		const totalPages = Math.max(1, Math.ceil(memories.length / ITEMS_PER_PAGE));
-		const currentPage = Math.max(1, Math.min(page, totalPages));
-		const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-		const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, memories.length);
-		const pageMemories = memories.slice(startIndex, endIndex);
-
-		const embed = new EmbedBuilder()
-			.setTitle(`🧠 Memories (${scope === 'server' ? 'server' : 'mine'})`)
-			.setDescription(`**Page ${currentPage}/${totalPages}**`)
-			.setColor(0x34_98_DB);
-
-		for (const [index, memory] of pageMemories.entries()) {
-			const globalIndex = startIndex + index + 1;
-			const content =
-				memory.content.length > CONTENT_PREVIEW_LENGTH
-					? `${memory.content.slice(0, CONTENT_PREVIEW_LENGTH)}…`
-					: memory.content;
-
-			embed.addFields({
-				name: `${globalIndex}. [${memory.scope}]`,
-				value: `${content}\nID: \`${memory.id}\``,
-				inline: false,
-			});
-		}
-
-		const navRow = new ActionRowBuilder<ButtonBuilder>();
-		const prevButton = new ButtonBuilder()
-			.setCustomId(`memories:page:${scope}:${currentPage - 1}`)
-			.setLabel('◀ Previous')
-			.setStyle(ButtonStyle.Secondary)
-			.setDisabled(currentPage <= 1);
-
-		const nextButton = new ButtonBuilder()
-			.setCustomId(`memories:page:${scope}:${currentPage + 1}`)
-			.setLabel('Next ▶')
-			.setStyle(ButtonStyle.Secondary)
-			.setDisabled(currentPage >= totalPages);
-
-		navRow.addComponents(prevButton, nextButton);
-
-		return { embed, components: [navRow] };
 	}
 
 	/**

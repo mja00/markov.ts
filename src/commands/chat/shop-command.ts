@@ -21,11 +21,11 @@ import { Command, CommandDeferType } from '../index.js';
 const ITEMS_PER_PAGE = 4;
 
 export class ShopCommand implements Command {
+	private readonly shopService = new ShopService();
+
 	public names = [Lang.getRef('chatCommands.shop', Language.Default)];
 	public deferType = CommandDeferType.PUBLIC;
 	public requireClientPerms: PermissionsString[] = [];
-
-	private readonly shopService = new ShopService();
 
 	/**
      * Format item effect for display
@@ -125,14 +125,16 @@ export class ShopCommand implements Command {
 		// Build buy buttons for items on this page
 		const buyRow = new ActionRowBuilder<ButtonBuilder>();
 		for (const { item } of pageItems) {
-			if (item.slug) {
-				const buyButton = new ButtonBuilder()
-					.setCustomId(`shop:buy:${item.slug}`)
-					.setLabel(`Buy ${item.name}`)
-					.setStyle(ButtonStyle.Primary);
-
-				buyRow.addComponents(buyButton);
+			if (!item.slug) {
+				continue;
 			}
+
+			const buyButton = new ButtonBuilder()
+				.setCustomId(`shop:buy:${item.slug}`)
+				.setLabel(`Buy ${item.name}`)
+				.setStyle(ButtonStyle.Primary);
+
+			buyRow.addComponents(buyButton);
 		}
 
 		const components: ActionRowBuilder<ButtonBuilder>[] = [];

@@ -90,7 +90,7 @@ describe('RandomUtils', () => {
 		it('should contain all original elements', () => {
 			const input = [1, 2, 3, 4, 5];
 			const result = RandomUtils.shuffle([...input]);
-			expect(result.sort()).toEqual(input.sort());
+			expect(result.toSorted((numA, numB) => numA - numB)).toEqual(input.toSorted((numA, numB) => numA - numB));
 		});
 
 		it('should handle empty array', () => {
@@ -121,7 +121,7 @@ describe('RandomUtils', () => {
 		it('should handle arrays with duplicate values', () => {
 			const input = [1, 1, 2, 2, 3];
 			const result = RandomUtils.shuffle([...input]);
-			expect(result.sort()).toEqual(input.sort());
+			expect(result.toSorted((numA, numB) => numA - numB)).toEqual(input.toSorted((numA, numB) => numA - numB));
 		});
 
 		it('should handle arrays with different types', () => {

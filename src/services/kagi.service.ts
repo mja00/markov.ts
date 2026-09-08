@@ -115,19 +115,23 @@ const canonicalizeUrl = (value: string, requireHttps: boolean): string | null =>
 		if ((requireHttps && parsed.protocol !== 'https:') || (!requireHttps && !['http:', 'https:'].includes(parsed.protocol))) {
 			return null;
 		}
-		if (!parsed.hostname || parsed.username || parsed.password || parsed.port === '0' || parsed.toString().length > MAX_SOURCE_URL_LENGTH) {
+		if (!parsed.hostname || parsed.username || parsed.password || parsed.port === '0' || parsed.href.length > MAX_SOURCE_URL_LENGTH) {
 			return null;
 		}
 		parsed.hash = '';
-		const canonical = parsed.toString();
+		const canonical = parsed.href;
 		return canonical.length <= MAX_SOURCE_URL_LENGTH ? canonical : null;
 	} catch {
 		return null;
 	}
 };
 
-const unavailableSearch = (reason: string): WebSearchResult => { return { available: false, sources: [], reason }; };
-const unavailableExtract = (url: string, reason: string): WebExtractResult => { return { available: false, url, reason }; };
+const unavailableSearch = (reason: string): WebSearchResult => {
+	return { available: false, sources: [], reason };
+};
+const unavailableExtract = (url: string, reason: string): WebExtractResult => {
+	return { available: false, url, reason };
+};
 
 export class KagiService {
 	private readonly config: KagiConfig;
@@ -151,113 +155,6 @@ export class KagiService {
 		this.now = options.now ?? Date.now;
 		this.resolveHostnames = options.resolveHostnames ?? defaultResolver;
 		this.telemetry = options.telemetry;
-	}
-
-	public get requestLimits(): { maxToolRounds: number; maxUpstreamCallsPerMessage: number; } {
-		return {
-			maxToolRounds: this.config.maxToolRounds,
-			maxUpstreamCallsPerMessage: this.config.maxUpstreamCallsPerMessage,
-		};
-	}
-
-	public async search(query: string, state?: WebRequestState): Promise<WebSearchResult> {
-		const normalizedQuery = query.trim();
-		if (!this.config.enabled || !state || !state.webAvailable) {
-			return unavailableSearch('Web search is unavailable.');
-		}
-		if (!normalizedQuery || normalizedQuery.length > MAX_QUERY_LENGTH || hasControlCharacters(normalizedQuery)) {
-			state.blockWeb();
-			return unavailableSearch('The search query is empty or too long.');
-		}
-
-		const key = `${this.config.baseUrl}:search:${this.config.maxResults}:${normalizedQuery.toLowerCase()}`;
-		const cached = this.getCached(this.searchCache, key);
-		if (cached) {
-			this.telemetry?.({ type: 'cache_hit', provider: 'kagi', operation: 'search' });
-			state.addSources(cached.sources);
-			return cached;
-		}
-
-		const existing = this.searchInFlight.get(key);
-		if (existing) {
-			const result = await this.join(existing, state.signal);
-			if (!result.available) {
-				state.blockWeb();
-			}
-			state.addSources(result.sources);
-			return result;
-		}
-
-		if (!state.canReserveUpstreamCall() || !this.reserveUserCall(state.userSnowflake)) {
-			state.blockWeb();
-			this.telemetry?.({ type: 'quota_denied', provider: 'kagi', operation: 'search' });
-			return unavailableSearch('The web-search limit for this request has been reached.');
-		}
-		state.reserveUpstreamCall();
-
-		const entry = this.createInFlight(this.searchInFlight, key, signal => this.requestSearch(normalizedQuery, signal));
-		const result = await this.join(entry, state.signal);
-		if (!result.available) {
-			state.blockWeb();
-		}
-		if (result.available) {
-			this.setCached(this.searchCache, key, result);
-			state.addSources(result.sources);
-		}
-		return result;
-	}
-
-	public async extract(url: string, state?: WebRequestState): Promise<WebExtractResult> {
-		const canonicalUrl = canonicalizeUrl(url.trim(), true);
-		if (!canonicalUrl) {
-			return unavailableExtract(url, 'Only public HTTPS URLs can be summarized.');
-		}
-		if (!this.config.enabled || !state || !state.webAvailable) {
-			return unavailableExtract(canonicalUrl, 'Web extraction is unavailable.');
-		}
-		if (!(await this.isPublicHost(canonicalUrl))) {
-			state.blockWeb();
-			return unavailableExtract(canonicalUrl, 'That URL is not a permitted public destination.');
-		}
-
-		const key = `${this.config.baseUrl}:extract:${this.config.maxExtractChars}:${canonicalUrl}`;
-		const cached = this.getCached(this.extractCache, key);
-		if (cached) {
-			this.telemetry?.({ type: 'cache_hit', provider: 'kagi', operation: 'extract' });
-			if (cached.available) {
-				state.addSources([{ url: canonicalUrl, title: cached.title ?? new URL(canonicalUrl).hostname }]);
-			}
-			return cached;
-		}
-
-		const existing = this.extractInFlight.get(key);
-		if (existing) {
-			const result = await this.join(existing, state.signal);
-			if (!result.available) {
-				state.blockWeb();
-			} else {
-				state.addSources([{ url: canonicalUrl, title: result.title ?? new URL(canonicalUrl).hostname }]);
-			}
-			return result;
-		}
-
-		if (!state.canReserveUpstreamCall() || !this.reserveUserCall(state.userSnowflake)) {
-			state.blockWeb();
-			this.telemetry?.({ type: 'quota_denied', provider: 'kagi', operation: 'extract' });
-			return unavailableExtract(canonicalUrl, 'The web-search limit for this request has been reached.');
-		}
-		state.reserveUpstreamCall();
-
-		const entry = this.createInFlight(this.extractInFlight, key, signal => this.requestExtract(canonicalUrl, signal));
-		const result = await this.join(entry, state.signal);
-		if (!result.available) {
-			state.blockWeb();
-		}
-		if (result.available) {
-			this.setCached(this.extractCache, key, result);
-			state.addSources([{ url: canonicalUrl, title: result.title ?? new URL(canonicalUrl).hostname }]);
-		}
-		return result;
 	}
 
 	private async requestSearch(query: string, signal: AbortSignal): Promise<WebSearchResult> {
@@ -416,7 +313,7 @@ export class KagiService {
 			available: true,
 			url: pageUrl,
 			content: truncate(markdown, this.config.maxExtractChars),
-			...(title ? { title: truncate(title, MAX_TITLE_LENGTH) } : {}),
+			...(title && { title: truncate(title, MAX_TITLE_LENGTH) }),
 		};
 	}
 
@@ -559,5 +456,112 @@ export class KagiService {
 		} finally {
 			release();
 		}
+	}
+
+	public get requestLimits(): { maxToolRounds: number; maxUpstreamCallsPerMessage: number; } {
+		return {
+			maxToolRounds: this.config.maxToolRounds,
+			maxUpstreamCallsPerMessage: this.config.maxUpstreamCallsPerMessage,
+		};
+	}
+
+	public async search(query: string, state?: WebRequestState): Promise<WebSearchResult> {
+		const normalizedQuery = query.trim();
+		if (!this.config.enabled || !state || !state.webAvailable) {
+			return unavailableSearch('Web search is unavailable.');
+		}
+		if (!normalizedQuery || normalizedQuery.length > MAX_QUERY_LENGTH || hasControlCharacters(normalizedQuery)) {
+			state.blockWeb();
+			return unavailableSearch('The search query is empty or too long.');
+		}
+
+		const key = `${this.config.baseUrl}:search:${this.config.maxResults}:${normalizedQuery.toLowerCase()}`;
+		const cached = this.getCached(this.searchCache, key);
+		if (cached) {
+			this.telemetry?.({ type: 'cache_hit', provider: 'kagi', operation: 'search' });
+			state.addSources(cached.sources);
+			return cached;
+		}
+
+		const existing = this.searchInFlight.get(key);
+		if (existing) {
+			const result = await this.join(existing, state.signal);
+			if (!result.available) {
+				state.blockWeb();
+			}
+			state.addSources(result.sources);
+			return result;
+		}
+
+		if (!state.canReserveUpstreamCall() || !this.reserveUserCall(state.userSnowflake)) {
+			state.blockWeb();
+			this.telemetry?.({ type: 'quota_denied', provider: 'kagi', operation: 'search' });
+			return unavailableSearch('The web-search limit for this request has been reached.');
+		}
+		state.reserveUpstreamCall();
+
+		const entry = this.createInFlight(this.searchInFlight, key, signal => this.requestSearch(normalizedQuery, signal));
+		const result = await this.join(entry, state.signal);
+		if (!result.available) {
+			state.blockWeb();
+		}
+		if (result.available) {
+			this.setCached(this.searchCache, key, result);
+			state.addSources(result.sources);
+		}
+		return result;
+	}
+
+	public async extract(url: string, state?: WebRequestState): Promise<WebExtractResult> {
+		const canonicalUrl = canonicalizeUrl(url.trim(), true);
+		if (!canonicalUrl) {
+			return unavailableExtract(url, 'Only public HTTPS URLs can be summarized.');
+		}
+		if (!this.config.enabled || !state || !state.webAvailable) {
+			return unavailableExtract(canonicalUrl, 'Web extraction is unavailable.');
+		}
+		if (!(await this.isPublicHost(canonicalUrl))) {
+			state.blockWeb();
+			return unavailableExtract(canonicalUrl, 'That URL is not a permitted public destination.');
+		}
+
+		const key = `${this.config.baseUrl}:extract:${this.config.maxExtractChars}:${canonicalUrl}`;
+		const cached = this.getCached(this.extractCache, key);
+		if (cached) {
+			this.telemetry?.({ type: 'cache_hit', provider: 'kagi', operation: 'extract' });
+			if (cached.available) {
+				state.addSources([{ url: canonicalUrl, title: cached.title ?? new URL(canonicalUrl).hostname }]);
+			}
+			return cached;
+		}
+
+		const existing = this.extractInFlight.get(key);
+		if (existing) {
+			const result = await this.join(existing, state.signal);
+			if (!result.available) {
+				state.blockWeb();
+			} else {
+				state.addSources([{ url: canonicalUrl, title: result.title ?? new URL(canonicalUrl).hostname }]);
+			}
+			return result;
+		}
+
+		if (!state.canReserveUpstreamCall() || !this.reserveUserCall(state.userSnowflake)) {
+			state.blockWeb();
+			this.telemetry?.({ type: 'quota_denied', provider: 'kagi', operation: 'extract' });
+			return unavailableExtract(canonicalUrl, 'The web-search limit for this request has been reached.');
+		}
+		state.reserveUpstreamCall();
+
+		const entry = this.createInFlight(this.extractInFlight, key, signal => this.requestExtract(canonicalUrl, signal));
+		const result = await this.join(entry, state.signal);
+		if (!result.available) {
+			state.blockWeb();
+		}
+		if (result.available) {
+			this.setCached(this.extractCache, key, result);
+			state.addSources([{ url: canonicalUrl, title: result.title ?? new URL(canonicalUrl).hostname }]);
+		}
+		return result;
 	}
 }

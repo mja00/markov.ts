@@ -21,10 +21,11 @@ function isValidTime(value: string): boolean {
 }
 
 export class AutomationsCommand implements Command {
+	private readonly preferences = new ProactivePreferencesService();
+
 	public names = [Lang.getRef('chatCommands.automations', Language.Default)];
 	public deferType = CommandDeferType.HIDDEN;
 	public requireClientPerms: PermissionsString[] = [];
-	private readonly preferences = new ProactivePreferencesService();
 
 	public async execute(intr: ChatInputCommandInteraction): Promise<void> {
 		const action = intr.options.getString(Lang.getRef('arguments.automationsAction', Language.Default), true);

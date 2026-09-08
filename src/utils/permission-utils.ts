@@ -11,7 +11,8 @@ export class PermissionUtils {
 	public static memberCanSend(channel: Channel, member: GuildMember): boolean {
 		if (channel instanceof DMChannel) {
 			return true;
-		} else if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
+		}
+		if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
 			const channelPerms = channel.permissionsFor(member);
 			if (!channelPerms) {
 				return false;
@@ -32,7 +33,8 @@ export class PermissionUtils {
 	public static canSend(channel: Channel, embedLinks: boolean = false): boolean {
 		if (channel instanceof DMChannel) {
 			return true;
-		} else if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
+		}
+		if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
 			const channelPerms = channel.permissionsFor(channel.client.user);
 			if (!channelPerms) {
 				// This can happen if the guild disconnected while a collector is running
@@ -54,7 +56,8 @@ export class PermissionUtils {
 	public static canMention(channel: Channel): boolean {
 		if (channel instanceof DMChannel) {
 			return true;
-		} else if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
+		}
+		if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
 			const channelPerms = channel.permissionsFor(channel.client.user);
 			if (!channelPerms) {
 				// This can happen if the guild disconnected while a collector is running
@@ -74,7 +77,8 @@ export class PermissionUtils {
 	public static canReact(channel: Channel, removeOthers: boolean = false): boolean {
 		if (channel instanceof DMChannel) {
 			return true;
-		} else if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
+		}
+		if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
 			const channelPerms = channel.permissionsFor(channel.client.user);
 			if (!channelPerms) {
 				// This can happen if the guild disconnected while a collector is running
@@ -99,7 +103,8 @@ export class PermissionUtils {
 	public static canPin(channel: Channel, findOld: boolean = false): boolean {
 		if (channel instanceof DMChannel) {
 			return true;
-		} else if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
+		}
+		if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
 			const channelPerms = channel.permissionsFor(channel.client.user);
 			if (!channelPerms) {
 				// This can happen if the guild disconnected while a collector is running
@@ -125,7 +130,8 @@ export class PermissionUtils {
 	): boolean {
 		if (channel instanceof DMChannel) {
 			return false;
-		} else if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
+		}
+		if (channel instanceof GuildChannel || channel instanceof ThreadChannel) {
 			const channelPerms = channel.permissionsFor(channel.client.user);
 			if (!channelPerms) {
 				// This can happen if the guild disconnected while a collector is running

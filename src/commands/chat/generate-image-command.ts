@@ -67,8 +67,9 @@ export class GenerateImageCommand implements Command {
 					logs: true,
 					onQueueUpdate: (update) => {
 						if (update.status === 'IN_PROGRESS') {
-							for (const message of update.logs
-								.map(log => log.message)) { Logger.debug(message); }
+							for (const log of update.logs) {
+								Logger.debug(log.message);
+							}
 						} else {
 							Logger.debug(update.status);
 						}

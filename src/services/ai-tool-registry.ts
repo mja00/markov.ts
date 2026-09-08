@@ -58,9 +58,10 @@ export class AIToolRegistry {
 
 	public definitions(options: { includeWeb?: boolean; } = {}): OpenAI.Responses.Tool[] {
 		const includeWeb = options.includeWeb ?? true;
-		return [...this.tools.values()]
+		return this.tools.values()
 			.filter(tool => includeWeb || tool.scope !== 'web')
-			.map(tool => tool.definition);
+			.map(tool => tool.definition)
+			.toArray();
 	}
 
 	public has(name: string): boolean {
@@ -190,7 +191,9 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; } = {}):
 			const rarity = await fishing.determineRarity(user.id);
 			context.signal?.throwIfAborted();
 			const caught = await fishing.pickCatchableByRarity(rarity);
-			if (!caught) { return { success: false, reason: 'no_catchable' }; }
+			if (!caught) {
+				return { success: false, reason: 'no_catchable' };
+			}
 			const worth = await fishing.calculateFinalWorth(caught.worth, user.id);
 			context.signal?.throwIfAborted();
 			const outcome = await getDb().transaction(async (tx) => {
@@ -263,13 +266,17 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; } = {}):
 					.where(eq(usersTable.id, user.id))
 					.returning();
 				context.signal?.throwIfAborted();
-				if (!updatedUsers[0]) { throw new Error(`User ${user.id} not found`); }
+				if (!updatedUsers[0]) {
+					throw new Error(`User ${user.id} not found`);
+				}
 				const catchRecords = await tx.insert(catches).values({
 					caughtBy: user.id,
 					catchableId: caught.id,
 				}).returning();
 				context.signal?.throwIfAborted();
-				if (!catchRecords[0]) { throw new Error('Failed to record catch'); }
+				if (!catchRecords[0]) {
+					throw new Error('Failed to record catch');
+				}
 				return { success: true as const, user: updatedUsers[0], catchRecord: catchRecords[0] };
 			});
 			if (!outcome.success) {
@@ -297,7 +304,9 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; } = {}):
 			const identifier = String(arguments_.identifier);
 			const quantity = Math.min(ShopLimits.MAX_PURCHASE_QUANTITY, Math.max(1, Number(arguments_.quantity)));
 			const item = await shop.getShopItemByIdOrSlug(identifier);
-			if (!item) { return { success: false, reason: 'not_found' }; }
+			if (!item) {
+				return { success: false, reason: 'not_found' };
+			}
 			return {
 				success: false,
 				confirmationRequired: true,
@@ -315,8 +324,12 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; } = {}):
 		handler: async (arguments_, context) => {
 			const user = await currentUser(context);
 			const owned = await shop.getInventoryItem(user.id, String(arguments_.item_id));
-			if (!owned) { return { success: false, reason: 'not_owned' }; }
-			if (!owned.item.isPassive) { return { success: false, reason: 'not_passive' }; }
+			if (!owned) {
+				return { success: false, reason: 'not_owned' };
+			}
+			if (!owned.item.isPassive) {
+				return { success: false, reason: 'not_passive' };
+			}
 			return { success: true, item: owned.item.name, active: true, activationRequired: false };
 		},
 	});
@@ -350,7 +363,7 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; } = {}):
 				const result = await options.kagi?.extract(String(arguments_.url), context.web);
 				return {
 					...(result ?? { available: false, url: String(arguments_.url), reason: 'Web extraction is unavailable.' }),
-					...(result?.content ? { content: `<untrusted_web_content>\n${result.content}\n</untrusted_web_content>` } : {}),
+					...(result?.content && { content: `<untrusted_web_content>\n${result.content}\n</untrusted_web_content>` }),
 					focus: typeof arguments_.focus === 'string' ? arguments_.focus : null,
 				};
 			},

@@ -43,16 +43,24 @@ import { PromptSettingsService } from '../../../src/services/prompt-settings.ser
 
 // Builders matching the call chains in the service.
 function makeSelect(rows: unknown[]): unknown {
-	return { from: () => { return { where: () => { return { limit: () => Promise.resolve(rows) }; } }; } };
+	return { from: () => {
+		return { where: () => {
+			return { limit: () => Promise.resolve(rows) };
+		} };
+	} };
 }
 function makeInsert(): unknown {
-	return { values: () => { return { onConflictDoNothing: () => Promise.resolve(undefined) }; } };
+	return { values: () => {
+		return { onConflictDoNothing: () => Promise.resolve(undefined) };
+	} };
 }
 function makeUpdate(rows: unknown[], capture?: (set: Record<string, unknown>) => void): unknown {
 	return {
 		set: (payload: Record<string, unknown>) => {
 			capture?.(payload);
-			return { where: () => { return { returning: () => Promise.resolve(rows) }; } };
+			return { where: () => {
+				return { returning: () => Promise.resolve(rows) };
+			} };
 		},
 	};
 }
@@ -148,7 +156,7 @@ describe('PromptSettingsService', () => {
 
 	it('rejects an empty system prompt', async () => {
 		const service = freshService();
-		await expect(service.update({ systemPrompt: '   ' })).rejects.toThrow(/empty/i);
+		await expect(service.update({ systemPrompt: ' '.repeat(3) })).rejects.toThrow(/empty/i);
 		expect(updateMock).not.toHaveBeenCalled();
 	});
 

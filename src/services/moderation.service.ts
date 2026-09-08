@@ -25,7 +25,7 @@ export type ModerationServiceOptions = {
 	telemetry?: WebTelemetry;
 };
 
-const defaultClient = (): ModerationClient => new OpenAI({ apiKey: Config.openai?.apiKey }) as unknown as ModerationClient;
+const defaultClient = (): ModerationClient => new OpenAI({ apiKey: Config.openai?.apiKey });
 
 export class ModerationService {
 	private readonly config: ModerationConfig;

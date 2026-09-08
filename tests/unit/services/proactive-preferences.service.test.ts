@@ -63,15 +63,21 @@ import { ProactivePreferencesService } from '../../../src/services/proactive-pre
 // db.select().from().where() -> rows
 function mockSubscribers(rows: unknown[]): void {
 	const where = vi.fn().mockResolvedValue(rows);
-	const from = vi.fn(() => { return { where }; });
+	const from = vi.fn(() => {
+		return { where };
+	});
 	selectMock.mockReturnValue({ from });
 }
 
 // db.insert().values().onConflictDoNothing().returning() -> one row (claim won)
 function mockClaimAlwaysWins(): void {
 	const returning = vi.fn().mockResolvedValue([{ id: 'claim' }]);
-	const onConflictDoNothing = vi.fn(() => { return { returning }; });
-	const values = vi.fn(() => { return { onConflictDoNothing }; });
+	const onConflictDoNothing = vi.fn(() => {
+		return { returning };
+	});
+	const values = vi.fn(() => {
+		return { onConflictDoNothing };
+	});
 	insertMock.mockReturnValue({ values });
 }
 

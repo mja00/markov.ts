@@ -24,30 +24,6 @@ export class ModalHandler implements EventHandler {
 
 	constructor(private eventDataService: EventDataService) {}
 
-	public async process(intr: ModalSubmitInteraction): Promise<void> {
-		// Don't respond to self, or other bots
-		if (intr.user.id === intr.client.user?.id || intr.user.bot) {
-			return;
-		}
-
-		// Check if user is rate limited
-		const limited = this.rateLimiter.take(intr.user.id);
-		if (limited) {
-			return;
-		}
-
-		// Handle shop buy modals
-		if (intr.customId.startsWith('shop:buy:')) {
-			await this.handleShopBuyModal(intr);
-			return;
-		}
-
-		// Handle the owner-only system prompt editor.
-		if (intr.customId === 'prompt:edit:system') {
-			await this.handlePromptEditModal(intr);
-		}
-	}
-
 	private async handlePromptEditModal(intr: ModalSubmitInteraction): Promise<void> {
 		// Re-check the owner gate — the modal can be submitted independently of the
 		// command that opened it.
@@ -143,6 +119,30 @@ export class ModalHandler implements EventHandler {
 			await InteractionUtils.send(intr, {
 				content: 'An error occurred while processing your purchase. Please try again later.',
 			}, true);
+		}
+	}
+
+	public async process(intr: ModalSubmitInteraction): Promise<void> {
+		// Don't respond to self, or other bots
+		if (intr.user.id === intr.client.user?.id || intr.user.bot) {
+			return;
+		}
+
+		// Check if user is rate limited
+		const limited = this.rateLimiter.take(intr.user.id);
+		if (limited) {
+			return;
+		}
+
+		// Handle shop buy modals
+		if (intr.customId.startsWith('shop:buy:')) {
+			await this.handleShopBuyModal(intr);
+			return;
+		}
+
+		// Handle the owner-only system prompt editor.
+		if (intr.customId === 'prompt:edit:system') {
+			await this.handlePromptEditModal(intr);
 		}
 	}
 }

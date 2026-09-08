@@ -26,11 +26,6 @@ export class ShardsController implements Controller {
 
 	constructor(private shardManager: ShardingManager) {}
 
-	public register(): void {
-		this.router.get('/', (req, res) => this.getShards(req, res));
-		this.router.put('/presence', mapClass(SetShardPresencesRequest), (req, res) => this.setShardPresences(req, res));
-	}
-
 	private async getShards(req: Request, res: Response): Promise<void> {
 		const shardDatas = await Promise.all(
 			this.shardManager.shards.map(async (shard) => {
@@ -76,5 +71,10 @@ export class ShardsController implements Controller {
 		);
 
 		res.sendStatus(200);
+	}
+
+	public register(): void {
+		this.router.get('/', (req, res) => this.getShards(req, res));
+		this.router.put('/presence', mapClass(SetShardPresencesRequest), (req, res) => this.setShardPresences(req, res));
 	}
 }

@@ -31,14 +31,54 @@ try {
 const PREFERENCES_PER_RUN = 100;
 
 export class EnqueueProactiveMessagesJob extends Job {
+	private readonly preferences = new ProactivePreferencesService();
+	private readonly scheduled = new ScheduledMessageService();
+	private cursor?: string;
+
 	public name = 'Enqueue Proactive Messages';
 	public schedule: string = Config.jobs?.enqueueProactiveMessages?.schedule ?? '0 0 * * * *';
 	public log: boolean = Config.jobs?.enqueueProactiveMessages?.log ?? false;
 	public runOnce = false;
 	public initialDelaySecs: number = Config.jobs?.enqueueProactiveMessages?.initialDelaySecs ?? 20;
-	private readonly preferences = new ProactivePreferencesService();
-	private readonly scheduled = new ScheduledMessageService();
-	private cursor?: string;
+
+	private async enqueue(
+		enabled: boolean,
+		feature: string,
+		period: string,
+		preference: typeof userAssistantPreferences.$inferSelect,
+		content: string,
+	): Promise<void> {
+		if (!enabled || !preference.destinationChannelSnowflake
+			|| !await this.preferences.claimDelivery(feature, preference.preferenceKey, period)) {
+			return;
+		}
+		try {
+			await this.scheduled.schedule({
+				channelSnowflake: preference.destinationChannelSnowflake,
+				guildSnowflake: preference.guildSnowflake,
+				createdBySnowflake: preference.userSnowflake,
+				content: `<@${preference.userSnowflake}> ${content}`,
+				scheduledAt: DateTime.now().plus({ minutes: 1 }).toJSDate(),
+			});
+		} catch (error) {
+			try {
+				await this.preferences.releaseDelivery(feature, preference.preferenceKey, period);
+			} catch (releaseError) {
+				Logger.warn(`[EnqueueProactiveMessagesJob] Failed to release ${feature} delivery:`, releaseError);
+			}
+			Logger.warn(`[EnqueueProactiveMessagesJob] Failed to schedule ${feature}:`, error);
+		}
+	}
+
+	private isQuiet(preference: typeof userAssistantPreferences.$inferSelect): boolean {
+		if (!preference.quietHoursStart || !preference.quietHoursEnd) {
+			return false;
+		}
+		const now = DateTime.now().setZone(preference.timezone).toFormat('HH:mm');
+		return preference.quietHoursStart <= preference.quietHoursEnd
+			? now >= preference.quietHoursStart && now < preference.quietHoursEnd
+			: now >= preference.quietHoursStart || now < preference.quietHoursEnd;
+	}
 
 	public async run(): Promise<void> {
 		if (!areAutomationsEnabled()) {
@@ -80,44 +120,5 @@ export class EnqueueProactiveMessagesJob extends Job {
 					: `${local.weekYear}-W${local.weekNumber}`);
 			await this.enqueue(preference.collectionReminders, 'collection_reminder', reminderPeriod, preference, '🗂️ Keep building your fishing collection—ask me for your collection progress.');
 		}
-	}
-
-	private async enqueue(
-		enabled: boolean,
-		feature: string,
-		period: string,
-		preference: typeof userAssistantPreferences.$inferSelect,
-		content: string,
-	): Promise<void> {
-		if (!enabled || !preference.destinationChannelSnowflake
-			|| !await this.preferences.claimDelivery(feature, preference.preferenceKey, period)) {
-			return;
-		}
-		try {
-			await this.scheduled.schedule({
-				channelSnowflake: preference.destinationChannelSnowflake,
-				guildSnowflake: preference.guildSnowflake,
-				createdBySnowflake: preference.userSnowflake,
-				content: `<@${preference.userSnowflake}> ${content}`,
-				scheduledAt: DateTime.now().plus({ minutes: 1 }).toJSDate(),
-			});
-		} catch (error) {
-			try {
-				await this.preferences.releaseDelivery(feature, preference.preferenceKey, period);
-			} catch (releaseError) {
-				Logger.warn(`[EnqueueProactiveMessagesJob] Failed to release ${feature} delivery:`, releaseError);
-			}
-			Logger.warn(`[EnqueueProactiveMessagesJob] Failed to schedule ${feature}:`, error);
-		}
-	}
-
-	private isQuiet(preference: typeof userAssistantPreferences.$inferSelect): boolean {
-		if (!preference.quietHoursStart || !preference.quietHoursEnd) {
-			return false;
-		}
-		const now = DateTime.now().setZone(preference.timezone).toFormat('HH:mm');
-		return preference.quietHoursStart <= preference.quietHoursEnd
-			? now >= preference.quietHoursStart && now < preference.quietHoursEnd
-			: now >= preference.quietHoursStart || now < preference.quietHoursEnd;
 	}
 }

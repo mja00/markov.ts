@@ -33,6 +33,21 @@ export class CommandHandler implements EventHandler {
 		private eventDataService: EventDataService,
 	) {}
 
+	private async sendError(intr: CommandInteraction, data: EventData): Promise<void> {
+		try {
+			await InteractionUtils.send(
+				intr,
+				Lang.getEmbed('errorEmbeds.command', data.lang, {
+					ERROR_CODE: intr.id,
+					GUILD_ID: intr.guild?.id ?? Lang.getRef('other.na', data.lang),
+					SHARD_ID: (intr.guild?.shardId ?? 0).toString(),
+				}),
+			);
+		} catch {
+			// Ignore
+		}
+	}
+
 	public async process(intr: CommandInteraction | AutocompleteInteraction): Promise<void> {
 		// Don't respond to self, or other bots
 		if (intr.user.id === intr.client.user?.id || intr.user.bot) {
@@ -169,19 +184,5 @@ export class CommandHandler implements EventHandler {
 			);
 		}
 	}
-
-	private async sendError(intr: CommandInteraction, data: EventData): Promise<void> {
-		try {
-			await InteractionUtils.send(
-				intr,
-				Lang.getEmbed('errorEmbeds.command', data.lang, {
-					ERROR_CODE: intr.id,
-					GUILD_ID: intr.guild?.id ?? Lang.getRef('other.na', data.lang),
-					SHARD_ID: (intr.guild?.shardId ?? 0).toString(),
-				}),
-			);
-		} catch {
-			// Ignore
-		}
-	}
 }
+

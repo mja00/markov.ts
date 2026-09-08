@@ -17,12 +17,12 @@ import { InteractionUtils } from '../../utils/interaction-utils.js';
 import { Command, CommandDeferType } from '../index.js';
 
 export class BuyCommand implements Command {
+	private readonly userService = new UserService();
+	private readonly shopService = new ShopService();
+
 	public names = [Lang.getRef('chatCommands.buy', Language.Default)];
 	public deferType = CommandDeferType.PUBLIC;
 	public requireClientPerms: PermissionsString[] = [];
-
-	private readonly userService = new UserService();
-	private readonly shopService = new ShopService();
 
 	/**
      * Autocomplete handler for the buy command

@@ -22,6 +22,32 @@ export class Lang {
 		'lang',
 	);
 
+	private static embedTm: TypeMapper<EmbedBuilder> = (jsonValue: any) => new EmbedBuilder({
+		author: jsonValue.author,
+		title: Utils.join(jsonValue.title, '\n'),
+		url: jsonValue.url,
+		thumbnail: {
+			url: jsonValue.thumbnail,
+		},
+		description: Utils.join(jsonValue.description, '\n'),
+		fields: jsonValue.fields?.map((field) => {
+			return {
+				name: Utils.join(field.name, '\n'),
+				value: Utils.join(field.value, '\n'),
+				inline: field.inline ?? false,
+			};
+		}),
+		image: {
+			url: jsonValue.image,
+		},
+		footer: {
+			text: Utils.join(jsonValue.footer?.text, '\n'),
+			iconURL: jsonValue.footer?.icon,
+		},
+		timestamp: jsonValue.timestamp ? Date.now() : undefined,
+		color: resolveColor(jsonValue.color ?? Lang.getCom('colors.default')),
+	});
+
 	public static getEmbed(
 		location: string,
 		langCode: Locale,
@@ -65,30 +91,4 @@ export class Lang {
 	public static getCom(location: string, variables?: { [name: string]: string; }): string {
 		return this.linguini.getCom(location, variables);
 	}
-
-	private static embedTm: TypeMapper<EmbedBuilder> = (jsonValue: any) => new EmbedBuilder({
-		author: jsonValue.author,
-		title: Utils.join(jsonValue.title, '\n'),
-		url: jsonValue.url,
-		thumbnail: {
-			url: jsonValue.thumbnail,
-		},
-		description: Utils.join(jsonValue.description, '\n'),
-		fields: jsonValue.fields?.map((field) => {
-			return {
-				name: Utils.join(field.name, '\n'),
-				value: Utils.join(field.value, '\n'),
-				inline: field.inline ?? false,
-			};
-		}),
-		image: {
-			url: jsonValue.image,
-		},
-		footer: {
-			text: Utils.join(jsonValue.footer?.text, '\n'),
-			iconURL: jsonValue.footer?.icon,
-		},
-		timestamp: jsonValue.timestamp ? Date.now() : undefined,
-		color: resolveColor(jsonValue.color ?? Lang.getCom('colors.default')),
-	});
 }

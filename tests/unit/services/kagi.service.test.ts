@@ -40,11 +40,11 @@ describe('KagiService', () => {
 			expect(JSON.parse(init?.body ?? '{}')).toMatchObject({
 				query: 'latest markov release', workflow: 'search', format: 'json', safe_search: true, limit: 5,
 			});
-			return new Response(JSON.stringify({ data: { search: [{
+			return Response.json({ data: { search: [{
 				url: 'https://example.com/release#tracking',
 				title: 'Latest release',
 				snippet: 'Release details',
-			}] } }), { status: 200 });
+			}] } }, { status: 200 });
 		});
 		const service = new KagiService({ config: config(), fetcher });
 		const request = state();
@@ -82,10 +82,10 @@ describe('KagiService', () => {
 	});
 
 	it('extracts public pages with a content limit and records the page as a source', async () => {
-		const fetcher = vi.fn(async () => new Response(JSON.stringify({ data: [{
+		const fetcher = vi.fn(async () => Response.json({ data: [{
 			url: 'https://example.com/article',
 			markdown: 'A'.repeat(100),
-		}] }), { status: 200 }));
+		}] }, { status: 200 }));
 		const service = new KagiService({
 			config: config({ maxExtractChars: 20 }),
 			fetcher,
@@ -98,11 +98,11 @@ describe('KagiService', () => {
 			url: 'https://example.com/article',
 			content: 'A'.repeat(20),
 		});
-		expect([...request.sources.values()]).toEqual([{ url: 'https://example.com/article', title: 'example.com' }]);
+		expect(request.sources.values().toArray()).toEqual([{ url: 'https://example.com/article', title: 'example.com' }]);
 	});
 
 	it('enforces the per-user upstream quota across independent request states', async () => {
-		const fetcher = vi.fn(async () => new Response(JSON.stringify({ data: { search: [] } }), { status: 200 }));
+		const fetcher = vi.fn(async () => Response.json({ data: { search: [] } }, { status: 200 }));
 		const service = new KagiService({ config: config({ maxCallsPerUserPerHour: 1 }), fetcher });
 
 		await service.search('first', state('same-user'));

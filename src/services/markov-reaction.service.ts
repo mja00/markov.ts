@@ -81,6 +81,18 @@ export class MarkovReactionService {
 		this.now = options.now ?? Date.now;
 	}
 
+	private canUseGuildEmoji(emoji: GuildEmoji, guild: Guild): boolean {
+		if (emoji.available === false) {
+			return false;
+		}
+		if (emoji.roles.cache.size === 0) {
+			return true;
+		}
+
+		const botMember = guild.members.me;
+		return Boolean(botMember && emoji.roles.cache.some(role => botMember.roles.cache.has(role.id)));
+	}
+
 	public async react(
 		msg: Message,
 		input: MarkovReactionSelectionInput,
@@ -148,17 +160,5 @@ export class MarkovReactionService {
 		}
 
 		return candidates;
-	}
-
-	private canUseGuildEmoji(emoji: GuildEmoji, guild: Guild): boolean {
-		if (emoji.available === false) {
-			return false;
-		}
-		if (emoji.roles.cache.size === 0) {
-			return true;
-		}
-
-		const botMember = guild.members.me;
-		return Boolean(botMember && emoji.roles.cache.some(role => botMember.roles.cache.has(role.id)));
 	}
 }

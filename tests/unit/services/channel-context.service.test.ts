@@ -54,17 +54,27 @@ const CHANNEL = 'CHANNEL_A';
 // db.select().from().where().orderBy().limit() -> rows
 function mockSelect(rows: unknown[]): void {
 	const limit = vi.fn().mockResolvedValue(rows);
-	const orderBy = vi.fn(() => { return { limit }; });
-	const where = vi.fn(() => { return { orderBy }; });
-	const from = vi.fn(() => { return { where }; });
+	const orderBy = vi.fn(() => {
+		return { limit };
+	});
+	const where = vi.fn(() => {
+		return { orderBy };
+	});
+	const from = vi.fn(() => {
+		return { where };
+	});
 	selectMock.mockReturnValue({ from });
 }
 
 // tx.insert().values().onConflictDoNothing().returning() -> rows
 function mockTxInsert(rows: unknown[]): ReturnType<typeof vi.fn> {
 	const returning = vi.fn().mockResolvedValue(rows);
-	const onConflictDoNothing = vi.fn(() => { return { returning }; });
-	const values = vi.fn(() => { return { onConflictDoNothing }; });
+	const onConflictDoNothing = vi.fn(() => {
+		return { returning };
+	});
+	const values = vi.fn(() => {
+		return { onConflictDoNothing };
+	});
 	txInsertMock.mockReturnValue({ values });
 	return values;
 }
