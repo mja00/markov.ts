@@ -250,7 +250,9 @@ export const userAssistantPreferences = pgTable('user_assistant_preferences', {
 	frequency: varchar('frequency', { length: 32 }).default('weekly').notNull(),
 	destinationChannelSnowflake: varchar('destination_channel_snowflake', { length: 255 }),
 	updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (table) => { return { preferenceKeyIdx: uniqueIndex('user_assistant_preferences_key_idx').on(table.preferenceKey) }; });
+}, (table) => {
+	return { preferenceKeyIdx: uniqueIndex('user_assistant_preferences_key_idx').on(table.preferenceKey) };
+});
 
 export const guildAssistantPreferences = pgTable('guild_assistant_preferences', {
 	guildSnowflake: varchar('guild_snowflake', { length: 255 }).primaryKey(),
@@ -270,7 +272,9 @@ export const automationDeliveries = pgTable('automation_deliveries', {
 	feature: varchar('feature', { length: 100 }).notNull(),
 	targetSnowflake: varchar('target_snowflake', { length: 255 }).notNull(),
 	deliveredAt: timestamp('delivered_at').defaultNow().notNull(),
-}, (table) => { return { dedupeIdx: uniqueIndex('automation_deliveries_dedupe_idx').on(table.dedupeKey) }; });
+}, (table) => {
+	return { dedupeIdx: uniqueIndex('automation_deliveries_dedupe_idx').on(table.dedupeKey) };
+});
 
 export const scheduledMessageStatusEnum = pgEnum('scheduled_message_status_enum', [
 	'PENDING',

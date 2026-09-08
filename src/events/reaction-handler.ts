@@ -22,6 +22,10 @@ export class ReactionHandler implements EventHandler {
 		private eventDataService: EventDataService,
 	) {}
 
+	private findReaction(emoji: string): Reaction {
+		return this.reactions.find(reaction => reaction.emoji === emoji);
+	}
+
 	public async process(msgReaction: MessageReaction, msg: Message, reactor: User): Promise<void> {
 		// Don't respond to self, or other bots
 		if (reactor.id === msgReaction.client.user?.id || reactor.bot) {
@@ -62,9 +66,5 @@ export class ReactionHandler implements EventHandler {
 
 		// Execute the reaction
 		await reaction.execute(msgReaction, msg, reactor, data);
-	}
-
-	private findReaction(emoji: string): Reaction {
-		return this.reactions.find(reaction => reaction.emoji === emoji);
 	}
 }

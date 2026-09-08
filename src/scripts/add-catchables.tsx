@@ -184,7 +184,7 @@ Make the names creative and varied. Return ONLY the JSON array, no other text.`;
 		}
 
 		// Try to extract JSON from the response
-		const jsonMatch = content.match(/\[[\S\s]*]/);
+		const jsonMatch = content.match(/\[[\s\S]*\]/);
 		if (!jsonMatch) {
 			return null;
 		}
@@ -264,7 +264,7 @@ function Select({ items, onSelect }: { items: Array<{ label: string; value: any;
 
 	useInput((input, key) => {
 		if (key.upArrow) {
-			setSelectedIndex(prev => (prev > 0 ? prev - 1 : items.length - 1));
+			setSelectedIndex(prev => (prev > 0 ? prev : items.length) - 1);
 		} else if (key.downArrow) {
 			setSelectedIndex(prev => (prev < items.length - 1 ? prev + 1 : 0));
 		} else if (key.return) {
@@ -332,20 +332,28 @@ function App(): ReactElement {
 	});
 
 	const handleRaritySelect = (rarity: Rarity): void => {
-		setState((prev) => { return { ...prev, rarity, step: 'count' }; });
+		setState((prev) => {
+			return { ...prev, rarity, step: 'count' };
+		});
 	};
 
 	const handleCountSubmit = (): void => {
 		const num = Number.parseInt(state.count, 10);
 		if (Number.isNaN(num) || num <= 0) {
-			setState((prev) => { return { ...prev, error: 'Count must be a positive number' }; });
+			setState((prev) => {
+				return { ...prev, error: 'Count must be a positive number' };
+			});
 			return;
 		}
-		setState((prev) => { return { ...prev, step: 'openai', error: null }; });
+		setState((prev) => {
+			return { ...prev, step: 'openai', error: null };
+		});
 	};
 
 	const handleOpenAISelect = (useOpenAI: boolean): void => {
-		setState((prev) => { return { ...prev, useOpenAI, step: 'image' }; });
+		setState((prev) => {
+			return { ...prev, useOpenAI, step: 'image' };
+		});
 	};
 
 	const handleImageSubmit = async (): Promise<void> => {
@@ -358,7 +366,9 @@ function App(): ReactElement {
 		const currentUseOpenAI = state.useOpenAI;
 		const currentImageUrl = state.imageUrl.trim() || null;
 
-		setState((prev) => { return { ...prev, step: 'generating' }; });
+		setState((prev) => {
+			return { ...prev, step: 'generating' };
+		});
 
 		try {
 			// Connect to database
@@ -439,7 +449,9 @@ function App(): ReactElement {
 					<Text>How many catchables to generate?</Text>
 					<TextInputComponent
 						value={state.count}
-						onChange={value => setState((prev) => { return { ...prev, count: value }; })}
+						onChange={value => setState((prev) => {
+							return { ...prev, count: value };
+						})}
 						onSubmit={handleCountSubmit}
 						placeholder="Enter a number"
 					/>
@@ -473,7 +485,9 @@ function App(): ReactElement {
 					<Text>Image URL (optional, press Enter to skip):</Text>
 					<TextInputComponent
 						value={state.imageUrl}
-						onChange={value => setState((prev) => { return { ...prev, imageUrl: value }; })}
+						onChange={value => setState((prev) => {
+							return { ...prev, imageUrl: value };
+						})}
 						onSubmit={handleImageSubmit}
 						placeholder="https://example.com/image.png"
 					/>

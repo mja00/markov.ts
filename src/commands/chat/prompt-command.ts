@@ -25,64 +25,13 @@ const Config = require('../../../config/config.json');
 const PROMPT_PREVIEW_LENGTH = 3800;
 
 export class PromptCommand implements Command {
+	private readonly promptSettings = PromptSettingsService.getInstance();
+
 	public names = [Lang.getRef('chatCommands.prompt', Language.Default)];
 	// NONE so `edit` can open a modal — you cannot showModal once an interaction
 	// has been deferred or replied to. The other actions reply themselves.
 	public deferType = CommandDeferType.NONE;
 	public requireClientPerms: PermissionsString[] = [];
-
-	private readonly promptSettings = PromptSettingsService.getInstance();
-
-	/**
-	 * Owner-only command to view and live-tweak Markov's OpenAI prompt settings
-	 * (system prompt, model, reasoning effort, verbosity, summary).
-	 */
-	public async execute(intr: ChatInputCommandInteraction, data: EventData): Promise<void> {
-		// Owner gate — same check as /dev.
-		if (!Config.developers.includes(intr.user.id)) {
-			await InteractionUtils.send(intr, Lang.getEmbed('validationEmbeds.devOnly', data.lang));
-			return;
-		}
-
-		const action = intr.options.getString(
-			Lang.getRef('arguments.promptAction', Language.Default),
-		) as PromptOption;
-
-		try {
-			switch (action) {
-				case PromptOption.VIEW: {
-					await this.handleView(intr);
-					return;
-				}
-				case PromptOption.EDIT: {
-					await this.handleEdit(intr);
-					return;
-				}
-				case PromptOption.SET: {
-					await this.handleSet(intr);
-					return;
-				}
-				case PromptOption.RESET: {
-					await this.promptSettings.reset();
-					await this.clearConversations();
-					await InteractionUtils.send(
-						intr,
-						'Prompt settings reset to defaults. Applies to new conversations; across shards within ~30s.',
-						true,
-					);
-					return;
-				}
-				default: {
-					await InteractionUtils.send(intr, 'Unknown action.', true);
-				}
-			}
-		} catch (error) {
-			Logger.error('[PromptCommand] Error executing prompt command:', error);
-			// Validation errors carry user-facing messages; surface them directly.
-			const message = error instanceof Error ? error.message : 'An error occurred.';
-			await InteractionUtils.send(intr, message, true);
-		}
-	}
 
 	private async handleView(intr: ChatInputCommandInteraction): Promise<void> {
 		const settings = await this.promptSettings.get();
@@ -163,5 +112,56 @@ export class PromptCommand implements Command {
 	private async clearConversations(): Promise<void> {
 		const openai = await OpenAIService.getInstance();
 		await openai.clearConversation();
+	}
+
+	/**
+	 * Owner-only command to view and live-tweak Markov's OpenAI prompt settings
+	 * (system prompt, model, reasoning effort, verbosity, summary).
+	 */
+	public async execute(intr: ChatInputCommandInteraction, data: EventData): Promise<void> {
+		// Owner gate — same check as /dev.
+		if (!Config.developers.includes(intr.user.id)) {
+			await InteractionUtils.send(intr, Lang.getEmbed('validationEmbeds.devOnly', data.lang));
+			return;
+		}
+
+		const action = intr.options.getString(
+			Lang.getRef('arguments.promptAction', Language.Default),
+		) as PromptOption;
+
+		try {
+			switch (action) {
+				case PromptOption.VIEW: {
+					await this.handleView(intr);
+					return;
+				}
+				case PromptOption.EDIT: {
+					await this.handleEdit(intr);
+					return;
+				}
+				case PromptOption.SET: {
+					await this.handleSet(intr);
+					return;
+				}
+				case PromptOption.RESET: {
+					await this.promptSettings.reset();
+					await this.clearConversations();
+					await InteractionUtils.send(
+						intr,
+						'Prompt settings reset to defaults. Applies to new conversations; across shards within ~30s.',
+						true,
+					);
+					return;
+				}
+				default: {
+					await InteractionUtils.send(intr, 'Unknown action.', true);
+				}
+			}
+		} catch (error) {
+			Logger.error('[PromptCommand] Error executing prompt command:', error);
+			// Validation errors carry user-facing messages; surface them directly.
+			const message = error instanceof Error ? error.message : 'An error occurred.';
+			await InteractionUtils.send(intr, message, true);
+		}
 	}
 }

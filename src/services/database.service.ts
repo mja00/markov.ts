@@ -10,6 +10,17 @@ import * as schema from '../db/schema.js';
  */
 export class DatabaseService {
 	private static instance: DatabaseService | null = null;
+
+	/**
+     * Get the singleton instance of DatabaseService
+     */
+	public static getInstance(): DatabaseService {
+		if (!this.instance) {
+			this.instance = new this();
+		}
+		return this.instance;
+	}
+
 	private db: PostgresJsDatabase<typeof schema> | null = null;
 	private client: postgres.Sql | null = null;
 
@@ -17,16 +28,6 @@ export class DatabaseService {
      * Private constructor to enforce singleton pattern
      */
 	private constructor() {}
-
-	/**
-     * Get the singleton instance of DatabaseService
-     */
-	public static getInstance(): DatabaseService {
-		if (!DatabaseService.instance) {
-			DatabaseService.instance = new DatabaseService();
-		}
-		return DatabaseService.instance;
-	}
 
 	/**
      * Initialize database connection

@@ -18,6 +18,14 @@ const Logs = require('../../lang/logs.json');
 export class CommandRegistrationService {
 	constructor(private rest: REST) {}
 
+	private formatCommandList(
+		cmds: RESTPostAPIApplicationCommandsJSONBody[] | APIApplicationCommand[],
+	): string {
+		return cmds.length > 0
+			? cmds.map((cmd: { name: string; }) => `'${cmd.name}'`).join(', ')
+			: 'N/A';
+	}
+
 	public async process(
 		localCmds: RESTPostAPIApplicationCommandsJSONBody[],
 		args: string[],
@@ -191,13 +199,5 @@ export class CommandRegistrationService {
 				Logger.info(Logs.info.commandActionCleared);
 			}
 		}
-	}
-
-	private formatCommandList(
-		cmds: RESTPostAPIApplicationCommandsJSONBody[] | APIApplicationCommand[],
-	): string {
-		return cmds.length > 0
-			? cmds.map((cmd: { name: string; }) => `'${cmd.name}'`).join(', ')
-			: 'N/A';
 	}
 }

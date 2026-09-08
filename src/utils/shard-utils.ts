@@ -21,7 +21,8 @@ export class ShardUtils {
 	public static shardIds(shardInterface: ShardingManager | ShardClientUtil): number[] {
 		if (shardInterface instanceof ShardingManager) {
 			return shardInterface.shards.map(shard => shard.id);
-		} else if (shardInterface instanceof ShardClientUtil) {
+		}
+		if (shardInterface instanceof ShardClientUtil) {
 			return shardInterface.ids;
 		}
 	}

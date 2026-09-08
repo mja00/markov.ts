@@ -48,6 +48,60 @@ export class ChannelContextService {
 		this.summarizer = options.summarizer;
 	}
 
+	private async summarizeIfNeeded(guildSnowflake: string, channelSnowflake: string): Promise<void> {
+		const rows = await getDb().select().from(channelMessages)
+			.where(and(
+				eq(channelMessages.guildSnowflake, guildSnowflake),
+				eq(channelMessages.channelSnowflake, channelSnowflake),
+				gt(channelMessages.expiresAt, new Date()),
+			))
+			.orderBy(asc(channelMessages.postedAt))
+			.limit(this.summaryThreshold);
+		if (rows.length < this.summaryThreshold) {
+			return;
+		}
+		const throughMessage = rows.at(-1);
+		if (!throughMessage) {
+			return;
+		}
+		// Only the AI summarizer's abstractive output may be persisted: raw
+		// transcripts outlive the retention window and the MessageDelete purge,
+		// so without a summarizer we skip and let messages expire naturally.
+		if (!this.summarizer) {
+			return;
+		}
+		const transcript = rows.map(row => `${row.authorName}: ${row.content || '[attachment]'}`).join('\n').slice(0, 8000);
+		let summary: string | null;
+		try {
+			summary = await this.summarizer(transcript, channelSnowflake);
+		} catch (error) {
+			Logger.warn('[ChannelContextService] AI summarization failed; leaving messages to expire naturally:', error);
+			return;
+		}
+		if (!summary) {
+			return;
+		}
+		await getDb().transaction(async (tx) => {
+			const inserted = await tx.insert(conversationSummaries).values({
+				guildSnowflake,
+				channelSnowflake,
+				summary,
+				throughMessageSnowflake: throughMessage.messageSnowflake,
+				messageCount: rows.length,
+				expiresAt: new Date(Date.now() + this.summaryTtlMs),
+			})
+				.onConflictDoNothing()
+				.returning({ id: conversationSummaries.id });
+			if (inserted.length === 0) {
+				return;
+			}
+			await tx.delete(channelMessages).where(inArray(
+				channelMessages.messageSnowflake,
+				rows.map(row => row.messageSnowflake),
+			));
+		});
+	}
+
 	public async record(input: ChannelMessageInput): Promise<void> {
 		const db = getDb();
 		await db.insert(channelMessages).values({
@@ -77,7 +131,7 @@ export class ChannelContextService {
 			))
 			.orderBy(desc(channelMessages.postedAt))
 			.limit(limit);
-		return rows.reverse().map((row) => {
+		return rows.toReversed().map((row) => {
 			return { author: row.authorName, content: row.content, isMarkov: row.authorSnowflake === botSnowflake };
 		});
 	}
@@ -106,49 +160,5 @@ export class ChannelContextService {
 
 	public async deleteMessage(messageSnowflake: string): Promise<void> {
 		await getDb().delete(channelMessages).where(eq(channelMessages.messageSnowflake, messageSnowflake));
-	}
-
-	private async summarizeIfNeeded(guildSnowflake: string, channelSnowflake: string): Promise<void> {
-		const rows = await getDb().select().from(channelMessages)
-			.where(and(
-				eq(channelMessages.guildSnowflake, guildSnowflake),
-				eq(channelMessages.channelSnowflake, channelSnowflake),
-				gt(channelMessages.expiresAt, new Date()),
-			))
-			.orderBy(asc(channelMessages.postedAt))
-			.limit(this.summaryThreshold);
-		if (rows.length < this.summaryThreshold) { return; }
-		const throughMessage = rows.at(-1);
-		if (!throughMessage) { return; }
-		// Only the AI summarizer's abstractive output may be persisted: raw
-		// transcripts outlive the retention window and the MessageDelete purge,
-		// so without a summarizer we skip and let messages expire naturally.
-		if (!this.summarizer) { return; }
-		const transcript = rows.map(row => `${row.authorName}: ${row.content || '[attachment]'}`).join('\n').slice(0, 8000);
-		let summary: string | null;
-		try {
-			summary = await this.summarizer(transcript, channelSnowflake);
-		} catch (error) {
-			Logger.warn('[ChannelContextService] AI summarization failed; leaving messages to expire naturally:', error);
-			return;
-		}
-		if (!summary) { return; }
-		await getDb().transaction(async (tx) => {
-			const inserted = await tx.insert(conversationSummaries).values({
-				guildSnowflake,
-				channelSnowflake,
-				summary,
-				throughMessageSnowflake: throughMessage.messageSnowflake,
-				messageCount: rows.length,
-				expiresAt: new Date(Date.now() + this.summaryTtlMs),
-			})
-				.onConflictDoNothing()
-				.returning({ id: conversationSummaries.id });
-			if (inserted.length === 0) { return; }
-			await tx.delete(channelMessages).where(inArray(
-				channelMessages.messageSnowflake,
-				rows.map(row => row.messageSnowflake),
-			));
-		});
 	}
 }

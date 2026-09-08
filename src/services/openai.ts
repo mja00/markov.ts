@@ -118,21 +118,21 @@ export type ResponseContentWithImages = {
 export class OpenAIService {
 	// We want to store some state in the service
 	private static instance: OpenAIService;
+
+	public static async getInstance(options?: OpenAIServiceOptions): Promise<OpenAIService> {
+		this.instance ??= new OpenAIService(options);
+		return this.instance;
+	}
+
+	public static createForTest(options: OpenAIServiceOptions = {}): OpenAIService {
+		return new OpenAIService(options);
+	}
+
 	private readonly options: OpenAIServiceOptions;
 	private readonly domainToolRegistry: ReturnType<typeof createDomainToolRegistry>;
 	private readonly responseCreate: NonNullable<OpenAIServiceOptions['responseCreate']>;
 	private readonly webTools: OpenAI.Responses.Tool[];
 	private readonly baseTools: OpenAI.Responses.Tool[];
-	private constructor(options: OpenAIServiceOptions = {}) {
-		this.options = options;
-		this.domainToolRegistry = createDomainToolRegistry({ kagi: this.options.kagiService });
-		this.responseCreate = this.options.responseCreate ?? ((params: OpenAI.Responses.ResponseCreateParams, requestOptions?: OpenAI.RequestOptions) => (
-			openai.responses.create(params, requestOptions) as Promise<OpenAI.Responses.Response>
-		));
-		this.webTools = this.domainToolRegistry.definitions()
-			.filter(tool => 'name' in tool && (tool.name === 'search_web' || tool.name === 'summarize_web_page'));
-		this.baseTools = this.createBaseTools();
-	}
 	private readonly conversationContextService = new ConversationContextService({
 		expiryMs: Config.conversationContext?.expiryHours
 			? Config.conversationContext.expiryHours * 60 * 60 * 1000
@@ -147,6 +147,65 @@ export class OpenAIService {
 	// Track generated image info by response ID for later extraction
 	private imageDataByResponseId: Map<string, GeneratedImageInfo[]> = new Map();
 	private webProvenanceByResponse = new WeakMap<object, WebProvenance>();
+
+	// Memory tools - only offered on the initial request when memory is active.
+	// Deliberately kept out of `this.baseTools` so they are never offered on follow-ups.
+	private readonly memoryTools: OpenAI.Responses.Tool[] = [
+		{
+			name: 'save_memory',
+			type: 'function',
+			strict: true,
+			description: 'Durably remember information only when explicitly requested or when it is clearly stable, low-risk, and useful. Never store secrets, credentials, financial, medical, or similarly sensitive claims.',
+			parameters: {
+				type: 'object',
+				required: ['scope', 'content', 'kind', 'confidence', 'importance', 'explicitly_requested'],
+				additionalProperties: false,
+				properties: {
+					scope: {
+						type: 'string',
+						enum: ['USER', 'SERVER', 'QUOTE'],
+						description: 'USER = a lasting fact about the current user; SERVER = a fact about this server/community; QUOTE = a notable thing someone said.',
+					},
+					content: {
+						type: 'string',
+						description: 'The fact to remember, phrased concisely.',
+					},
+					kind: { type: 'string', enum: ['PREFERENCE', 'FACT', 'QUOTE', 'REMINDER'] },
+					confidence: { type: 'number', minimum: 0, maximum: 1 },
+					importance: { type: 'number', minimum: 0, maximum: 100 },
+					explicitly_requested: { type: 'boolean', description: 'True only if the user directly asked Markov to remember this.' },
+				},
+			},
+		},
+		{
+			name: 'recall_memory',
+			type: 'function',
+			strict: true,
+			description: 'Search your long-term memory for relevant facts about the current user or server before answering.',
+			parameters: {
+				type: 'object',
+				required: ['query'],
+				additionalProperties: false,
+				properties: {
+					query: {
+						type: 'string',
+						description: 'What to search your memory for.',
+					},
+				},
+			},
+		},
+	];
+
+	private constructor(options: OpenAIServiceOptions = {}) {
+		this.options = options;
+		this.domainToolRegistry = createDomainToolRegistry({ kagi: this.options.kagiService });
+		this.responseCreate = this.options.responseCreate ?? ((params: OpenAI.Responses.ResponseCreateParams, requestOptions?: OpenAI.RequestOptions) => (
+			openai.responses.create(params, requestOptions) as Promise<OpenAI.Responses.Response>
+		));
+		this.webTools = this.domainToolRegistry.definitions()
+			.filter(tool => 'name' in tool && (tool.name === 'search_web' || tool.name === 'summarize_web_page'));
+		this.baseTools = this.createBaseTools();
+	}
 
 	// Function implementations for tool calls
 	private randomNumberGenerator(args: { min: number; max: number; }): number {
@@ -317,7 +376,7 @@ export class OpenAIService {
 			const followUpResponse = await this.handleToolCalls(currentResponse, promptConfig, ctx, {
 				followUpTools,
 				terminal,
-				...(permittedTools ? { allowedToolNames: permittedTools } : {}),
+				...(permittedTools && { allowedToolNames: permittedTools }),
 			});
 			if (!followUpResponse) {
 				ctx.web.markFallback();
@@ -463,63 +522,16 @@ export class OpenAIService {
 				},
 			},
 			{
-			// Note: the image_generation tool now defaults to the gpt-image-2 model,
-			// which does not support the `input_fidelity` parameter (gpt-image-1 did).
+			// Pinned to 2.5-flare: the tool default drifts over time, and input_fidelity
+			// (used by earlier revisions of this codebase) is unsupported outside gpt-image-1/1.5.
 				type: 'image_generation',
+				model: 'gpt-image-2.5-flare',
 				background: 'opaque',
 				quality: 'medium',
 				size: '1024x1024',
 			},
 		];
 	}
-
-	// Memory tools - only offered on the initial request when memory is active.
-	// Deliberately kept out of `this.baseTools` so they are never offered on follow-ups.
-	private readonly memoryTools: OpenAI.Responses.Tool[] = [
-		{
-			name: 'save_memory',
-			type: 'function',
-			strict: true,
-			description: 'Durably remember information only when explicitly requested or when it is clearly stable, low-risk, and useful. Never store secrets, credentials, financial, medical, or similarly sensitive claims.',
-			parameters: {
-				type: 'object',
-				required: ['scope', 'content', 'kind', 'confidence', 'importance', 'explicitly_requested'],
-				additionalProperties: false,
-				properties: {
-					scope: {
-						type: 'string',
-						enum: ['USER', 'SERVER', 'QUOTE'],
-						description: 'USER = a lasting fact about the current user; SERVER = a fact about this server/community; QUOTE = a notable thing someone said.',
-					},
-					content: {
-						type: 'string',
-						description: 'The fact to remember, phrased concisely.',
-					},
-					kind: { type: 'string', enum: ['PREFERENCE', 'FACT', 'QUOTE', 'REMINDER'] },
-					confidence: { type: 'number', minimum: 0, maximum: 1 },
-					importance: { type: 'number', minimum: 0, maximum: 100 },
-					explicitly_requested: { type: 'boolean', description: 'True only if the user directly asked Markov to remember this.' },
-				},
-			},
-		},
-		{
-			name: 'recall_memory',
-			type: 'function',
-			strict: true,
-			description: 'Search your long-term memory for relevant facts about the current user or server before answering.',
-			parameters: {
-				type: 'object',
-				required: ['query'],
-				additionalProperties: false,
-				properties: {
-					query: {
-						type: 'string',
-						description: 'What to search your memory for.',
-					},
-				},
-			},
-		},
-	];
 
 	private getChatTools(memoryActive: boolean, webEnabled: boolean): OpenAI.Responses.Tool[] {
 		const tools = webEnabled ? [...this.baseTools, ...this.webTools] : this.baseTools;
@@ -589,9 +601,7 @@ export class OpenAIService {
 			if (settings.reasoningEffort && settings.reasoningEffort !== 'off') {
 				config.reasoning = {
 					effort: settings.reasoningEffort as 'minimal' | 'low' | 'medium' | 'high',
-					...(settings.reasoningSummary && settings.reasoningSummary !== 'off'
-						? { summary: settings.reasoningSummary as 'auto' | 'concise' | 'detailed' }
-						: {}),
+					...(settings.reasoningSummary && settings.reasoningSummary !== 'off' && { summary: settings.reasoningSummary as 'auto' | 'concise' | 'detailed' }),
 				};
 			}
 			if (settings.verbosity && settings.verbosity !== 'off') {
@@ -620,14 +630,14 @@ export class OpenAIService {
 			const request = {
 				...params,
 				model: route.model,
-				...(routedReasoning === undefined ? {} : { reasoning: routedReasoning }),
-				...(route.maxOutputTokens === undefined ? {} : { max_output_tokens: route.maxOutputTokens }),
+				...(routedReasoning !== undefined && { reasoning: routedReasoning }),
+				...(route.maxOutputTokens !== undefined && { max_output_tokens: route.maxOutputTokens }),
 			};
 			return this.responseCreate(
 				request,
 				{
-					...(route.timeoutMs === undefined && defaultTimeoutMs === undefined ? {} : { timeout: route.timeoutMs ?? defaultTimeoutMs }),
-					...(signal ? { signal } : {}),
+					...(!(route.timeoutMs === undefined && defaultTimeoutMs === undefined) && { timeout: route.timeoutMs ?? defaultTimeoutMs }),
+					...(signal && { signal }),
 				},
 			);
 		});
@@ -636,7 +646,7 @@ export class OpenAIService {
 	// gpt-5-family and o-series models accept reasoning/verbosity controls; older
 	// models (e.g. gpt-4o) reject them, so we omit those params for such models.
 	private modelSupportsReasoning(model: string): boolean {
-		return /^(o\d|gpt-5)/i.test(model);
+		return /^(?:o\d|gpt-5)/i.test(model);
 	}
 
 	public async classifyMarkovIntent(
@@ -682,7 +692,9 @@ export class OpenAIService {
 			? `${input.author} is replying to ${input.referencedMessage.author}'s message "${input.referencedMessage.content}".`
 			: '';
 		const currentMessage = `${input.author}: ${input.content || '[non-text message]'}`;
-		const candidateData = candidates.map(({ key, label }) => { return { key, label }; });
+		const candidateData = candidates.map(({ key, label }) => {
+			return { key, label };
+		});
 		const inputText = [
 			recentContext,
 			referencedContext,
@@ -705,9 +717,7 @@ export class OpenAIService {
 			input: responseInput,
 			store: false,
 			max_output_tokens: 128,
-			...(this.modelSupportsReasoning(settings.model)
-				? { reasoning: { effort: 'low' as const } }
-				: {}),
+			...(this.modelSupportsReasoning(settings.model) && { reasoning: { effort: 'low' as const } }),
 			text: {
 				format: {
 					type: 'json_schema',
@@ -758,9 +768,7 @@ export class OpenAIService {
 			store: false,
 			// Cap output even when routing is disabled and supplies no token limit.
 			max_output_tokens: 400,
-			...(this.modelSupportsReasoning(settings.model)
-				? { reasoning: { effort: 'low' as const } }
-				: {}),
+			...(this.modelSupportsReasoning(settings.model) && { reasoning: { effort: 'low' as const } }),
 		};
 		const response = await this.createRoutedResponse('summarization', routingKey, params);
 		return response.output_text?.trim() || null;
@@ -772,17 +780,6 @@ export class OpenAIService {
 	// with no argument it resets every channel.
 	public async clearConversation(): Promise<void> {
 		await this.conversationContextService.resetAll();
-	}
-
-	public static async getInstance(options?: OpenAIServiceOptions): Promise<OpenAIService> {
-		if (!OpenAIService.instance) {
-			OpenAIService.instance = new OpenAIService(options);
-		}
-		return OpenAIService.instance;
-	}
-
-	public static createForTest(options: OpenAIServiceOptions = {}): OpenAIService {
-		return new OpenAIService(options);
 	}
 
 	// On shutdown, dump all conversations to file
@@ -1105,7 +1102,7 @@ export class OpenAIService {
 		}
 
 		Logger.trace(`Final text content length: ${textContent.length}, generated images: ${images.length}`);
-		return { text: textContent, images, ...(web ? { web } : {}) };
+		return { text: textContent, images, ...(web && { web }) };
 	}
 
 	// No longer needed - Responses API handles execution automatically
@@ -1257,7 +1254,7 @@ export class OpenAIService {
 				const followUpResponse = await this.createRoutedResponse('final_response', ctx.channelId, {
 					input: inputMessages,
 					tools: options.followUpTools ?? this.baseTools,
-					...(options.terminal ? { tool_choice: 'none' as const } : {}),
+					...(options.terminal && { tool_choice: 'none' as const }),
 					...promptConfig,
 					previous_response_id: response.id, // Maintain conversation context
 				}, undefined, ctx.signal);
@@ -1483,8 +1480,9 @@ export class OpenAIService {
 				logs: true,
 				onQueueUpdate: (update) => {
 					if (update.status === 'IN_PROGRESS') {
-						for (const message of update.logs
-							.map(log => log.message)) { Logger.debug(message); }
+						for (const log of update.logs) {
+							Logger.debug(log.message);
+						}
 					} else {
 						Logger.debug(update.status);
 					}

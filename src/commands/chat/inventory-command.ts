@@ -11,12 +11,12 @@ import { InteractionUtils } from '../../utils/interaction-utils.js';
 import { Command, CommandDeferType } from '../index.js';
 
 export class InventoryCommand implements Command {
+	private readonly userService = new UserService();
+	private readonly shopService = new ShopService();
+
 	public names = [Lang.getRef('chatCommands.inventory', Language.Default)];
 	public deferType = CommandDeferType.PUBLIC;
 	public requireClientPerms: PermissionsString[] = [];
-
-	private readonly userService = new UserService();
-	private readonly shopService = new ShopService();
 
 	/**
      * Format item effect for display

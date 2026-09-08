@@ -65,7 +65,9 @@ vi.mock('../../../src/services/fishing.service.js', () => {
 	};
 });
 vi.mock('../../../src/services/database.service.js', () => {
-	return { getDb: () => { return { transaction: transactionMock }; } };
+	return { getDb: () => {
+		return { transaction: transactionMock };
+	} };
 });
 
 describe('AIToolRegistry', () => {
@@ -83,7 +85,9 @@ describe('AIToolRegistry', () => {
 				strict: true,
 				parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
 			},
-			handler: async (_arguments, context) => { return { user: context.userSnowflake }; },
+			handler: async (_arguments, context) => {
+				return { user: context.userSnowflake };
+			},
 		});
 		await expect(registry.execute('who_am_i', { user: 'attacker' }, {
 			userSnowflake: 'trusted', guildSnowflake: 'guild', username: 'Alice', channelId: 'channel',
@@ -158,7 +162,9 @@ describe('AIToolRegistry', () => {
 		const registry = new AIToolRegistry();
 		const controller = new AbortController();
 		controller.abort(new Error('already cancelled'));
-		const handler = vi.fn(async () => { return { success: true }; });
+		const handler = vi.fn(async () => {
+			return { success: true };
+		});
 		registry.register({
 			definition: {
 				type: 'function',
@@ -234,14 +240,22 @@ describe('AIToolRegistry', () => {
 					};
 				}),
 				update: updateMock.mockImplementation(() => {
-					return { set: () => { return { where: () => { return { returning: async () => [{ id: 'user-id', money: 30 }] }; } }; } };
+					return { set: () => {
+						return { where: () => {
+							return { returning: async () => [{ id: 'user-id', money: 30 }] };
+						} };
+					} };
 				}),
 				insert: vi.fn(() => {
 					insertCount++;
 					if (insertCount === 1) {
-						return { values: () => { return { onConflictDoNothing: vi.fn() }; } };
+						return { values: () => {
+							return { onConflictDoNothing: vi.fn() };
+						} };
 					}
-					return { values: async () => { throw new Error('cooldown write failed'); } };
+					return { values: async () => {
+						throw new Error('cooldown write failed');
+					} };
 				}),
 			};
 			return callback(tx);
@@ -264,10 +278,7 @@ describe('AIToolRegistry', () => {
 		let transactionCount = 0;
 		let executeCount = 0;
 		let lockTail = Promise.resolve();
-		let releaseExecuteBarrier: (() => void) | undefined;
-		const executeBarrier = new Promise<void>((resolve) => {
-			releaseExecuteBarrier = resolve;
-		});
+		const { promise: executeBarrier, resolve: releaseExecuteBarrier } = Promise.withResolvers<void>();
 		const events: string[] = [];
 		transactionMock.mockImplementation(async (callback) => {
 			const transactionId = ++transactionCount;
@@ -281,9 +292,9 @@ describe('AIToolRegistry', () => {
 					execute: vi.fn(async () => {
 						events.push(`lock-wait:${transactionId}`);
 						const previousLock = lockTail;
-						lockTail = new Promise<void>((resolve) => {
-							releaseLock = resolve;
-						});
+						const lockResolvers = Promise.withResolvers<void>();
+						lockTail = lockResolvers.promise;
+						releaseLock = lockResolvers.resolve;
 						executeCount++;
 						if (executeCount === 2) {
 							releaseExecuteBarrier?.();
@@ -309,7 +320,9 @@ describe('AIToolRegistry', () => {
 											return Promise.resolve([{ count: attemptCount }]);
 										}
 										return {
-											orderBy: () => { return { limit: async () => [{ attemptedAt: new Date() }] }; },
+											orderBy: () => {
+												return { limit: async () => [{ attemptedAt: new Date() }] };
+											},
 										};
 									},
 								};
@@ -319,15 +332,25 @@ describe('AIToolRegistry', () => {
 					insert: vi.fn(() => {
 						insertCount++;
 						if (insertCount === 1) {
-							return { values: () => { return { onConflictDoNothing: vi.fn() }; } };
+							return { values: () => {
+								return { onConflictDoNothing: vi.fn() };
+							} };
 						}
 						if (insertCount === 2) {
-							return { values: async () => { attemptCount++; } };
+							return { values: async () => {
+								attemptCount++;
+							} };
 						}
-						return { values: () => { return { returning: async () => [{ id: 'catch-id' }] }; } };
+						return { values: () => {
+							return { returning: async () => [{ id: 'catch-id' }] };
+						} };
 					}),
 					update: vi.fn(() => {
-						return { set: () => { return { where: () => { return { returning: async () => [{ id: 'user-id', money: 30 }] }; } }; } };
+						return { set: () => {
+							return { where: () => {
+								return { returning: async () => [{ id: 'user-id', money: 30 }] };
+							} };
+						} };
 					}),
 				};
 				return await callback(tx);

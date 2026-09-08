@@ -9,7 +9,7 @@ export class RegexUtils {
 	}
 
 	public static escapeRegex(input: string): string {
-		return input?.replaceAll(/[\s#$()*+,.?[\\\]^{|}-]/g, '\\$&');
+		return input?.replaceAll(/[\s#$()*+,.?[\\\]^{|}-]/g, String.raw`\$&`);
 	}
 
 	public static discordId(input: string): string {

@@ -156,11 +156,13 @@ export class ItemEffectsService {
 		let totalBoost = 0;
 
 		for (const item of passiveItems) {
-			if (item.effectType === EffectType.RARITY_BOOST && item.effectValue) {
-				const boostValue = Number.parseFloat(item.effectValue);
-				if (!Number.isNaN(boostValue)) {
-					totalBoost += boostValue;
-				}
+			if (!(item.effectType === EffectType.RARITY_BOOST && item.effectValue)) {
+				continue;
+			}
+
+			const boostValue = Number.parseFloat(item.effectValue);
+			if (!Number.isNaN(boostValue)) {
+				totalBoost += boostValue;
 			}
 		}
 
@@ -177,11 +179,13 @@ export class ItemEffectsService {
 		let totalMultiplier = 1;
 
 		for (const item of passiveItems) {
-			if (item.effectType === EffectType.WORTH_MULTIPLIER && item.effectValue) {
-				const multiplierValue = Number.parseFloat(item.effectValue);
-				if (!Number.isNaN(multiplierValue) && multiplierValue > 0) {
-					totalMultiplier *= multiplierValue;
-				}
+			if (!(item.effectType === EffectType.WORTH_MULTIPLIER && item.effectValue)) {
+				continue;
+			}
+
+			const multiplierValue = Number.parseFloat(item.effectValue);
+			if (!Number.isNaN(multiplierValue) && multiplierValue > 0) {
+				totalMultiplier *= multiplierValue;
 			}
 		}
 

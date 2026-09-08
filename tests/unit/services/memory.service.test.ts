@@ -151,9 +151,15 @@ describe('MemoryService', () => {
 
 			// db.select().from().where().orderBy().limit() -> [existingRow]
 			const limit = vi.fn().mockResolvedValue([existingRow]);
-			const orderBy = vi.fn(() => { return { limit }; });
-			const where = vi.fn(() => { return { orderBy }; });
-			const from = vi.fn(() => { return { where }; });
+			const orderBy = vi.fn(() => {
+				return { limit };
+			});
+			const where = vi.fn(() => {
+				return { orderBy };
+			});
+			const from = vi.fn(() => {
+				return { where };
+			});
 			selectMock.mockReturnValue({ from });
 
 			const service = new MemoryService();
@@ -173,9 +179,15 @@ describe('MemoryService', () => {
 			createEmbeddingMock.mockResolvedValue(Array.from({ length: 1536 }, () => 0.1));
 
 			const limit = vi.fn().mockResolvedValue([]); // no duplicate
-			const orderBy = vi.fn(() => { return { limit }; });
-			const where = vi.fn(() => { return { orderBy }; });
-			const from = vi.fn(() => { return { where }; });
+			const orderBy = vi.fn(() => {
+				return { limit };
+			});
+			const where = vi.fn(() => {
+				return { orderBy };
+			});
+			const from = vi.fn(() => {
+				return { where };
+			});
 			selectMock.mockReturnValue({ from });
 
 			const createdRow = {
@@ -191,7 +203,9 @@ describe('MemoryService', () => {
 				updatedAt: new Date(),
 			};
 			const returning = vi.fn().mockResolvedValue([createdRow]);
-			const values = vi.fn(() => { return { returning }; });
+			const values = vi.fn(() => {
+				return { returning };
+			});
 			insertMock.mockReturnValue({ values });
 
 			const service = new MemoryService();
@@ -211,13 +225,21 @@ describe('MemoryService', () => {
 			createEmbeddingMock.mockResolvedValue(Array.from({ length: 1536 }, () => 0.1));
 
 			const limit = vi.fn().mockResolvedValue([]); // no duplicate
-			const orderBy = vi.fn(() => { return { limit }; });
-			const where = vi.fn(() => { return { orderBy }; });
-			const from = vi.fn(() => { return { where }; });
+			const orderBy = vi.fn(() => {
+				return { limit };
+			});
+			const where = vi.fn(() => {
+				return { orderBy };
+			});
+			const from = vi.fn(() => {
+				return { where };
+			});
 			selectMock.mockReturnValue({ from });
 
 			const returning = vi.fn().mockResolvedValue([{ id: 'server-id' }]);
-			const values = vi.fn(() => { return { returning }; });
+			const values = vi.fn(() => {
+				return { returning };
+			});
 			insertMock.mockReturnValue({ values });
 
 			const service = new MemoryService();
@@ -266,7 +288,9 @@ describe('MemoryService', () => {
 	describe('forgetByIdForGuild', () => {
 		it('returns true when a row matching both id and guildSnowflake is deleted', async () => {
 			const returning = vi.fn().mockResolvedValue([{ id: 'mem-uuid-1' }]);
-			const where = vi.fn(() => { return { returning }; });
+			const where = vi.fn(() => {
+				return { returning };
+			});
 			deleteMock.mockReturnValue({ where });
 
 			const service = new MemoryService();
@@ -280,7 +304,9 @@ describe('MemoryService', () => {
 
 		it('returns false when no row matches (wrong guild or non-existent id)', async () => {
 			const returning = vi.fn().mockResolvedValue([]);
-			const where = vi.fn(() => { return { returning }; });
+			const where = vi.fn(() => {
+				return { returning };
+			});
 			deleteMock.mockReturnValue({ where });
 
 			const service = new MemoryService();
@@ -291,7 +317,9 @@ describe('MemoryService', () => {
 
 		it('constrains the delete by both id and guildSnowflake', async () => {
 			const returning = vi.fn().mockResolvedValue([]);
-			const where = vi.fn(() => { return { returning }; });
+			const where = vi.fn(() => {
+				return { returning };
+			});
 			deleteMock.mockReturnValue({ where });
 
 			const service = new MemoryService();
@@ -309,7 +337,9 @@ describe('MemoryService', () => {
 		});
 
 		it('throws when the db operation rejects', async () => {
-			const where = vi.fn(() => { return { returning: vi.fn().mockRejectedValue(new Error('db error')) }; });
+			const where = vi.fn(() => {
+				return { returning: vi.fn().mockRejectedValue(new Error('db error')) };
+			});
 			deleteMock.mockReturnValue({ where });
 
 			const service = new MemoryService();
@@ -320,7 +350,9 @@ describe('MemoryService', () => {
 	describe('forgetAllForGuild', () => {
 		it('returns the count of deleted rows', async () => {
 			const returning = vi.fn().mockResolvedValue([{ id: 'mem-1' }, { id: 'mem-2' }]);
-			const where = vi.fn(() => { return { returning }; });
+			const where = vi.fn(() => {
+				return { returning };
+			});
 			deleteMock.mockReturnValue({ where });
 
 			const service = new MemoryService();
@@ -332,7 +364,9 @@ describe('MemoryService', () => {
 
 		it('constrains the delete to SERVER scope and the guild (never users\' private memories)', async () => {
 			const returning = vi.fn().mockResolvedValue([]);
-			const where = vi.fn(() => { return { returning }; });
+			const where = vi.fn(() => {
+				return { returning };
+			});
 			deleteMock.mockReturnValue({ where });
 
 			const service = new MemoryService();
@@ -352,7 +386,9 @@ describe('MemoryService', () => {
 		});
 
 		it('throws when the db operation rejects', async () => {
-			const where = vi.fn(() => { return { returning: vi.fn().mockRejectedValue(new Error('db error')) }; });
+			const where = vi.fn(() => {
+				return { returning: vi.fn().mockRejectedValue(new Error('db error')) };
+			});
 			deleteMock.mockReturnValue({ where });
 
 			const service = new MemoryService();

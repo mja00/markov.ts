@@ -23,6 +23,17 @@ export class ButtonHandler implements EventHandler {
 		private eventDataService: EventDataService,
 	) {}
 
+	private findButton(id: string): Button {
+		// First try exact match
+		const button = this.buttons.find(button => button.ids.includes(id));
+		if (button) {
+			return button;
+		}
+
+		// Then try prefix match (for buttons like shop:page:1, shop:buy:slug)
+		return this.buttons.find(button => button.ids.some(buttonId => id.startsWith(buttonId + ':')));
+	}
+
 	public async process(intr: ButtonInteraction): Promise<void> {
 		// Don't respond to self, or other bots
 		if (intr.user.id === intr.client.user?.id || intr.user.bot) {
@@ -80,16 +91,5 @@ export class ButtonHandler implements EventHandler {
 
 		// Execute the button
 		await button.execute(intr, data);
-	}
-
-	private findButton(id: string): Button {
-		// First try exact match
-		const button = this.buttons.find(button => button.ids.includes(id));
-		if (button) {
-			return button;
-		}
-
-		// Then try prefix match (for buttons like shop:page:1, shop:buy:slug)
-		return this.buttons.find(button => button.ids.some(buttonId => id.startsWith(buttonId + ':')));
 	}
 }

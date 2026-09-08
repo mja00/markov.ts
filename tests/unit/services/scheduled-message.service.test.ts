@@ -46,15 +46,21 @@ import { ScheduledMessageService } from '../../../src/services/scheduled-message
 // db.select().from().where().orderBy() -> rows
 function mockListPending(rows: unknown[]): void {
 	const orderBy = vi.fn().mockResolvedValue(rows);
-	const where = vi.fn(() => { return { orderBy }; });
-	const from = vi.fn(() => { return { where }; });
+	const where = vi.fn(() => {
+		return { orderBy };
+	});
+	const from = vi.fn(() => {
+		return { where };
+	});
 	selectMock.mockReturnValue({ from });
 }
 
 // db.insert().values().returning() -> rows
 function mockInsert(rows: unknown[]): ReturnType<typeof vi.fn> {
 	const returning = vi.fn().mockResolvedValue(rows);
-	const values = vi.fn(() => { return { returning }; });
+	const values = vi.fn(() => {
+		return { returning };
+	});
 	insertMock.mockReturnValue({ values });
 	return values;
 }
@@ -62,8 +68,12 @@ function mockInsert(rows: unknown[]): ReturnType<typeof vi.fn> {
 // db.update().set().where().returning() -> rows
 function mockUpdate(rows: unknown[]): { set: ReturnType<typeof vi.fn>; where: ReturnType<typeof vi.fn>; } {
 	const returning = vi.fn().mockResolvedValue(rows);
-	const where = vi.fn(() => { return { returning }; });
-	const set = vi.fn(() => { return { where }; });
+	const where = vi.fn(() => {
+		return { returning };
+	});
+	const set = vi.fn(() => {
+		return { where };
+	});
 	updateMock.mockReturnValue({ set });
 	return { set, where };
 }
@@ -84,7 +94,7 @@ describe('ScheduledMessageService', () => {
 				channelSnowflake: CHANNEL,
 				guildSnowflake: 'GUILD_A',
 				createdBySnowflake: 'USER123',
-				content: '   ',
+				content: ' '.repeat(3),
 				scheduledAt: new Date(Date.now() + (60 * 60 * 1000)),
 			})).rejects.toThrow(/empty/i);
 			expect(insertMock).not.toHaveBeenCalled();
@@ -115,7 +125,9 @@ describe('ScheduledMessageService', () => {
 		});
 
 		it('rejects when the channel is already at the pending cap', async () => {
-			mockListPending(Array.from({ length: 20 }, (_unused, index) => { return { id: `m${index}` }; }));
+			mockListPending(Array.from({ length: 20 }, (_unused, index) => {
+				return { id: `m${index}` };
+			}));
 
 			const service = new ScheduledMessageService();
 			await expect(service.schedule({

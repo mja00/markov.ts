@@ -25,14 +25,14 @@ const Config = require('../../config/config.json');
  * message rather than risking a double-post.
  */
 export class ProcessScheduledMessagesJob extends Job {
+	private readonly scheduledMessageService = new ScheduledMessageService();
+	private readonly channelContextService = new ChannelContextService();
+
 	public name = 'Process Scheduled Messages';
 	public schedule: string = Config.jobs.processScheduledMessages.schedule;
 	public log: boolean = Config.jobs.processScheduledMessages.log;
 	public runOnce: boolean = Config.jobs.processScheduledMessages.runOnce;
 	public initialDelaySecs: number = Config.jobs.processScheduledMessages.initialDelaySecs;
-
-	private readonly scheduledMessageService = new ScheduledMessageService();
-	private readonly channelContextService = new ChannelContextService();
 
 	constructor(private client: Client) {
 		super();

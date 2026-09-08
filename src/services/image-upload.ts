@@ -12,16 +12,17 @@ const Config = require('../../config/config.json');
 
 export class ImageUpload {
 	private static instance: ImageUpload;
-	private constructor() {}
-	private ziplineCookie: string;
-	private ziplineToken: string;
 
 	public static getInstance(): ImageUpload {
-		if (!ImageUpload.instance) {
-			ImageUpload.instance = new ImageUpload();
+		if (!this.instance) {
+			this.instance = new this();
 		}
-		return ImageUpload.instance;
+		return this.instance;
 	}
+
+	private ziplineCookie: string;
+	private ziplineToken: string;
+	private constructor() {}
 
 	public async getZiplineCookie(): Promise<string> {
 		const body = {
@@ -57,7 +58,7 @@ export class ImageUpload {
 		}
 
 		// Find the zipline_session cookie
-		const sessionCookie = cookies.split(';').find(cookie => cookie.trim().startsWith('zipline_session='));
+		const sessionCookie = cookies.split(';').find(cookie => cookie.trimStart().startsWith('zipline_session='));
 
 		if (!sessionCookie) {
 			Logger.error('zipline_session cookie not found in:', cookies);
@@ -210,11 +211,10 @@ export class ImageUpload {
 				Logger.error('Raw response text:', responseText);
 				throw new Error('Failed to parse upload response', { cause: parseError });
 			}
-		} else {
-			Logger.error(`Upload failed with status ${response.status}`);
-			Logger.trace('Response headers:', Object.fromEntries(response.headers.entries()));
-			Logger.trace('Response body:', responseText);
-			throw new Error(`Failed to upload image. Status: ${response.status} - ${responseText}`);
 		}
+		Logger.error(`Upload failed with status ${response.status}`);
+		Logger.trace('Response headers:', Object.fromEntries(response.headers.entries()));
+		Logger.trace('Response body:', responseText);
+		throw new Error(`Failed to upload image. Status: ${response.status} - ${responseText}`);
 	}
 }

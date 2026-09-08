@@ -17,17 +17,17 @@ export class GuildsController implements Controller {
 
 	constructor(private shardManager: ShardingManager) {}
 
-	public register(): void {
-		this.router.get('/', (req, res) => this.getGuilds(req, res));
-	}
-
 	private async getGuilds(req: Request, res: Response): Promise<void> {
-		const guildIdsPerShard = await this.shardManager.broadcastEval(client => [...client.guilds.cache.keys()]);
+		const guildIdsPerShard = await this.shardManager.broadcastEval(client => client.guilds.cache.keys().toArray());
 		const guilds: string[] = [...new Set(guildIdsPerShard.flat())];
 
 		const resBody: GetGuildsResponse = {
 			guilds,
 		};
 		res.status(200).json(resBody);
+	}
+
+	public register(): void {
+		this.router.get('/', (req, res) => this.getGuilds(req, res));
 	}
 }

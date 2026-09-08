@@ -56,51 +56,83 @@ export class Language {
 		enabled: boolean,
 		limit: number = Number.MAX_VALUE,
 	): Locale[] {
-		const langCodes = enabled ? this.Enabled : Object.values(Locale).sort();
+		const langCodes = enabled
+			? this.Enabled
+			: Object.values(Locale).toSorted((first, second) => first.localeCompare(second));
 		const search = input.toLowerCase();
 		const found = new Set<Locale>();
 		// Exact match
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => langCode.toLowerCase() === search)) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (langCode.toLowerCase() === search) {
+					found.add(langCode);
+				}
+			}
 		}
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => this.Data[langCode].nativeName.toLowerCase() === search)) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (this.Data[langCode].nativeName.toLowerCase() === search) {
+					found.add(langCode);
+				}
+			}
 		}
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => this.Data[langCode].nativeName.toLowerCase() === search)) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (this.Data[langCode].nativeName.toLowerCase() === search) {
+					found.add(langCode);
+				}
+			}
 		}
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => this.Data[langCode].englishName.toLowerCase() === search)) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (this.Data[langCode].englishName.toLowerCase() === search) {
+					found.add(langCode);
+				}
+			}
 		}
 		// Starts with search term
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => langCode.toLowerCase().startsWith(search))) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (langCode.toLowerCase().startsWith(search)) {
+					found.add(langCode);
+				}
+			}
 		}
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => this.Data[langCode].nativeName.toLowerCase().startsWith(search))) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (this.Data[langCode].nativeName.toLowerCase().startsWith(search)) {
+					found.add(langCode);
+				}
+			}
 		}
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => this.Data[langCode].englishName.toLowerCase().startsWith(search))) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (this.Data[langCode].englishName.toLowerCase().startsWith(search)) {
+					found.add(langCode);
+				}
+			}
 		}
 		// Includes search term
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => langCode.toLowerCase().startsWith(search))) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (langCode.toLowerCase().startsWith(search)) {
+					found.add(langCode);
+				}
+			}
 		}
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => this.Data[langCode].nativeName.toLowerCase().startsWith(search))) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (this.Data[langCode].nativeName.toLowerCase().startsWith(search)) {
+					found.add(langCode);
+				}
+			}
 		}
 		if (found.size < limit) {
-			for (const langCode of langCodes
-				.filter(langCode => this.Data[langCode].englishName.toLowerCase().startsWith(search))) { found.add(langCode); }
+			for (const langCode of langCodes) {
+				if (this.Data[langCode].englishName.toLowerCase().startsWith(search)) {
+					found.add(langCode);
+				}
+			}
 		}
 		return [...found];
 	}

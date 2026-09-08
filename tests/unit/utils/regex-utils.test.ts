@@ -26,9 +26,9 @@ describe('RegexUtils', () => {
 		});
 
 		it('should parse complex regex pattern', () => {
-			const result = RegexUtils.regex('/\\d{3}-\\d{4}/');
+			const result = RegexUtils.regex(String.raw`/\d{3}-\d{4}/`);
 			expect(result).toBeInstanceOf(RegExp);
-			expect(result?.source).toBe('\\d{3}-\\d{4}');
+			expect(result?.source).toBe(String.raw`\d{3}-\d{4}`);
 		});
 
 		it('should return undefined for invalid pattern (no slashes)', () => {
@@ -48,72 +48,72 @@ describe('RegexUtils', () => {
 		});
 
 		it('should handle pattern with special characters', () => {
-			const result = RegexUtils.regex('/[a-z]+@[a-z]+\\.[a-z]+/i');
+			const result = RegexUtils.regex(String.raw`/[a-z]+@[a-z]+\.[a-z]+/i`);
 			expect(result).toBeInstanceOf(RegExp);
 			expect(result?.flags).toBe('i');
 		});
 
 		it('should handle pattern with forward slashes in it', () => {
-			const result = RegexUtils.regex('/http:\\/\\/example\\.com/');
+			const result = RegexUtils.regex(String.raw`/http:\/\/example\.com/`);
 			expect(result).toBeInstanceOf(RegExp);
-			expect(result?.source).toBe('http:\\/\\/example\\.com');
+			expect(result?.source).toBe(String.raw`http:\/\/example\.com`);
 		});
 	});
 
 	describe('escapeRegex', () => {
 		it('should escape special regex characters', () => {
 			const result = RegexUtils.escapeRegex('test.*');
-			expect(result).toBe('test\\.\\*');
+			expect(result).toBe(String.raw`test\.\*`);
 		});
 
 		it('should escape brackets', () => {
 			const result = RegexUtils.escapeRegex('[test]');
-			expect(result).toBe('\\[test\\]');
+			expect(result).toBe(String.raw`\[test\]`);
 		});
 
 		it('should escape parentheses', () => {
 			const result = RegexUtils.escapeRegex('(test)');
-			expect(result).toBe('\\(test\\)');
+			expect(result).toBe(String.raw`\(test\)`);
 		});
 
 		it('should escape curly braces', () => {
 			const result = RegexUtils.escapeRegex('{test}');
-			expect(result).toBe('\\{test\\}');
+			expect(result).toBe(String.raw`\{test\}`);
 		});
 
 		it('should escape plus and asterisk', () => {
 			const result = RegexUtils.escapeRegex('test+*');
-			expect(result).toBe('test\\+\\*');
+			expect(result).toBe(String.raw`test\+\*`);
 		});
 
 		it('should escape question mark and dot', () => {
 			const result = RegexUtils.escapeRegex('test?.com');
-			expect(result).toBe('test\\?\\.com');
+			expect(result).toBe(String.raw`test\?\.com`);
 		});
 
 		it('should escape caret and dollar', () => {
 			const result = RegexUtils.escapeRegex('^test$');
-			expect(result).toBe('\\^test\\$');
+			expect(result).toBe(String.raw`\^test\$`);
 		});
 
 		it('should escape pipe and backslash', () => {
-			const result = RegexUtils.escapeRegex('test|\\path');
-			expect(result).toBe('test\\|\\\\path');
+			const result = RegexUtils.escapeRegex(String.raw`test|\path`);
+			expect(result).toBe(String.raw`test\|\\path`);
 		});
 
 		it('should escape hyphen', () => {
 			const result = RegexUtils.escapeRegex('test-case');
-			expect(result).toBe('test\\-case');
+			expect(result).toBe(String.raw`test\-case`);
 		});
 
 		it('should escape hash symbol', () => {
 			const result = RegexUtils.escapeRegex('#hashtag');
-			expect(result).toBe('\\#hashtag');
+			expect(result).toBe(String.raw`\#hashtag`);
 		});
 
 		it('should escape whitespace', () => {
 			const result = RegexUtils.escapeRegex('hello world');
-			expect(result).toBe('hello\\ world');
+			expect(result).toBe(String.raw`hello\ world`);
 		});
 
 		it('should handle plain text without special chars', () => {
@@ -128,7 +128,7 @@ describe('RegexUtils', () => {
 
 		it('should escape all special chars together', () => {
 			const result = RegexUtils.escapeRegex('[test.*+?^$]');
-			expect(result).toBe('\\[test\\.\\*\\+\\?\\^\\$\\]');
+			expect(result).toBe(String.raw`\[test\.\*\+\?\^\$\]`);
 		});
 
 		it('should handle undefined input', () => {

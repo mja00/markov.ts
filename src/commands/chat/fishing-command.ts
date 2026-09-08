@@ -23,52 +23,12 @@ function getRankMedal(index: number): string {
 }
 
 export class FishingCommand implements Command {
-	public names = [Lang.getRef('chatCommands.fishing', Language.Default)];
-	public deferType = CommandDeferType.PUBLIC;
-	public requireClientPerms: PermissionsString[] = [];
-
 	private readonly userService = new UserService();
 	private readonly fishingService = new FishingService();
 
-	/**
-     * Execute the fishing management command
-     * Shows stats or leaderboard based on option
-     */
-	public async execute(intr: ChatInputCommandInteraction, _data: EventData): Promise<void> {
-		try {
-			const option = intr.options.getString(Lang.getRef('arguments.fishing', Language.Default)) as FishingOption;
-
-			let embed: EmbedBuilder;
-
-			switch (option) {
-				case FishingOption.STATS: {
-					embed = await this.getStatsEmbed(intr);
-					break;
-				}
-				case FishingOption.LEADERBOARD: {
-					embed = await this.getLeaderboardEmbed();
-					break;
-				}
-				default: {
-					embed = new EmbedBuilder()
-						.setTitle('Invalid Option')
-						.setDescription('Please select either Stats or Leaderboard.')
-						.setColor(0xFF_00_00);
-				}
-			}
-
-			await InteractionUtils.send(intr, embed);
-		} catch (error) {
-			Logger.error('[FishingCommand] Error executing fishing command:', error);
-
-			const errorEmbed = new EmbedBuilder()
-				.setTitle('Error')
-				.setDescription('An error occurred while fetching fishing data. Please try again later.')
-				.setColor(0xFF_00_00);
-
-			await InteractionUtils.send(intr, errorEmbed);
-		}
-	}
+	public names = [Lang.getRef('chatCommands.fishing', Language.Default)];
+	public deferType = CommandDeferType.PUBLIC;
+	public requireClientPerms: PermissionsString[] = [];
 
 	/**
      * Build stats embed for the user
@@ -171,5 +131,45 @@ export class FishingCommand implements Command {
 		}
 
 		return embed;
+	}
+
+	/**
+     * Execute the fishing management command
+     * Shows stats or leaderboard based on option
+     */
+	public async execute(intr: ChatInputCommandInteraction, _data: EventData): Promise<void> {
+		try {
+			const option = intr.options.getString(Lang.getRef('arguments.fishing', Language.Default)) as FishingOption;
+
+			let embed: EmbedBuilder;
+
+			switch (option) {
+				case FishingOption.STATS: {
+					embed = await this.getStatsEmbed(intr);
+					break;
+				}
+				case FishingOption.LEADERBOARD: {
+					embed = await this.getLeaderboardEmbed();
+					break;
+				}
+				default: {
+					embed = new EmbedBuilder()
+						.setTitle('Invalid Option')
+						.setDescription('Please select either Stats or Leaderboard.')
+						.setColor(0xFF_00_00);
+				}
+			}
+
+			await InteractionUtils.send(intr, embed);
+		} catch (error) {
+			Logger.error('[FishingCommand] Error executing fishing command:', error);
+
+			const errorEmbed = new EmbedBuilder()
+				.setTitle('Error')
+				.setDescription('An error occurred while fetching fishing data. Please try again later.')
+				.setColor(0xFF_00_00);
+
+			await InteractionUtils.send(intr, errorEmbed);
+		}
 	}
 }

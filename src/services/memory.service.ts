@@ -135,6 +135,73 @@ export class MemoryService {
 	private readonly embeddingService = new EmbeddingService();
 
 	/**
+	 * Shared semantic search backing recall and search. Returns [] (no recency
+	 * fallback) when the query embedding cannot be created.
+	 */
+	private async semanticSearch(
+		queryText: string,
+		userSnowflake: string,
+		guildSnowflake: string | null,
+		limit: number,
+	): Promise<Memory[]> {
+		const db = getDb();
+
+		try {
+			const queryEmbedding = await this.embeddingService.createEmbedding(queryText);
+
+			if (!queryEmbedding) {
+				Logger.debug('[MemoryService] Recall skipped: query embedding could not be created');
+				return [];
+			}
+
+			const similarity = sql<number>`1 - (${cosineDistance(memories.embedding, queryEmbedding)})`;
+			const exactBoost = sql<number>`case when lower(${memories.content}) like ${`%${queryText.toLowerCase()}%`} then 0.25 else 0 end`;
+			const rank = sql<number>`${similarity} + (${memories.importance} / 500.0) + ${exactBoost}`;
+
+			const results = await db
+				.select({
+					id: memories.id,
+					scope: memories.scope,
+					userSnowflake: memories.userSnowflake,
+					guildSnowflake: memories.guildSnowflake,
+					content: memories.content,
+					kind: memories.kind,
+					confidence: memories.confidence,
+					importance: memories.importance,
+					expiresAt: memories.expiresAt,
+					lastConfirmedAt: memories.lastConfirmedAt,
+					sourceMessageSnowflake: memories.sourceMessageSnowflake,
+					supersededBy: memories.supersededBy,
+					sourceChannelSnowflake: memories.sourceChannelSnowflake,
+					createdByModel: memories.createdByModel,
+					createdAt: memories.createdAt,
+					updatedAt: memories.updatedAt,
+					similarity,
+				})
+				.from(memories)
+				.where(and(
+					buildMemoryScopeFilter(userSnowflake, guildSnowflake),
+					gt(similarity, similarityThreshold),
+					isNull(memories.supersededBy),
+					or(isNull(memories.expiresAt), gt(memories.expiresAt, new Date())),
+				))
+				.orderBy(desc(rank), desc(memories.updatedAt))
+				.limit(limit);
+
+			Logger.debug(
+				`[MemoryService] Recalled ${results.length} memories (scores: ${results.map(row => row.similarity.toFixed(3)).join(', ')})`,
+			);
+
+			return results.map(({ similarity: _similarity, ...memory }) => {
+				return { ...memory, embedding: null };
+			}) as Memory[];
+		} catch (error) {
+			Logger.error('[MemoryService] Failed to recall memories:', error);
+			throw new Error(`Failed to recall memories: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });
+		}
+	}
+
+	/**
 	 * Save a memory. Computes the embedding up front; if it cannot be created
 	 * the memory is NOT inserted (a null-embedding row would be permanently
 	 * unrecallable). Deduplicates against existing memories of the same scope
@@ -276,74 +343,11 @@ export class MemoryService {
 		return this.semanticSearch(queryText, userSnowflake, guildSnowflake, limit);
 	}
 
-	/**
-	 * Shared semantic search backing recall and search. Returns [] (no recency
-	 * fallback) when the query embedding cannot be created.
-	 */
-	private async semanticSearch(
-		queryText: string,
-		userSnowflake: string,
-		guildSnowflake: string | null,
-		limit: number,
-	): Promise<Memory[]> {
-		const db = getDb();
-
-		try {
-			const queryEmbedding = await this.embeddingService.createEmbedding(queryText);
-
-			if (!queryEmbedding) {
-				Logger.debug('[MemoryService] Recall skipped: query embedding could not be created');
-				return [];
-			}
-
-			const similarity = sql<number>`1 - (${cosineDistance(memories.embedding, queryEmbedding)})`;
-			const exactBoost = sql<number>`case when lower(${memories.content}) like ${`%${queryText.toLowerCase()}%`} then 0.25 else 0 end`;
-			const rank = sql<number>`${similarity} + (${memories.importance} / 500.0) + ${exactBoost}`;
-
-			const results = await db
-				.select({
-					id: memories.id,
-					scope: memories.scope,
-					userSnowflake: memories.userSnowflake,
-					guildSnowflake: memories.guildSnowflake,
-					content: memories.content,
-					kind: memories.kind,
-					confidence: memories.confidence,
-					importance: memories.importance,
-					expiresAt: memories.expiresAt,
-					lastConfirmedAt: memories.lastConfirmedAt,
-					sourceMessageSnowflake: memories.sourceMessageSnowflake,
-					supersededBy: memories.supersededBy,
-					sourceChannelSnowflake: memories.sourceChannelSnowflake,
-					createdByModel: memories.createdByModel,
-					createdAt: memories.createdAt,
-					updatedAt: memories.updatedAt,
-					similarity,
-				})
-				.from(memories)
-				.where(and(
-					buildMemoryScopeFilter(userSnowflake, guildSnowflake),
-					gt(similarity, similarityThreshold),
-					isNull(memories.supersededBy),
-					or(isNull(memories.expiresAt), gt(memories.expiresAt, new Date())),
-				))
-				.orderBy(desc(rank), desc(memories.updatedAt))
-				.limit(limit);
-
-			Logger.debug(
-				`[MemoryService] Recalled ${results.length} memories (scores: ${results.map(row => row.similarity.toFixed(3)).join(', ')})`,
-			);
-
-			return results.map(({ similarity: _similarity, ...memory }) => { return { ...memory, embedding: null }; }) as Memory[];
-		} catch (error) {
-			Logger.error('[MemoryService] Failed to recall memories:', error);
-			throw new Error(`Failed to recall memories: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });
-		}
-	}
-
 	public async editForUser(id: string, userSnowflake: string, guildSnowflake: string | null, content: string): Promise<boolean> {
 		const embedding = await this.embeddingService.createEmbedding(content);
-		if (!embedding) { return false; }
+		if (!embedding) {
+			return false;
+		}
 		const updated = await getDb().update(memories).set({
 			content, embedding, lastConfirmedAt: new Date(), confidence: '1.000', updatedAt: new Date(),
 		})
@@ -365,9 +369,13 @@ export class MemoryService {
 				guildSnowflake === null ? isNull(memories.guildSnowflake) : eq(memories.guildSnowflake, guildSnowflake),
 			))
 			.limit(1);
-		if (!existing[0]) { return false; }
+		if (!existing[0]) {
+			return false;
+		}
 		const embedding = await this.embeddingService.createEmbedding(content);
-		if (!embedding) { return false; }
+		if (!embedding) {
+			return false;
+		}
 		return getDb().transaction(async (tx) => {
 			const created = await tx.insert(memories).values({
 				scope: existing[0].scope,
@@ -381,7 +389,9 @@ export class MemoryService {
 				lastConfirmedAt: new Date(),
 				embedding,
 			}).returning();
-			if (!created[0]) { return false; }
+			if (!created[0]) {
+				return false;
+			}
 			const superseded = await tx.update(memories).set({ supersededBy: created[0].id, updatedAt: new Date() })
 				.where(and(eq(memories.id, id), isNull(memories.supersededBy)))
 				.returning({ id: memories.id });
@@ -417,7 +427,9 @@ export class MemoryService {
 					),
 				)
 				.orderBy(desc(memories.createdAt));
-			return rows.map((row) => { return { ...row, embedding: null }; }) as Memory[];
+			return rows.map((row) => {
+				return { ...row, embedding: null };
+			}) as Memory[];
 		} catch (error) {
 			Logger.error('[MemoryService] Failed to list memories for user:', error);
 			throw new Error(`Failed to list memories for user: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });
@@ -443,7 +455,9 @@ export class MemoryService {
 					isNull(memories.supersededBy),
 				))
 				.orderBy(desc(memories.createdAt));
-			return rows.map((row) => { return { ...row, embedding: null }; }) as Memory[];
+			return rows.map((row) => {
+				return { ...row, embedding: null };
+			}) as Memory[];
 		} catch (error) {
 			Logger.error('[MemoryService] Failed to list memories for server:', error);
 			throw new Error(`Failed to list memories for server: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error });

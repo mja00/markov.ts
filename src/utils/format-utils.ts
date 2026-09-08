@@ -46,7 +46,7 @@ export class FormatUtils {
 							'second',
 						)
 						.toObject(),
-				).filter(([_, value]) => Boolean(value)), // Remove units that are 0
+				).filter(([_, value]) => value), // Remove units that are 0
 			),
 		).toHuman({ maximumFractionDigits: 0 });
 	}

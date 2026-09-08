@@ -52,11 +52,6 @@ export class Bot {
 		private jobService: JobService,
 	) {}
 
-	public async start(): Promise<void> {
-		this.registerListeners();
-		await this.login(this.token);
-	}
-
 	private registerListeners(): void {
 		this.client.on(Events.ClientReady, () => this.onReady());
 		this.client.on(Events.GuildCreate, (guild: Guild) => this.onGuildJoin(guild));
@@ -208,5 +203,10 @@ export class Bot {
 		if (rateLimitData.timeToReset >= Config.logging.rateLimit.minTimeout * 1000) {
 			Logger.error(Logs.error.apiRateLimit, rateLimitData);
 		}
+	}
+
+	public async start(): Promise<void> {
+		this.registerListeners();
+		await this.login(this.token);
 	}
 }

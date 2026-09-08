@@ -91,7 +91,7 @@ export class WebRequestState {
 			used: this.successful,
 			// A tool round can fail before any web call, which is not a web fallback.
 			fallback: this.fallback && this.attempted,
-			sources: [...this.sources.values()],
+			sources: this.sources.values().toArray(),
 		};
 	}
 }

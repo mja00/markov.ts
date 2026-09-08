@@ -31,7 +31,8 @@ function prettyMs(ms: number): string {
 
 	if (hours > 0) {
 		return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-	} else if (minutes > 0) {
+	}
+	if (minutes > 0) {
 		return `${minutes}m ${seconds % 60}s`;
 	}
 	return `${seconds}s`;
@@ -73,10 +74,6 @@ export class MessageHandler implements EventHandler {
 		this.moderationService = options.moderationService;
 	}
 
-	public async delete(messageSnowflake: string): Promise<void> {
-		await this.channelContextService.deleteMessage(messageSnowflake);
-	}
-
 	private async getRecentChannelMessages(msg: Message): Promise<RecentChannelMessage[]> {
 		try {
 			const messages = await msg.channel.messages.fetch({
@@ -84,7 +81,8 @@ export class MessageHandler implements EventHandler {
 				before: msg.id,
 			});
 
-			return [...messages.values()].reverse().map((message) => {
+			const recent = messages.values().toArray().toReversed();
+			return recent.map((message) => {
 				return {
 					author: message.author.displayName,
 					content: message.content,
@@ -98,9 +96,13 @@ export class MessageHandler implements EventHandler {
 	}
 
 	private firstImageUrl(msg: Message): string | undefined {
-		return [...msg.attachments.values()]
+		return msg.attachments.values()
 			.find(attachment => attachment.contentType?.startsWith('image/'))
 			?.url;
+	}
+
+	public async delete(messageSnowflake: string): Promise<void> {
+		await this.channelContextService.deleteMessage(messageSnowflake);
 	}
 
 	public async process(msg: Message): Promise<void> {
@@ -169,11 +171,11 @@ export class MessageHandler implements EventHandler {
 					authorName: msg.author.displayName,
 					content: msg.content,
 					replyTargetSnowflake: msg.reference?.messageId ?? null,
-					attachments: [...msg.attachments.values()].map((attachment) => {
+					attachments: msg.attachments.values().map((attachment) => {
 						return {
 							url: attachment.url, contentType: attachment.contentType,
 						};
-					}),
+					}).toArray(),
 					postedAt: msg.createdAt,
 				});
 				if (shouldReply) {
@@ -355,9 +357,9 @@ export class MessageHandler implements EventHandler {
 							authorName: sentReply.author.displayName,
 							content: sentReply.content,
 							replyTargetSnowflake: msg.id,
-							attachments: [...sentReply.attachments.values()].map((attachment) => {
+							attachments: sentReply.attachments.values().map((attachment) => {
 								return { url: attachment.url, contentType: attachment.contentType };
-							}),
+							}).toArray(),
 							postedAt: sentReply.createdAt,
 						});
 					} catch (error) {

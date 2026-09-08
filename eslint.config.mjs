@@ -23,7 +23,11 @@ export default [
 			// `fs.readFileSync` so `JSON.parse` receives a Buffer. That is
 			// valid at runtime but fails TypeScript's `JSON.parse(string)`
 			// typing, so `lint:fix` would silently break the build.
-			'unicorn/prefer-json-parse-buffer': 'off',
+			'unicorn/consistent-json-file-read': 'off',
+
+			// Allow the `void promise` fire-and-forget idiom: rare-catch alerts and
+			// cache-cleanup chains are deliberately backgrounded and must not await.
+			'no-void': ['error', { allowAsStatement: true }],
 
 			// Re-allow TypeScript enums: this project relies on a dedicated
 			// src/enums/ directory. Keeps the rest of Nodecraft's

@@ -172,9 +172,9 @@ async function start(): Promise<void> {
 			const rest = new REST({ version: '10' }).setToken(Config.client.token);
 			const commandRegistrationService = new CommandRegistrationService(rest);
 			const localCmds = [
-				...Object.values(ChatCommandMetadata).sort((first, second) => (first.name > second.name ? 1 : -1)),
-				...Object.values(MessageCommandMetadata).sort((first, second) => (first.name > second.name ? 1 : -1)),
-				...Object.values(UserCommandMetadata).sort((first, second) => (first.name > second.name ? 1 : -1)),
+				...Object.values(ChatCommandMetadata).toSorted((first, second) => first.name.localeCompare(second.name)),
+				...Object.values(MessageCommandMetadata).toSorted((first, second) => first.name.localeCompare(second.name)),
+				...Object.values(UserCommandMetadata).toSorted((first, second) => first.name.localeCompare(second.name)),
 			];
 			await commandRegistrationService.process(localCmds, process.argv);
 		} catch (error) {

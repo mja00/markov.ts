@@ -6,12 +6,12 @@ import { EventData } from '../models/internal-models.js';
 import { Logger } from '../services/logger.js';
 
 export class MemoriesButton implements Button {
+	private readonly memoriesCommand = new MemoriesCommand();
+
 	public ids = ['memories:page'];
 	public deferType = ButtonDeferType.NONE;
 	public requireGuild = false;
 	public requireEmbedAuthorTag = false;
-
-	private readonly memoriesCommand = new MemoriesCommand();
 
 	public async execute(intr: ButtonInteraction, _data: EventData): Promise<void> {
 		const customId = intr.customId;

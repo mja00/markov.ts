@@ -31,7 +31,9 @@ export class MessageUtils {
 		target: User | TextBasedChannel,
 		content: string | EmbedBuilder | BaseMessageOptions,
 	): Promise<Message> {
-		if (target instanceof PartialGroupDMChannel) { return; }
+		if (target instanceof PartialGroupDMChannel) {
+			return;
+		}
 		try {
 			const options: BaseMessageOptions =
 				typeof content === 'string'

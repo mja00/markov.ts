@@ -54,12 +54,12 @@ describe('StringUtils', () => {
 	describe('escapeMarkdown', () => {
 		it('should escape asterisks', () => {
 			const result = StringUtils.escapeMarkdown('*bold*');
-			expect(result).toContain('\\*');
+			expect(result).toContain(String.raw`\*`);
 		});
 
 		it('should escape underscores', () => {
 			const result = StringUtils.escapeMarkdown('_italic_');
-			expect(result).toContain('\\_');
+			expect(result).toContain(String.raw`\_`);
 		});
 
 		it('should preserve custom Discord emojis', () => {
@@ -75,7 +75,7 @@ describe('StringUtils', () => {
 		});
 
 		it('should handle escaped characters in emoji names', () => {
-			const text = 'Text with <:emoji\\_name:123456789012345678> inside';
+			const text = String.raw`Text with <:emoji\_name:123456789012345678> inside`;
 			const result = StringUtils.escapeMarkdown(text);
 			// Should unescape the emoji name but keep other escapes
 			expect(result).toContain('<:emoji_name:123456789012345678>');
@@ -93,7 +93,7 @@ describe('StringUtils', () => {
 			const text = '*bold* <:smile:123456789012345678> _italic_';
 			const result = StringUtils.escapeMarkdown(text);
 			expect(result).toContain('<:smile:123456789012345678>');
-			expect(result).toContain('\\*');
+			expect(result).toContain(String.raw`\*`);
 			// Note: Discord.js escapeMarkdown behavior with underscores may vary
 			// Just ensure the emoji is preserved
 		});

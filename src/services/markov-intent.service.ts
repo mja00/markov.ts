@@ -29,6 +29,19 @@ export type MarkovIntentModel = (
 export class MarkovIntentService {
 	public constructor(private readonly classify: MarkovIntentModel) {}
 
+	private namesMarkov(content: string): boolean {
+		return /\bmarkov\b/i.test(content);
+	}
+
+	private isIntentResult(value: unknown): value is MarkovIntentResult {
+		return typeof value === 'object'
+			&& value !== null
+			&& 'shouldReply' in value
+			&& typeof value.shouldReply === 'boolean'
+			&& 'shouldReact' in value
+			&& typeof value.shouldReact === 'boolean';
+	}
+
 	public async decide(input: MarkovIntentInput, routingKey: string): Promise<MarkovIntentResult> {
 		// Reactions are intentionally guild-only. DMs keep their authoritative reply
 		// behavior without paying for a classifier that cannot enable another action.
@@ -57,18 +70,5 @@ export class MarkovIntentService {
 			Logger.warn('Markov intent detection failed; skipping optional AI actions:', error);
 			return { shouldReply: authoritativeReply, shouldReact: false };
 		}
-	}
-
-	private namesMarkov(content: string): boolean {
-		return /\bmarkov\b/i.test(content);
-	}
-
-	private isIntentResult(value: unknown): value is MarkovIntentResult {
-		return typeof value === 'object'
-			&& value !== null
-			&& 'shouldReply' in value
-			&& typeof value.shouldReply === 'boolean'
-			&& 'shouldReact' in value
-			&& typeof value.shouldReact === 'boolean';
 	}
 }

@@ -35,7 +35,9 @@ describe('PermissionUtils.memberCanSend', () => {
 
 	it('requires ViewChannel and SendMessages in guild channels', () => {
 		const has = vi.fn().mockReturnValue(true);
-		const channel = makeChannel<GuildChannel>(GuildChannel.prototype, vi.fn(() => { return { has }; }));
+		const channel = makeChannel<GuildChannel>(GuildChannel.prototype, vi.fn(() => {
+			return { has };
+		}));
 
 		expect(PermissionUtils.memberCanSend(channel, member)).toBe(true);
 		expect(has).toHaveBeenCalledWith([
@@ -46,7 +48,9 @@ describe('PermissionUtils.memberCanSend', () => {
 
 	it('requires SendMessagesInThreads in threads', () => {
 		const has = vi.fn().mockReturnValue(false);
-		const channel = makeChannel<ThreadChannel>(ThreadChannel.prototype, vi.fn(() => { return { has }; }));
+		const channel = makeChannel<ThreadChannel>(ThreadChannel.prototype, vi.fn(() => {
+			return { has };
+		}));
 
 		expect(PermissionUtils.memberCanSend(channel, member)).toBe(false);
 		expect(has).toHaveBeenCalledWith([
