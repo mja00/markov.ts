@@ -317,6 +317,7 @@
             "SendPolls": "Send Polls",
             "SendTTSMessages": "Send Text-to-Speech Messages",
             "SendVoiceMessages": "Send Voice Messages",
+            "SetVoiceChannelStatus": "Set Voice Channel Status",
             "Speak": "Speak",
             "Stream": "Video",
             "UseApplicationCommands": "Use Application Commands",
