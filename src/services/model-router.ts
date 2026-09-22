@@ -12,7 +12,7 @@ export const AI_TASK_TYPES = [
 
 export type AITaskType = typeof AI_TASK_TYPES[number];
 
-export type ModelReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ModelReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface ModelTaskSettings {
 	model?: string;

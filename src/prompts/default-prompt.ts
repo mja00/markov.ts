@@ -51,12 +51,12 @@ export const DEFAULT_MODEL = 'gpt-5.4-mini';
 // Reasoning effort, response verbosity, and reasoning summary mode. The string
 // 'off' (or null) means "omit this parameter from the request" — useful when
 // switching to a model that doesn't accept these gpt-5-family options.
-export const DEFAULT_REASONING_EFFORT = 'medium'; // minimal | low | medium | high | off
+export const DEFAULT_REASONING_EFFORT = 'medium'; // minimal | low | medium | high | xhigh | max | off
 export const DEFAULT_VERBOSITY = 'medium'; // low | medium | high | off
 export const DEFAULT_REASONING_SUMMARY = 'auto'; // auto | concise | detailed | off
 
 // Allowed values for the tunable settings, used by both the service (validation)
 // and the slash command (choices). Kept here so the two never drift.
-export const REASONING_EFFORT_VALUES = ['minimal', 'low', 'medium', 'high', 'off'] as const;
+export const REASONING_EFFORT_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'off'] as const;
 export const VERBOSITY_VALUES = ['low', 'medium', 'high', 'off'] as const;
 export const REASONING_SUMMARY_VALUES = ['auto', 'concise', 'detailed', 'off'] as const;

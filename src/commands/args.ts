@@ -172,6 +172,8 @@ export class Args {
 			{ name: 'Low', value: 'low' },
 			{ name: 'Medium', value: 'medium' },
 			{ name: 'High', value: 'high' },
+			{ name: 'Extra high', value: 'xhigh' },
+			{ name: 'Max', value: 'max' },
 			{ name: 'Off', value: 'off' },
 		],
 	};
