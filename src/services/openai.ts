@@ -600,7 +600,7 @@ export class OpenAIService {
 		if (this.modelSupportsReasoning(settings.model)) {
 			if (settings.reasoningEffort && settings.reasoningEffort !== 'off') {
 				config.reasoning = {
-					effort: settings.reasoningEffort as 'minimal' | 'low' | 'medium' | 'high',
+					effort: settings.reasoningEffort as OpenAI.ReasoningEffort,
 					...(settings.reasoningSummary && settings.reasoningSummary !== 'off' && { summary: settings.reasoningSummary as 'auto' | 'concise' | 'detailed' }),
 				};
 			}
@@ -643,10 +643,10 @@ export class OpenAIService {
 		});
 	}
 
-	// gpt-5-family and o-series models accept reasoning/verbosity controls; older
+	// gpt-5+ and o-series models accept reasoning/verbosity controls; older
 	// models (e.g. gpt-4o) reject them, so we omit those params for such models.
 	private modelSupportsReasoning(model: string): boolean {
-		return /^(?:o\d|gpt-5)/i.test(model);
+		return /^(?:o\d|gpt-[5-9])/i.test(model);
 	}
 
 	public async classifyMarkovIntent(
