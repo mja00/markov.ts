@@ -16,6 +16,7 @@ import { MarkovIntentService } from '../services/markov-intent.service.js';
 import { MarkovReactionService } from '../services/markov-reaction.service.js';
 import { ModerationService } from '../services/moderation.service.js';
 import { OpenAIService } from '../services/openai.js';
+import { resolveReplyBudget } from '../services/reply-budget.js';
 import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
 import { assembleReply } from '../utils/web-source-utils.js';
 
@@ -25,6 +26,7 @@ import type { GeneratedAttachment } from '../models/internal-models.js';
 
 const require = createRequire(import.meta.url);
 const Config = require('../../config/config.json');
+const REPLY_TIMEOUT_MS = resolveReplyBudget(Config.replyBudget).timeoutMs;
 
 function prettyMs(ms: number): string {
 	const seconds = Math.floor(ms / 1000);
@@ -227,7 +229,7 @@ export class MessageHandler implements EventHandler {
 			}, 5000);
 			const openAI = this.configuredOpenAI ?? await OpenAIService.getInstance();
 			const requestController = new AbortController();
-			const requestTimeout = setTimeout(() => requestController.abort(), 60000);
+			const requestTimeout = setTimeout(() => requestController.abort(), REPLY_TIMEOUT_MS);
 			let generatedToCleanup: GeneratedAttachment[] = [];
 
 			try {

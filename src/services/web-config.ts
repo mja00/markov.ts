@@ -23,7 +23,7 @@ const asRecord = (value: unknown): UnknownRecord => (
 	value && typeof value === 'object' && !Array.isArray(value) ? value as UnknownRecord : {}
 );
 
-const boundedInteger = (value: unknown, fallback: number, minimum: number, maximum: number): number => {
+export const boundedInteger = (value: unknown, fallback: number, minimum: number, maximum: number): number => {
 	if (typeof value !== 'number' || !Number.isFinite(value)) {
 		return fallback;
 	}
