@@ -75,6 +75,7 @@ npm run commands:delete                # Delete a specific command
   - **ItemEffectsService**: Item effect calculations (rarity boosts, worth multipliers)
   - **FishingCooldownService**: Rate limiting for fishing commands
   - **ShopService**: Shop and purchase management
+  - **SongService**: Builds MIDI from the `compose_song` AI tool and renders it to MP3 via FluidSynth + ffmpeg
 
 - **Database Schema** (`src/db/schema.ts`): PostgreSQL schema using Drizzle ORM
   - **users**: Discord user profiles with money and auto-fishing status

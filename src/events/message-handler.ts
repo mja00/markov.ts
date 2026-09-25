@@ -269,18 +269,18 @@ export class MessageHandler implements EventHandler {
 				const endTime = Date.now();
 				const computationTime = endTime - startTime;
 
-				// Get the response content with images (function calls are already handled in the service)
-				const responseData = openAI.getResponseContentWithImages(response);
+				// Get the response content with generated files (function calls are already handled in the service)
+				const responseData = openAI.getResponseContentWithAttachments(response);
 				let responseContent = responseData.text;
-				let images = responseData.images;
-				const imagesToCleanup = responseData.images;
-				let backupImages = true;
+				let generated = responseData.attachments;
+				const generatedToCleanup = responseData.attachments;
+				let backupGenerated = true;
 
-				if (!responseContent && images.length === 0) {
+				if (!responseContent && generated.length === 0) {
 					if (responseData.web?.fallback) {
 						responseContent = 'I couldn\'t complete the web research right now. Please try again later.';
 					} else {
-						Logger.error('No response content or images generated');
+						Logger.error('No response content or attachments generated');
 						clearTimeout(requestTimeout);
 						await msg.reply({ content: 'An error occurred while processing your request. Please try again later.', allowedMentions: { parse: [] } });
 						return;
@@ -289,7 +289,7 @@ export class MessageHandler implements EventHandler {
 
 				// Send the response
 				Logger.debug(`[OpenAI Response]: ${responseContent.length} characters`);
-				Logger.debug(`[OpenAI Images]: ${images.length} image(s) to send`);
+				Logger.debug(`[OpenAI Attachments]: ${generated.length} file(s) to send`);
 
 				const footer = `-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
 				let replyMessage = assembleReply({
@@ -304,34 +304,25 @@ export class MessageHandler implements EventHandler {
 						: { status: 'unavailable' as const };
 					if (moderation.status !== 'allowed') {
 						responseContent = '';
-						images = [];
-						backupImages = false;
+						generated = [];
+						backupGenerated = false;
 						replyMessage = SAFE_WEB_NOTICE;
 					}
 				}
 
-				// Prepare attachments for images
 				const attachments: AttachmentBuilder[] = [];
-				if (images.length > 0) {
-					for (let i = 0; i < images.length; i++) {
-						const imageInfo = images[i];
-						Logger.debug(`Loading image ${i + 1}/${images.length} from disk: ${imageInfo.filePath}`);
-
-						try {
-							const imageBuffer = await readFile(imageInfo.filePath);
-							const attachment = new AttachmentBuilder(imageBuffer, {
-								name: imageInfo.filename ?? `generated-image-${i + 1}.png`,
-								description: `AI generated image ${i + 1}`,
-							});
-							attachments.push(attachment);
-							Logger.debug(`Image ${i + 1} prepared for Discord attachment`);
-						} catch (error) {
-							Logger.error(`Failed to prepare image ${imageInfo.filePath} for Discord`, error);
-						}
+				for (const file of generated) {
+					try {
+						attachments.push(new AttachmentBuilder(await readFile(file.filePath), {
+							name: file.filename,
+							description: file.description,
+						}));
+					} catch (error) {
+						Logger.error(`Failed to prepare ${file.filePath} for Discord`, error);
 					}
 				}
 
-				// Send the response with images if any
+				// Send the response with attachments if any
 				let sentReply: Message;
 				if (attachments.length > 0) {
 					sentReply = await msg.reply({
@@ -339,7 +330,7 @@ export class MessageHandler implements EventHandler {
 						files: attachments,
 						allowedMentions: { parse: [] },
 					});
-					Logger.info(`Sent response with ${attachments.length} image(s) to Discord`);
+					Logger.info(`Sent response with ${attachments.length} attachment(s) to Discord`);
 				} else {
 					sentReply = await msg.reply({ content: replyMessage, allowedMentions: { parse: [] } });
 				}
@@ -367,17 +358,17 @@ export class MessageHandler implements EventHandler {
 					}
 				}
 
-				if (imagesToCleanup.length > 0) {
-					Logger.info('Finalizing generated images');
+				if (generatedToCleanup.length > 0) {
+					Logger.info('Finalizing generated attachments');
 					try {
-						if (backupImages) {
-							await openAI.backupAndCleanupImages(imagesToCleanup);
+						if (backupGenerated) {
+							await openAI.finalizeAttachments(generatedToCleanup);
 						} else {
 							// Moderation failures should not upload an image that will never be delivered.
-							await openAI.cleanupGeneratedImages(imagesToCleanup);
+							await openAI.cleanupGeneratedAttachments(generatedToCleanup);
 						}
 					} catch (error) {
-						Logger.error('Failed to backup or cleanup generated images:', error);
+						Logger.error('Failed to finalize generated attachments:', error);
 					}
 				}
 				clearTimeout(requestTimeout);

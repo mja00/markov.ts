@@ -53,6 +53,7 @@ import {
 	Logger,
 	ModerationService,
 	OpenAIService,
+	SongService,
 	resolveWebConfig,
 } from './services/index.js';
 import { Trigger } from './triggers/index.js';
@@ -135,7 +136,10 @@ async function start(): Promise<void> {
 	const kagiService = webConfig.kagi && moderationService
 		? new KagiService({ config: webConfig.kagi })
 		: undefined;
-	const openAI = await OpenAIService.getInstance({ kagiService });
+	const songService = Config.music?.enabled
+		? new SongService({ config: Config.music })
+		: undefined;
+	const openAI = await OpenAIService.getInstance({ kagiService, songService });
 	const messageHandler = new MessageHandler(triggerHandler, {
 		openAI,
 		moderationService,
