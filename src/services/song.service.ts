@@ -174,7 +174,7 @@ function uint32(value: number): number[] {
 	return [(value >>> 24) & 0xFF, (value >>> 16) & 0xFF, (value >>> 8) & 0xFF, value & 0xFF];
 }
 
-function trackChunk(events: TrackEvent[]): number[] {
+function trackChunk(events: TrackEvent[], endTick = 0): number[] {
 	const sorted = events.toSorted((left, right) => left.tick - right.tick || left.order - right.order);
 	const data: number[] = [];
 	let lastTick = 0;
@@ -182,7 +182,8 @@ function trackChunk(events: TrackEvent[]): number[] {
 		data.push(...variableLength(event.tick - lastTick), ...event.bytes);
 		lastTick = event.tick;
 	}
-	data.push(0x00, 0xFF, 0x2F, 0x00);
+	// Trailing rests emit no events, so the end marker carries them or the track would stop at its last note-off.
+	data.push(...variableLength(Math.max(0, endTick - lastTick)), 0xFF, 0x2F, 0x00);
 	return [0x4D, 0x54, 0x72, 0x6B, ...uint32(data.length), ...data];
 }
 
@@ -229,7 +230,7 @@ export function buildSongMidi(song: Song): { midi: Buffer; durationSeconds: numb
 				}
 			}
 		}
-		chunks.push(trackChunk(events));
+		chunks.push(trackChunk(events, Math.round(beats * repeat * TICKS_PER_BEAT)));
 	}
 
 	if (noteCount === 0) {

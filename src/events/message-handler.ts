@@ -21,6 +21,8 @@ import { assembleReply } from '../utils/web-source-utils.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
 
+import type { GeneratedAttachment } from '../models/internal-models.js';
+
 const require = createRequire(import.meta.url);
 const Config = require('../../config/config.json');
 
@@ -226,6 +228,7 @@ export class MessageHandler implements EventHandler {
 			const openAI = this.configuredOpenAI ?? await OpenAIService.getInstance();
 			const requestController = new AbortController();
 			const requestTimeout = setTimeout(() => requestController.abort(), 60000);
+			let generatedToCleanup: GeneratedAttachment[] = [];
 
 			try {
 				const startTime = Date.now();
@@ -273,7 +276,7 @@ export class MessageHandler implements EventHandler {
 				const responseData = openAI.getResponseContentWithAttachments(response);
 				let responseContent = responseData.text;
 				let generated = responseData.attachments;
-				const generatedToCleanup = responseData.attachments;
+				generatedToCleanup = responseData.attachments;
 				let backupGenerated = true;
 
 				if (!responseContent && generated.length === 0) {
@@ -360,12 +363,14 @@ export class MessageHandler implements EventHandler {
 
 				if (generatedToCleanup.length > 0) {
 					Logger.info('Finalizing generated attachments');
+					const finalizing = generatedToCleanup;
+					generatedToCleanup = [];
 					try {
 						if (backupGenerated) {
-							await openAI.finalizeAttachments(generatedToCleanup);
+							await openAI.finalizeAttachments(finalizing);
 						} else {
 							// Moderation failures should not upload an image that will never be delivered.
-							await openAI.cleanupGeneratedAttachments(generatedToCleanup);
+							await openAI.cleanupGeneratedAttachments(finalizing);
 						}
 					} catch (error) {
 						Logger.error('Failed to finalize generated attachments:', error);
@@ -376,6 +381,8 @@ export class MessageHandler implements EventHandler {
 				clearInterval(typingInterval);
 				clearTimeout(requestTimeout);
 				Logger.error('Error processing message:', err);
+				// A failed send never reaches finalization, so drop the rendered files here instead of leaking them in tmp.
+				await openAI.cleanupGeneratedAttachments(generatedToCleanup);
 				await msg.reply({ content: 'An error occurred while processing your request. Please try again later.', allowedMentions: { parse: [] } });
 				throw err;
 			}

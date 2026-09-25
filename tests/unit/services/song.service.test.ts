@@ -85,6 +85,13 @@ describe('buildSongMidi', () => {
 		expect(durationSeconds).toBe(4);
 	});
 
+	it('keeps trailing rests by ending the track after them', () => {
+		const { midi } = buildSongMidi(song([track({ notes: 'C4:1 R:3' })]));
+
+		// The last note-off lands at beat 1, so end-of-track must follow 3 beats (1440 ticks) later.
+		expect([...midi.subarray(-5)]).toEqual([0x8B, 0x20, 0xFF, 0x2F, 0x00]);
+	});
+
 	it('rejects songs over the length limit', () => {
 		const beatsOverLimit = ((MAX_SONG_SECONDS * 120) / 60) + 1;
 
