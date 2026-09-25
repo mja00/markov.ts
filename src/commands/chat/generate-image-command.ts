@@ -5,10 +5,10 @@ import * as fal from '@fal-ai/serverless-client';
 import { AttachmentBuilder, ChatInputCommandInteraction, PermissionsString } from 'discord.js';
 
 import { Language } from '../../models/enum-helpers/index.js';
-import { EventData } from '../../models/internal-models.js';
+import { EventData, GeneratedAttachment } from '../../models/internal-models.js';
 import { Lang } from '../../services/index.js';
 import { Logger } from '../../services/logger.js';
-import { GeneratedImageInfo, OpenAIService } from '../../services/openai.js';
+import { OpenAIService } from '../../services/openai.js';
 import { InteractionUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
 
@@ -45,7 +45,7 @@ export class GenerateImageCommand implements Command {
 		};
 
 		const openAIService = await OpenAIService.getInstance();
-		let imageInfo: GeneratedImageInfo | null;
+		let imageInfo: GeneratedAttachment | null;
 
 		// Try OpenAI first
 		try {
@@ -123,14 +123,14 @@ export class GenerateImageCommand implements Command {
 				Logger.info('Sent generated image to Discord');
 
 				// Backup to Zipline and cleanup local file
-				await openAIService.backupAndCleanupImages([imageInfo]);
+				await openAIService.finalizeAttachments([imageInfo]);
 			} catch (discordError) {
 				Logger.error('Error sending image to Discord:', discordError);
 				await InteractionUtils.send(intr, 'Generated the image but failed to send it. Please try again.');
 
 				// Try to cleanup even if sending failed
 				try {
-					await openAIService.backupAndCleanupImages([imageInfo]);
+					await openAIService.finalizeAttachments([imageInfo]);
 				} catch (cleanupError) {
 					Logger.error('Failed to cleanup image after Discord error:', cleanupError);
 				}

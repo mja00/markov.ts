@@ -167,6 +167,12 @@
         "username": "<IMAGE_UPLOAD_USERNAME>",
         "password": "<IMAGE_UPLOAD_PASSWORD>"
     },
+    "music": {
+        "enabled": false,
+        "soundfontPath": "/usr/share/sounds/sf2/FluidR3_GM.sf2",
+        "fluidsynthPath": "fluidsynth",
+        "ffmpegPath": "ffmpeg"
+    },
     "db": {
         "host": "<DB_HOST>",
         "port": 5432,

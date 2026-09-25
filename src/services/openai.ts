@@ -19,11 +19,13 @@ import { PromptSettingsService } from './prompt-settings.service.js';
 import { ScheduledMessageService } from './scheduled-message.service.js';
 import { WebRequestState } from './web-contracts.js';
 import { Memory } from '../db/schema.js';
+import { GeneratedAttachment } from '../models/internal-models.js';
 import { MARKOV_INTENT_INSTRUCTIONS, MARKOV_INTENT_RESPONSE_FORMAT } from '../prompts/markov-intent-prompt.js';
 import { RecentChannelMessage, formatRecentChannelContext } from '../utils/recent-channel-context.js';
 
 import type { MarkovIntentInput } from './markov-intent.service.js';
 import type { MarkovReactionSelectionInput, ReactionCandidate } from './markov-reaction.service.js';
+import type { SongService } from './song.service.js';
 import type { WebProvenance } from './web-contracts.js';
 
 const require = createRequire(import.meta.url);
@@ -88,12 +90,6 @@ type ConversationState = {
 	createdAt: number;
 };
 
-export type GeneratedImageInfo = {
-	filePath: string;
-	filename: string;
-	dataUrl: string;
-};
-
 export type RequestContext = {
 	channelId: string;
 	userSnowflake: string;
@@ -102,16 +98,19 @@ export type RequestContext = {
 	messageSnowflake?: string;
 	signal?: AbortSignal;
 	web?: WebRequestState;
+	// Tools push files here so they are uploaded with the final reply.
+	attachments?: GeneratedAttachment[];
 };
 
 export type OpenAIServiceOptions = {
 	kagiService?: KagiService;
+	songService?: SongService;
 	responseCreate?: (params: OpenAI.Responses.ResponseCreateParams, options?: OpenAI.RequestOptions) => Promise<OpenAI.Responses.Response>;
 };
 
-export type ResponseContentWithImages = {
+export type ResponseContent = {
 	text: string;
-	images: GeneratedImageInfo[];
+	attachments: GeneratedAttachment[];
 	web?: WebProvenance;
 };
 
@@ -144,8 +143,8 @@ export class OpenAIService {
 	private readonly modelRouter = new ModelRouter((Config.aiRouting ?? {}) as ModelRoutingConfig);
 	private readonly scheduledMessageService = new ScheduledMessageService();
 	private readonly promptSettingsService = PromptSettingsService.getInstance();
-	// Track generated image info by response ID for later extraction
-	private imageDataByResponseId: Map<string, GeneratedImageInfo[]> = new Map();
+	// Track generated files by response ID for later extraction
+	private attachmentsByResponseId: Map<string, GeneratedAttachment[]> = new Map();
 	private webProvenanceByResponse = new WeakMap<object, WebProvenance>();
 
 	// Memory tools - only offered on the initial request when memory is active.
@@ -198,7 +197,7 @@ export class OpenAIService {
 
 	private constructor(options: OpenAIServiceOptions = {}) {
 		this.options = options;
-		this.domainToolRegistry = createDomainToolRegistry({ kagi: this.options.kagiService });
+		this.domainToolRegistry = createDomainToolRegistry({ kagi: this.options.kagiService, songs: this.options.songService });
 		this.responseCreate = this.options.responseCreate ?? ((params: OpenAI.Responses.ResponseCreateParams, requestOptions?: OpenAI.RequestOptions) => (
 			openai.responses.create(params, requestOptions) as Promise<OpenAI.Responses.Response>
 		));
@@ -406,7 +405,7 @@ export class OpenAIService {
 	}
 
 	// Save base64 image data locally and prepare for Discord upload
-	private async saveGeneratedImage(base64Data: string): Promise<GeneratedImageInfo> {
+	private async saveGeneratedImage(base64Data: string): Promise<GeneratedAttachment> {
 		// Create temp directory if it doesn't exist
 		const tempDir = path.join(os.tmpdir(), 'markov-images');
 		if (!fs.existsSync(tempDir)) {
@@ -428,13 +427,11 @@ export class OpenAIService {
 			Logger.debug(`Image saved to disk: ${tempFilePath}`);
 			Logger.debug(`Image size: ${imageBuffer.length} bytes`);
 
-			// Prepare data URL for OpenAI follow-up requests
-			const dataUrl = `data:image/png;base64,${base64Data}`;
-
 			return {
 				filePath: tempFilePath,
 				filename: filename,
-				dataUrl,
+				description: 'AI generated image',
+				kind: 'image',
 			};
 		} catch (error) {
 			Logger.error('Failed to save generated image locally:', error);
@@ -1052,23 +1049,22 @@ export class OpenAIService {
 		return '';
 	}
 
-	// Get response content with images extracted from response outputs
-	public getResponseContentWithImages(response: OpenAI.Responses.Response): ResponseContentWithImages {
-		Logger.trace('Processing OpenAI response with images...');
+	// Get response content with generated files extracted from response outputs
+	public getResponseContentWithAttachments(response: OpenAI.Responses.Response): ResponseContent {
+		Logger.trace('Processing OpenAI response with attachments...');
 		Logger.trace('Response has output_text:', Boolean(response.output_text));
 		Logger.trace('Response output array length:', response.output?.length || 0);
 
 		let textContent = '';
-		const images: GeneratedImageInfo[] = [];
+		const attachments: GeneratedAttachment[] = [];
 		const web = this.webProvenanceByResponse.get(response);
 		this.webProvenanceByResponse.delete(response);
 
-		// Check if we have tracked image info for this response
-		const trackedImages = this.imageDataByResponseId.get(response.id);
-		if (trackedImages) {
-			images.push(...trackedImages);
-			this.imageDataByResponseId.delete(response.id);
-			Logger.trace(`Found ${trackedImages.length} generated image(s) for response ${response.id}`);
+		const trackedAttachments = this.attachmentsByResponseId.get(response.id);
+		if (trackedAttachments) {
+			attachments.push(...trackedAttachments);
+			this.attachmentsByResponseId.delete(response.id);
+			Logger.trace(`Found ${trackedAttachments.length} generated attachment(s) for response ${response.id}`);
 		}
 
 		// Process the response output array to handle text content
@@ -1101,8 +1097,8 @@ export class OpenAIService {
 			textContent = response.output_text;
 		}
 
-		Logger.trace(`Final text content length: ${textContent.length}, generated images: ${images.length}`);
-		return { text: textContent, images, ...(web && { web }) };
+		Logger.trace(`Final text content length: ${textContent.length}, generated attachments: ${attachments.length}`);
+		return { text: textContent, attachments, ...(web && { web }) };
 	}
 
 	// No longer needed - Responses API handles execution automatically
@@ -1128,8 +1124,8 @@ export class OpenAIService {
 	): Promise<OpenAI.Responses.Response | null> {
 		let hasToolCalls = false;
 		const inputMessages: any[] = []; // Don't copy output items - only include function call outputs and new messages
-		// Seed from earlier rounds so images survive a multi-round tool loop instead of being re-keyed one hop.
-		const generatedImages: GeneratedImageInfo[] = [...(this.imageDataByResponseId.get(response.id) ?? [])];
+		// Seed from earlier rounds so attachments survive a multi-round tool loop instead of being re-keyed one hop.
+		const generatedAttachments: GeneratedAttachment[] = [...(this.attachmentsByResponseId.get(response.id) ?? [])];
 
 		Logger.trace('handleToolCalls - Processing response with output length:', response.output?.length || 0);
 
@@ -1170,7 +1166,7 @@ export class OpenAIService {
 
 					Logger.trace(`Executing function call: ${name}`);
 					try {
-						const result = await this.callFunction(name, args, ctx);
+						const result = await this.callFunction(name, args, { ...ctx, attachments: generatedAttachments });
 
 						// Append the function call result to input messages
 						inputMessages.push({
@@ -1204,7 +1200,7 @@ export class OpenAIService {
 						try {
 							// Save the generated image locally and prepare metadata
 							const generatedImage = await this.saveGeneratedImage(outputItem.result);
-							generatedImages.push(generatedImage);
+							generatedAttachments.push(generatedImage);
 
 							// Inform the AI that generation succeeded. We don't re-attach the image
 							// itself: the model already knows the prompt it requested and can reply
@@ -1241,10 +1237,10 @@ export class OpenAIService {
 			}
 		}
 
-		// Track generated images for the original response BEFORE making follow-up request
+		// Track generated attachments for the original response BEFORE making follow-up request
 		// This ensures we have them even if the follow-up fails
-		if (generatedImages.length > 0) {
-			this.imageDataByResponseId.set(response.id, generatedImages);
+		if (generatedAttachments.length > 0) {
+			this.attachmentsByResponseId.set(response.id, generatedAttachments);
 		}
 
 		// If we had tool calls (functions or images), make a second request to get the final response
@@ -1259,17 +1255,17 @@ export class OpenAIService {
 					previous_response_id: response.id, // Maintain conversation context
 				}, undefined, ctx.signal);
 
-				// Track generated images for this follow-up response as well
-				if (generatedImages.length > 0) {
-					this.imageDataByResponseId.set(followUpResponse.id, generatedImages);
-					this.imageDataByResponseId.delete(response.id);
+				// Track generated attachments for this follow-up response as well
+				if (generatedAttachments.length > 0) {
+					this.attachmentsByResponseId.set(followUpResponse.id, generatedAttachments);
+					this.attachmentsByResponseId.delete(response.id);
 				}
 
 				return followUpResponse;
 			} catch (error) {
 				Logger.error('Error making follow-up request:', error);
-				// Even if follow-up fails, we've already tracked the image URLs for the original response
-				// Return null so the original response is used, which will have the tracked URLs
+				// Even if follow-up fails, we've already tracked the attachments for the original response
+				// Return null so the original response is used, which will have the tracked attachments
 				return null;
 			}
 		}
@@ -1278,37 +1274,35 @@ export class OpenAIService {
 		return null;
 	}
 
-	public async backupAndCleanupImages(images: GeneratedImageInfo[]): Promise<void> {
-		if (!images || images.length === 0) {
-			return;
-		}
-
-		for (const image of images) {
+	// Images are mirrored to Zipline before deletion; other files are only removed since Zipline is our image host.
+	public async finalizeAttachments(attachments: GeneratedAttachment[]): Promise<void> {
+		for (const attachment of attachments) {
 			try {
-				const imageBuffer = await fs.promises.readFile(image.filePath);
-				const backupUrl = await this.imageUploadInstance.uploadImageBuffer(imageBuffer);
-				Logger.debug(`Backed up generated image to Zipline: ${backupUrl}`);
-
-				await fs.promises.unlink(image.filePath);
-				Logger.debug(`Removed local generated image file: ${image.filePath}`);
+				if (attachment.kind === 'image') {
+					const imageBuffer = await fs.promises.readFile(attachment.filePath);
+					const backupUrl = await this.imageUploadInstance.uploadImageBuffer(imageBuffer);
+					Logger.debug(`Backed up generated image to Zipline: ${backupUrl}`);
+				}
+				await fs.promises.unlink(attachment.filePath);
+				Logger.debug(`Removed local generated file: ${attachment.filePath}`);
 			} catch (error) {
-				Logger.error(`Failed to backup or cleanup generated image ${image.filePath}:`, error);
+				Logger.error(`Failed to finalize generated file ${attachment.filePath}:`, error);
 			}
 		}
 	}
 
-	public async cleanupGeneratedImages(images: GeneratedImageInfo[]): Promise<void> {
-		for (const image of images) {
+	public async cleanupGeneratedAttachments(attachments: GeneratedAttachment[]): Promise<void> {
+		for (const attachment of attachments) {
 			try {
-				await fs.promises.unlink(image.filePath);
+				await fs.promises.unlink(attachment.filePath);
 			} catch (error) {
-				Logger.error(`Failed to remove generated image ${image.filePath}:`, error);
+				Logger.error(`Failed to remove generated file ${attachment.filePath}:`, error);
 			}
 		}
 	}
 
-	// Generate image using OpenAI DALL-E and return GeneratedImageInfo for Discord upload
-	public async generateImageForPrompt(prompt: string): Promise<GeneratedImageInfo> {
+	// Generate image using OpenAI DALL-E and return it as an attachment for Discord upload
+	public async generateImageForPrompt(prompt: string): Promise<GeneratedAttachment> {
 		try {
 			Logger.debug(`Generating image with OpenAI for prompt: ${prompt}`);
 			const response = await openai.images.generate({
@@ -1338,7 +1332,7 @@ export class OpenAIService {
 			// Convert to base64 for saveGeneratedImage
 			const base64Data = imageBuffer.toString('base64');
 
-			// Save locally and get GeneratedImageInfo
+			// Save locally for Discord upload
 			const imageInfo = await this.saveGeneratedImage(base64Data);
 			Logger.debug(`Image saved locally: ${imageInfo.filePath}`);
 

@@ -10,3 +10,11 @@ export class EventData {
 		public langGuild: Locale,
 	) {}
 }
+
+// A file produced during an AI response that is uploaded alongside the reply.
+export type GeneratedAttachment = {
+	filePath: string;
+	filename: string;
+	description: string;
+	kind: 'image' | 'audio' | 'midi';
+};

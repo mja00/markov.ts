@@ -100,6 +100,7 @@ A welcome message is sent to the server and owner when the bot is added.
     - Kagi search and extraction are billed separately by Kagi. Markov applies per-message and per-process safety limits; sharded processes have independent limits.
     - Markov stores the visible source links in the normal Discord context, but does not log or persist raw Kagi snippets/page Markdown. The existing OpenAI Responses conversation chain uses server-side response storage for `previous_response_id`, so enabling web research sends extracted content through that provider chain.
     - Set `KAGI_ENABLED=false` or `kagi.enabled` to `false` and restart the bot to disable new web requests.
+    - To let Markov compose songs, install FluidSynth, ffmpeg, and a General MIDI soundfont (Ubuntu: `sudo apt install fluidsynth ffmpeg fluid-soundfont-gm`), then set `music.enabled` to `true` and point `music.soundfontPath` at the `.sf2` file. Songs are rendered locally and attached as `.mp3` and `.mid` files.
 5. Register commands.
     - In order to use slash commands, they first [have to be registered](https://discordjs.guide/creating-your-bot/command-deployment.html).
     - **Important:** Choose ONE approach (global OR guild-specific). Having both will show duplicate commands!

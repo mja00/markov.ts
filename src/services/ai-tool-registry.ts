@@ -17,6 +17,13 @@ import { KagiService } from './kagi.service.js';
 import { Logger } from './logger.js';
 import { ProactivePreferencesService } from './proactive-preferences.service.js';
 import { ShopService } from './shop.service.js';
+import {
+	COMPOSE_SONG_DESCRIPTION,
+	COMPOSE_SONG_PROPERTIES,
+	Song,
+	SongError,
+	SongService,
+} from './song.service.js';
 import { UserService } from './user.service.js';
 import { ShopLimits } from '../constants/shop-limits.js';
 import {
@@ -26,6 +33,7 @@ import {
 	guilds,
 	users as usersTable,
 } from '../db/schema.js';
+import { GeneratedAttachment } from '../models/internal-models.js';
 
 import type { WebRequestState } from './web-contracts.js';
 
@@ -36,6 +44,7 @@ export type AIToolContext = {
 	channelId: string;
 	signal?: AbortSignal;
 	web?: WebRequestState;
+	attachments?: GeneratedAttachment[];
 };
 type ToolHandler = (arguments_: Record<string, unknown>, context: AIToolContext) => Promise<unknown>;
 
@@ -121,7 +130,7 @@ const functionTool = (
 	};
 };
 
-export function createDomainToolRegistry(options: { kagi?: KagiService; } = {}): AIToolRegistry {
+export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: SongService; } = {}): AIToolRegistry {
 	const registry = new AIToolRegistry();
 	const users = new UserService();
 	const fishing = new FishingService();
@@ -333,6 +342,36 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; } = {}):
 			return { success: true, item: owned.item.name, active: true, activationRequired: false };
 		},
 	});
+
+	if (options.songs) {
+		const songs = options.songs;
+		registry.register({
+			definition: functionTool('compose_song', COMPOSE_SONG_DESCRIPTION, COMPOSE_SONG_PROPERTIES, ['title', 'bpm', 'tracks']),
+			timeoutMs: 30000,
+			handler: async (arguments_, context) => {
+				if (!context.attachments) {
+					return { success: false, reason: 'Songs cannot be attached in this conversation.' };
+				}
+				try {
+					// Strict function schemas guarantee the shape; SongService validates the note notation and limits.
+					const song = arguments_ as Song;
+					const rendered = await songs.render(song, context.signal);
+					context.attachments.push(...rendered.attachments);
+					return {
+						success: true,
+						title: song.title,
+						durationSeconds: Math.round(rendered.durationSeconds),
+						attached: rendered.attachments.map(file => file.filename),
+					};
+				} catch (error) {
+					if (error instanceof SongError) {
+						return { success: false, reason: error.message };
+					}
+					throw error;
+				}
+			},
+		});
+	}
 
 	if (options.kagi) {
 		registry.register({

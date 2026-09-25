@@ -56,7 +56,7 @@ describe('OpenAI web orchestration', () => {
 		}).processResponseWithFunctionCalls.bind(service);
 
 		const result = await process(initial, { model: 'gpt-5.4', instructions: 'test', store: true }, context);
-		const content = service.getResponseContentWithImages(result);
+		const content = service.getResponseContentWithAttachments(result);
 
 		expect(search).toHaveBeenCalledWith('latest news', requestState);
 		expect(responseCreate).toHaveBeenCalledTimes(1);
@@ -177,7 +177,7 @@ describe('OpenAI web orchestration', () => {
 		}).processResponseWithFunctionCalls.bind(service);
 
 		const result = await process(initial, { model: 'gpt-5.4', instructions: 'test', store: true }, context);
-		const content = service.getResponseContentWithImages(result);
+		const content = service.getResponseContentWithAttachments(result);
 
 		expect(result.id).toBe('follow1');
 		expect(content.text).toBe('Per evil.example, the sky is green.');
@@ -205,7 +205,7 @@ describe('OpenAI web orchestration', () => {
 		}).processResponseWithFunctionCalls.bind(service);
 
 		const result = await process(initial, { model: 'gpt-5.4', instructions: 'test', store: true }, context);
-		const content = service.getResponseContentWithImages(result);
+		const content = service.getResponseContentWithAttachments(result);
 
 		expect(search).not.toHaveBeenCalled();
 		expect(content.web?.attempted).toBe(false);
@@ -243,10 +243,10 @@ describe('OpenAI web orchestration', () => {
 		}).processResponseWithFunctionCalls.bind(service);
 
 		const result = await process(initial, { model: 'gpt-5.4', instructions: 'test', store: true }, context);
-		const content = service.getResponseContentWithImages(result);
+		const content = service.getResponseContentWithAttachments(result);
 
 		expect(result.id).toBe('follow2');
-		expect(content.images).toHaveLength(1);
-		await service.cleanupGeneratedImages(content.images);
+		expect(content.attachments).toHaveLength(1);
+		await service.cleanupGeneratedAttachments(content.attachments);
 	});
 });
