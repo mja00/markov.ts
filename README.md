@@ -93,6 +93,7 @@ A welcome message is sent to the server and owner when the bot is added.
     - You'll need to edit the following values:
         - `client.id` - Your discord bot's [user ID](https://techswift.org/2020/04/22/how-to-find-your-user-id-on-discord/).
         - `client.token` - Your discord bot's token.
+    - Optional: `replyBudget` limits how much work Markov does before replying. He can chain up to `maxToolRounds` tool rounds per reply until he has used `maxOutputTokens` output tokens (reasoning included) or `wrapUpAfterMs` has passed; after that he has to answer. The budget is checked between rounds, so the round that crosses it and the final answer can go past `maxOutputTokens`. `timeoutMs` is the hard abort for the whole reply. `kagi.maxToolRounds` still caps how many of those rounds can use web research.
 4. Install packages.
     - Navigate into the downloaded source files and type `npm install`.
     - To enable Kagi-backed web research, set `kagi.enabled` to `true` and provide `KAGI_API_KEY` (or `kagi.apiKey`). API keys from the environment take precedence over the config file.

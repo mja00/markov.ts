@@ -69,26 +69,29 @@ describe('OpenAI web orchestration', () => {
 		});
 	});
 
-	it('blocks tool execution after the web round limit but still answers', async () => {
+	it('blocks web calls past the web round limit while other tools stay available', async () => {
 		const responseCreate = vi.fn(async (params: OpenAI.Responses.ResponseCreateParams) => {
-			expect(params.tools).toEqual([]);
-			expect(params.tool_choice).toBe('none');
-			return response('terminal', [{
+			expect(params.tool_choice).toBeUndefined();
+			expect(params.tools?.some(tool => 'name' in tool && tool.name === 'search_web')).toBe(false);
+			expect(params.tools?.some(tool => 'name' in tool && tool.name === 'random_number_generator')).toBe(true);
+			expect(params.input).toEqual([{
+				type: 'function_call_output',
+				call_id: 'call-1',
+				output: 'Error: The web research limit for this reply has been reached.',
+			}]);
+			return response('answer', [{
 				type: 'message',
 				content: [{ type: 'output_text', text: 'Here is what I already know.' }],
 			}]);
 		});
-		const search = vi.fn(async (_query: string, requestState?: WebRequestState) => {
-			requestState?.reserveUpstreamCall();
-			requestState?.addSources([{ url: 'https://example.com', title: 'Example' }]);
-			return { available: true, sources: [{ url: 'https://example.com', title: 'Example' }] };
-		});
+		const search = vi.fn();
 		const service = OpenAIService.createForTest({ kagiService: { search } as never, responseCreate });
 		const context = {
 			channelId: 'channel',
 			userSnowflake: 'user-1',
 			guildSnowflake: 'guild',
 			username: 'Alice',
+			startedAt: Date.now(),
 			web: new WebRequestState({ userSnowflake: 'user-1', maxToolRounds: 0, maxUpstreamCalls: 1 }),
 		};
 		const initial = response('initial', [{
@@ -100,7 +103,7 @@ describe('OpenAI web orchestration', () => {
 
 		const result = await process(initial, { model: 'gpt-5.4', instructions: 'test', store: true }, context);
 
-		expect(result.id).toBe('terminal');
+		expect(result.id).toBe('answer');
 		expect(search).not.toHaveBeenCalled();
 		expect(responseCreate).toHaveBeenCalledTimes(1);
 		expect(context.web.fallback).toBe(false);
