@@ -369,6 +369,7 @@ export class OpenAIService {
 	}
 
 	// Runs tool rounds until Markov answers or the reply budget is spent; the last follow-up forbids tools so he must reply.
+	// The budget is soft: it is checked between rounds, so one call (including the final answer) can run past maxOutputTokens.
 	private async processResponseWithFunctionCalls(
 		initialResponse: OpenAI.Responses.Response,
 		promptConfig: OpenAI.Responses.ResponseCreateParams,
@@ -379,13 +380,12 @@ export class OpenAIService {
 		let outputTokens = initialResponse.usage?.output_tokens ?? 0;
 		let rounds = 0;
 		let webRounds = 0;
-		let readWebContent = false;
 		// Tools offered on the request that produced currentResponse; undefined means the full initial set.
 		let offeredToolNames: ReadonlySet<string> | undefined;
 		while (this.responseHasToolCalls(currentResponse)) {
 			const offered = offeredToolNames;
 			const webRoundsLeft = web !== undefined && webRounds < web.maxToolRounds;
-			const notOfferedReason = readWebContent
+			const notOfferedReason = web?.successful
 				? 'Error: This tool is not available during web research.'
 				: 'Error: This tool is not available right now.';
 			const blockReason = (name: string): string | undefined => {
@@ -401,19 +401,22 @@ export class OpenAIService {
 				item.type === 'function_call' && isWebTool(item.name) && !blockReason(item.name)
 			));
 
+			const toolOutputs = await this.runToolCalls(currentResponse, ctx, blockReason);
+			if (!toolOutputs) {
+				break;
+			}
 			rounds += 1;
 			if (runsWebTool) {
 				webRounds += 1;
-				readWebContent = true;
 			}
+			// Checked after the tools run so slow tools count toward the deadline.
 			const terminal = rounds >= this.replyBudget.maxToolRounds
 				|| outputTokens >= this.replyBudget.maxOutputTokens
 				|| Date.now() - ctx.startedAt >= this.replyBudget.wrapUpAfterMs;
-			const followUpTools = terminal ? [] : this.getFollowUpTools(ctx, readWebContent, webRounds);
-			const followUpResponse = await this.handleToolCalls(currentResponse, promptConfig, ctx, {
-				followUpTools,
+			const followUpTools = terminal ? [] : this.getFollowUpTools(ctx, webRounds);
+			const followUpResponse = await this.requestFollowUp(currentResponse, toolOutputs, promptConfig, ctx, {
+				tools: followUpTools,
 				terminal,
-				blockReason,
 			});
 			if (!followUpResponse) {
 				web?.markFallback();
@@ -433,11 +436,12 @@ export class OpenAIService {
 		return currentResponse;
 	}
 
-	// Web results are untrusted, so once they reach the model later rounds may only request more web data.
-	private getFollowUpTools(ctx: RequestContext, readWebContent: boolean, webRounds: number): OpenAI.Responses.Tool[] {
+	// Web results are untrusted, so once any reach the model later rounds may only request more web data.
+	// A failed or empty web call adds no sources, so it leaves the action tools available.
+	private getFollowUpTools(ctx: RequestContext, webRounds: number): OpenAI.Responses.Tool[] {
 		const webToolsLeft = ctx.web !== undefined && ctx.web.webAvailable && webRounds < ctx.web.maxToolRounds;
 		const webTools = webToolsLeft ? this.webTools : [];
-		if (readWebContent) {
+		if (ctx.web?.successful) {
 			return webTools;
 		}
 		return [...this.baseTools, ...webTools];
@@ -452,6 +456,173 @@ export class OpenAIService {
 				&& 'result' in outputItem
 				&& Boolean(outputItem.result))
 		));
+	}
+
+	// Execute the response's tool calls and return their outputs as follow-up input, or null when there were none.
+	private async runToolCalls(
+		response: OpenAI.Responses.Response,
+		ctx: RequestContext,
+		blockReason?: (name: string) => string | undefined,
+	): Promise<OpenAI.Responses.ResponseInputItem[] | null> {
+		let hasToolCalls = false;
+		const inputMessages: OpenAI.Responses.ResponseInputItem[] = []; // Don't copy output items - only include function call outputs and new messages
+		// Seed from earlier rounds so attachments survive a multi-round tool loop instead of being re-keyed one hop.
+		const generatedAttachments: GeneratedAttachment[] = [...(this.attachmentsByResponseId.get(response.id) ?? [])];
+
+		Logger.trace('runToolCalls - Processing response with output length:', response.output?.length || 0);
+
+		// Check if there are any tool calls in the response output
+		if (response.output && Array.isArray(response.output)) {
+			for (const outputItem of response.output) {
+				Logger.trace(`runToolCalls - Processing output item type: ${outputItem.type}`);
+				// Handle function calls according to the OpenAI docs
+				if (outputItem.type === 'function_call') {
+					hasToolCalls = true;
+					const name = outputItem.name;
+					const callId = outputItem.call_id;
+					let args: Record<string, unknown>;
+					try {
+						const parsed = JSON.parse(outputItem.arguments) as unknown;
+						if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+							throw new Error('Tool arguments must be a JSON object.');
+						}
+						args = parsed as Record<string, unknown>;
+					} catch {
+						inputMessages.push({
+							type: 'function_call_output',
+							call_id: callId,
+							output: 'Error: Tool arguments were not valid JSON.',
+						});
+						continue;
+					}
+
+					const blocked = blockReason?.(name);
+					if (blocked) {
+						inputMessages.push({
+							type: 'function_call_output',
+							call_id: callId,
+							output: blocked,
+						});
+						Logger.warn(`Blocked tool call ${name}: ${blocked}`);
+						continue;
+					}
+
+					Logger.trace(`Executing function call: ${name}`);
+					try {
+						const result = await this.callFunction(name, args, { ...ctx, attachments: generatedAttachments });
+
+						// Append the function call result to input messages
+						inputMessages.push({
+							type: 'function_call_output',
+							call_id: callId,
+							output: result,
+						});
+
+						if (name === 'search_web' || name === 'summarize_web_page') {
+							Logger.trace(`Function ${name} executed successfully`);
+						} else {
+							Logger.trace(`Function ${name} executed successfully with result: ${result}`);
+						}
+					} catch (error) {
+						Logger.error(`Error executing function ${name}:`, error);
+
+						// Append error result
+						inputMessages.push({
+							type: 'function_call_output',
+							call_id: callId,
+							output: `Error: ${error instanceof Error ? error.message : 'Function execution failed'}`,
+						});
+					}
+				} else if (outputItem.type === 'image_generation_call') {
+					// Handle image generation calls
+					Logger.trace('runToolCalls - Found image_generation_call');
+					if ('status' in outputItem && outputItem.status === 'completed' && 'result' in outputItem && outputItem.result) {
+						hasToolCalls = true;
+						Logger.trace('runToolCalls - Processing completed image generation call');
+
+						try {
+							// Save the generated image locally and prepare metadata
+							const generatedImage = await this.saveGeneratedImage(outputItem.result);
+							generatedAttachments.push(generatedImage);
+
+							// Inform the AI that generation succeeded. We don't re-attach the image
+							// itself: the model already knows the prompt it requested and can reply
+							// based on that, avoiding the cost of feeding the image back as vision input.
+							inputMessages.push({
+								type: 'message',
+								role: 'user',
+								content: [
+									{
+										type: 'input_text',
+										text: 'I\'ve generated the image you requested.',
+									},
+								],
+							});
+
+							Logger.trace(`Image generated and stored locally: ${generatedImage.filePath}`);
+						} catch (error) {
+							Logger.error('Error processing image generation:', error);
+
+							// Add error result as a message
+							inputMessages.push({
+								type: 'message',
+								role: 'user',
+								content: [
+									{
+										type: 'input_text',
+										text: `Error: Image generation failed - ${error instanceof Error ? error.message : 'Upload failed'}`,
+									},
+								],
+							});
+						}
+					}
+				}
+			}
+		}
+
+		// Track generated attachments for the original response BEFORE making follow-up request
+		// This ensures we have them even if the follow-up fails
+		if (generatedAttachments.length > 0) {
+			this.attachmentsByResponseId.set(response.id, generatedAttachments);
+		}
+
+		return hasToolCalls ? inputMessages : null;
+	}
+
+	// Send tool outputs back so the model can continue or reply; null means the request failed and `response` stands.
+	private async requestFollowUp(
+		response: OpenAI.Responses.Response,
+		inputMessages: OpenAI.Responses.ResponseInputItem[],
+		promptConfig: OpenAI.Responses.ResponseCreateParams,
+		ctx: RequestContext,
+		options: { tools: OpenAI.Responses.Tool[]; terminal: boolean; },
+	): Promise<OpenAI.Responses.Response | null> {
+		const input = options.terminal
+			? [...inputMessages, { type: 'message' as const, role: 'developer' as const, content: FINAL_ROUND_NOTE }]
+			: inputMessages;
+		try {
+			Logger.trace('Making follow-up request with tool results');
+			const followUpResponse = await this.createRoutedResponse('final_response', ctx.channelId, {
+				input,
+				tools: options.tools,
+				...(options.terminal && { tool_choice: 'none' as const }),
+				...promptConfig,
+				previous_response_id: response.id, // Maintain conversation context
+			}, undefined, ctx.signal);
+
+			// Re-key attachments so they follow the newest response in the chain
+			const attachments = this.attachmentsByResponseId.get(response.id);
+			if (attachments) {
+				this.attachmentsByResponseId.set(followUpResponse.id, attachments);
+				this.attachmentsByResponseId.delete(response.id);
+			}
+
+			return followUpResponse;
+		} catch (error) {
+			Logger.error('Error making follow-up request:', error);
+			// Attachments stay keyed to `response`, which the caller falls back to
+			return null;
+		}
 	}
 
 	// Save base64 image data locally and prepare for Discord upload
@@ -1090,7 +1261,7 @@ export class OpenAIService {
 						}
 					}
 				}
-				// Note: Image generation calls are now handled in handleToolCalls
+				// Note: Image generation calls are now handled in runToolCalls
 				// This allows the AI to provide a proper response after seeing the uploaded URL
 			}
 
@@ -1172,169 +1343,6 @@ export class OpenAIService {
 	public async waitOnRun(run: any, _thread: any): Promise<any> {
 		Logger.warn('waitOnRun called - this method is deprecated with Responses API');
 		return run;
-	}
-
-	// Handle function calls and image generation in the response and execute them
-	public async handleToolCalls(
-		response: OpenAI.Responses.Response,
-		promptConfig: OpenAI.Responses.ResponseCreateParams,
-		ctx: RequestContext,
-		options: { followUpTools?: OpenAI.Responses.Tool[]; terminal?: boolean; blockReason?: (name: string) => string | undefined; } = {},
-	): Promise<OpenAI.Responses.Response | null> {
-		let hasToolCalls = false;
-		const inputMessages: any[] = []; // Don't copy output items - only include function call outputs and new messages
-		// Seed from earlier rounds so attachments survive a multi-round tool loop instead of being re-keyed one hop.
-		const generatedAttachments: GeneratedAttachment[] = [...(this.attachmentsByResponseId.get(response.id) ?? [])];
-
-		Logger.trace('handleToolCalls - Processing response with output length:', response.output?.length || 0);
-
-		// Check if there are any tool calls in the response output
-		if (response.output && Array.isArray(response.output)) {
-			for (const outputItem of response.output) {
-				Logger.trace(`handleToolCalls - Processing output item type: ${outputItem.type}`);
-				// Handle function calls according to the OpenAI docs
-				if (outputItem.type === 'function_call') {
-					hasToolCalls = true;
-					const name = outputItem.name;
-					const callId = outputItem.call_id;
-					let args: Record<string, unknown>;
-					try {
-						const parsed = JSON.parse(outputItem.arguments) as unknown;
-						if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-							throw new Error('Tool arguments must be a JSON object.');
-						}
-						args = parsed as Record<string, unknown>;
-					} catch {
-						inputMessages.push({
-							type: 'function_call_output',
-							call_id: callId,
-							output: 'Error: Tool arguments were not valid JSON.',
-						});
-						continue;
-					}
-
-					const blocked = options.blockReason?.(name);
-					if (blocked) {
-						inputMessages.push({
-							type: 'function_call_output',
-							call_id: callId,
-							output: blocked,
-						});
-						Logger.warn(`Blocked tool call ${name}: ${blocked}`);
-						continue;
-					}
-
-					Logger.trace(`Executing function call: ${name}`);
-					try {
-						const result = await this.callFunction(name, args, { ...ctx, attachments: generatedAttachments });
-
-						// Append the function call result to input messages
-						inputMessages.push({
-							type: 'function_call_output',
-							call_id: callId,
-							output: result,
-						});
-
-						if (name === 'search_web' || name === 'summarize_web_page') {
-							Logger.trace(`Function ${name} executed successfully`);
-						} else {
-							Logger.trace(`Function ${name} executed successfully with result: ${result}`);
-						}
-					} catch (error) {
-						Logger.error(`Error executing function ${name}:`, error);
-
-						// Append error result
-						inputMessages.push({
-							type: 'function_call_output',
-							call_id: callId,
-							output: `Error: ${error instanceof Error ? error.message : 'Function execution failed'}`,
-						});
-					}
-				} else if (outputItem.type === 'image_generation_call') {
-					// Handle image generation calls
-					Logger.trace('handleToolCalls - Found image_generation_call');
-					if ('status' in outputItem && outputItem.status === 'completed' && 'result' in outputItem && outputItem.result) {
-						hasToolCalls = true;
-						Logger.trace('handleToolCalls - Processing completed image generation call');
-
-						try {
-							// Save the generated image locally and prepare metadata
-							const generatedImage = await this.saveGeneratedImage(outputItem.result);
-							generatedAttachments.push(generatedImage);
-
-							// Inform the AI that generation succeeded. We don't re-attach the image
-							// itself: the model already knows the prompt it requested and can reply
-							// based on that, avoiding the cost of feeding the image back as vision input.
-							inputMessages.push({
-								type: 'message',
-								role: 'user',
-								content: [
-									{
-										type: 'input_text',
-										text: 'I\'ve generated the image you requested.',
-									},
-								],
-							});
-
-							Logger.trace(`Image generated and stored locally: ${generatedImage.filePath}`);
-						} catch (error) {
-							Logger.error('Error processing image generation:', error);
-
-							// Add error result as a message
-							inputMessages.push({
-								type: 'message',
-								role: 'user',
-								content: [
-									{
-										type: 'input_text',
-										text: `Error: Image generation failed - ${error instanceof Error ? error.message : 'Upload failed'}`,
-									},
-								],
-							});
-						}
-					}
-				}
-			}
-		}
-
-		// Track generated attachments for the original response BEFORE making follow-up request
-		// This ensures we have them even if the follow-up fails
-		if (generatedAttachments.length > 0) {
-			this.attachmentsByResponseId.set(response.id, generatedAttachments);
-		}
-
-		// If we had tool calls (functions or images), make a follow-up request so the model can continue or reply
-		if (hasToolCalls) {
-			if (options.terminal) {
-				inputMessages.push({ type: 'message', role: 'developer', content: FINAL_ROUND_NOTE });
-			}
-			try {
-				Logger.trace('Making follow-up request with tool results');
-				const followUpResponse = await this.createRoutedResponse('final_response', ctx.channelId, {
-					input: inputMessages,
-					tools: options.followUpTools ?? this.baseTools,
-					...(options.terminal && { tool_choice: 'none' as const }),
-					...promptConfig,
-					previous_response_id: response.id, // Maintain conversation context
-				}, undefined, ctx.signal);
-
-				// Track generated attachments for this follow-up response as well
-				if (generatedAttachments.length > 0) {
-					this.attachmentsByResponseId.set(followUpResponse.id, generatedAttachments);
-					this.attachmentsByResponseId.delete(response.id);
-				}
-
-				return followUpResponse;
-			} catch (error) {
-				Logger.error('Error making follow-up request:', error);
-				// Even if follow-up fails, we've already tracked the attachments for the original response
-				// Return null so the original response is used, which will have the tracked attachments
-				return null;
-			}
-		}
-
-		// No function calls, return null to indicate no follow-up needed
-		return null;
 	}
 
 	// Images are mirrored to Zipline before deletion; other files are only removed since Zipline is our image host.

@@ -128,6 +128,26 @@ describe('OpenAI reply budget', () => {
 		expect(names).toContain('search_web');
 	});
 
+	it('keeps action tools after a web call that returned no content', async () => {
+		const search = vi.fn(async (_query: string, requestState?: WebRequestState) => {
+			requestState?.blockWeb();
+			return { available: false, sources: [], reason: 'Kagi is down.' };
+		});
+		const responseCreate = vi.fn().mockResolvedValueOnce(answer('final', 'Search is down, but I set the reminder.'));
+		const service = OpenAIService.createForTest({ kagiService: { search } as never, responseCreate, replyBudget: budget() });
+
+		await runLoop(service, response('initial', [{
+			type: 'function_call', name: 'search_web', call_id: 'call-1', arguments: '{"query":"news"}',
+		}]), context({
+			web: new WebRequestState({ userSnowflake: 'user-1', maxToolRounds: 3, maxUpstreamCalls: 3 }),
+		}));
+
+		expect(search).toHaveBeenCalledTimes(1);
+		const names = toolNames(responseCreate.mock.calls[0][0]);
+		expect(names).toContain('schedule_message');
+		expect(names).not.toContain('search_web');
+	});
+
 	it('stops offering web tools after the web round cap but keeps the loop going', async () => {
 		const search = vi.fn(async (_query: string, requestState?: WebRequestState) => {
 			requestState?.reserveUpstreamCall();

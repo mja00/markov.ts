@@ -26,7 +26,8 @@ export function resolveReplyBudget(rawConfig: unknown): ReplyBudget {
 	return {
 		maxToolRounds: boundedInteger(raw.maxToolRounds, DEFAULT_REPLY_BUDGET.maxToolRounds, 1, 20),
 		maxOutputTokens: boundedInteger(raw.maxOutputTokens, DEFAULT_REPLY_BUDGET.maxOutputTokens, 1000, 1_000_000),
-		wrapUpAfterMs: boundedInteger(raw.wrapUpAfterMs, DEFAULT_REPLY_BUDGET.wrapUpAfterMs, 5000, timeoutMs),
+		// Half the timeout, like the defaults, so a short timeoutMs without wrapUpAfterMs still leaves time for the final answer.
+		wrapUpAfterMs: boundedInteger(raw.wrapUpAfterMs, Math.min(DEFAULT_REPLY_BUDGET.wrapUpAfterMs, Math.floor(timeoutMs / 2)), 5000, timeoutMs),
 		timeoutMs,
 	};
 }

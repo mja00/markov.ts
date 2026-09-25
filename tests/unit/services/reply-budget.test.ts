@@ -17,6 +17,10 @@ describe('resolveReplyBudget', () => {
 		});
 	});
 
+	it('wraps up at half of a short timeout when wrapUpAfterMs is omitted', () => {
+		expect(resolveReplyBudget({ timeoutMs: 60000 }).wrapUpAfterMs).toBe(30000);
+	});
+
 	it('falls back to defaults for missing or non-numeric values', () => {
 		expect(resolveReplyBudget({ maxToolRounds: '9' })).toEqual(resolveReplyBudget(undefined));
 	});
