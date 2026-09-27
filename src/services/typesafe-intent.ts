@@ -27,29 +27,29 @@ export function createTypeSafeIntentModel(settings: TypeSafeIntentSettings = {})
 			retry: { maxRetries: 1 },
 		});
 
-		const questions: Record<string, NoulQuestion> = { react: MARKOV_REACT_QUESTION };
+		const questions: Record<string, NoulQuestion> = {};
 		if (request.addressed) {
 			questions.addressed = MARKOV_ADDRESSED_QUESTION;
 		}
 		if (request.continuation) {
 			questions.continuation = MARKOV_CONTINUATION_QUESTION;
 		}
+		if (request.react) {
+			questions.react = MARKOV_REACT_QUESTION;
+		}
 
 		const { answers } = await client.systemOne({
 			state: {
-				message: {
-					content: input.content,
-					...(input.hasImage && { hasImage: true }),
-				},
+				message: { content: input.content },
 				...(input.referencedMessage && { repliedToMessage: input.referencedMessage }),
 			},
 			questions,
 		});
 
 		return {
-			react: answers.react.noul,
 			addressed: answers.addressed?.noul,
 			continuation: answers.continuation?.noul,
+			react: answers.react?.noul,
 		};
 	};
 }

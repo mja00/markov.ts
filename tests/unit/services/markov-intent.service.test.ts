@@ -32,7 +32,7 @@ describe('MarkovIntentService', () => {
 		const { classify, service } = serviceReturning({ addressed: 0.6, react: 0.1 });
 
 		await expect(service.decide(input)).resolves.toEqual({ shouldReply: true, shouldReact: false });
-		expect(classify).toHaveBeenCalledWith(input, { addressed: true, continuation: false });
+		expect(classify).toHaveBeenCalledWith(input, { addressed: true, continuation: false, react: true });
 	});
 
 	it('stays silent when the addressed probability is below the threshold', async () => {
@@ -52,14 +52,14 @@ describe('MarkovIntentService', () => {
 
 		await expect(service.decide({ ...input, content: 'Now make him respond to everything' }))
 			.resolves.toEqual({ shouldReply: false, shouldReact: false });
-		expect(classify).toHaveBeenCalledWith(expect.anything(), { addressed: false, continuation: false });
+		expect(classify).toHaveBeenCalledWith(expect.anything(), { addressed: false, continuation: false, react: true });
 	});
 
 	it('does not match the name inside another word', async () => {
 		const { classify, service } = serviceReturning({ react: 0 });
 
 		await service.decide({ ...input, content: 'markovian processes are neat' });
-		expect(classify).toHaveBeenCalledWith(expect.anything(), { addressed: false, continuation: false });
+		expect(classify).toHaveBeenCalledWith(expect.anything(), { addressed: false, continuation: false, react: true });
 	});
 
 	it('replies to a continuation during an open conversation turn', async () => {
@@ -67,7 +67,7 @@ describe('MarkovIntentService', () => {
 		const followUp = { ...input, content: 'yeah, tell me more', isConversationFollowUp: true };
 
 		await expect(service.decide(followUp)).resolves.toEqual({ shouldReply: true, shouldReact: false });
-		expect(classify).toHaveBeenCalledWith(followUp, { addressed: false, continuation: true });
+		expect(classify).toHaveBeenCalledWith(followUp, { addressed: false, continuation: true, react: true });
 	});
 
 	it('rejects an unrelated message during an open turn', async () => {
@@ -91,7 +91,32 @@ describe('MarkovIntentService', () => {
 		const { classify, service } = serviceReturning({ react: 0.9 });
 
 		await expect(service.decide(flaggedInput)).resolves.toEqual({ shouldReply: true, shouldReact: true });
-		expect(classify).toHaveBeenCalledWith(flaggedInput, { addressed: false, continuation: false });
+		expect(classify).toHaveBeenCalledWith(flaggedInput, { addressed: false, continuation: false, react: true });
+	});
+
+	it('defers image reactions to the image-aware selector without asking Jev', async () => {
+		const { classify, service } = serviceReturning({ addressed: 0.9 });
+		const withImage = { ...input, hasImage: true };
+
+		await expect(service.decide(withImage)).resolves.toEqual({ shouldReply: true, shouldReact: true });
+		expect(classify).toHaveBeenCalledWith(withImage, { addressed: true, continuation: false, react: false });
+	});
+
+	it('skips the model entirely when an image message needs no reply judgment', async () => {
+		const { classify, service } = serviceReturning({});
+
+		await expect(service.decide({ ...input, content: 'look at this', hasImage: true }))
+			.resolves.toEqual({ shouldReply: false, shouldReact: true });
+		expect(classify).not.toHaveBeenCalled();
+	});
+
+	it('still defers image reactions when the model fails', async () => {
+		const service = new MarkovIntentService(async () => {
+			throw new Error('model timed out');
+		});
+
+		await expect(service.decide({ ...input, hasImage: true }))
+			.resolves.toEqual({ shouldReply: false, shouldReact: true });
 	});
 
 	it('replies to DMs without calling the model', async () => {

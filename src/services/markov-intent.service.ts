@@ -18,17 +18,18 @@ export type MarkovIntentResult = {
 	shouldReact: boolean;
 };
 
-/** Which optional reply judgments the model must answer; the reaction judgment is always requested. */
+/** Which judgments the model must answer for this message. */
 export type MarkovIntentJudgmentRequest = {
 	addressed: boolean;
 	continuation: boolean;
+	react: boolean;
 };
 
 /** Yes-probabilities for each requested judgment. */
 export type MarkovIntentJudgments = {
 	addressed?: number;
 	continuation?: number;
-	react: number;
+	react?: number;
 };
 
 export type MarkovIntentModel = (
@@ -68,23 +69,31 @@ export class MarkovIntentService {
 		}
 
 		const authoritativeReply = input.botMentioned || input.isReplyToMarkov;
+		// Jev is text-only, so image messages go straight to the image-aware reaction selector, which can still decline.
+		const deferReactionToSelector = input.hasImage;
 		// Optional replies need the name or an open turn, so skip judgments code would ignore.
 		const request: MarkovIntentJudgmentRequest = {
 			addressed: !authoritativeReply && /\bmarkov\b/i.test(input.content),
 			continuation: !authoritativeReply && input.isConversationFollowUp,
+			react: !deferReactionToSelector,
 		};
+		if (!request.addressed && !request.continuation && !request.react) {
+			return { shouldReply: authoritativeReply, shouldReact: deferReactionToSelector };
+		}
+
 		try {
 			const judgments = await this.classify(input, request);
 			const addressed = request.addressed && this.passes(judgments.addressed, this.thresholds.reply);
 			const continuation = request.continuation && this.passes(judgments.continuation, this.thresholds.reply);
+			const react = request.react && this.passes(judgments.react, this.thresholds.react);
 
 			return {
 				shouldReply: authoritativeReply || addressed || continuation,
-				shouldReact: this.passes(judgments.react, this.thresholds.react),
+				shouldReact: deferReactionToSelector || react,
 			};
 		} catch (error) {
 			Logger.warn('Markov intent detection failed; skipping optional AI actions:', error);
-			return { shouldReply: authoritativeReply, shouldReact: false };
+			return { shouldReply: authoritativeReply, shouldReact: deferReactionToSelector };
 		}
 	}
 }
