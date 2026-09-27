@@ -10,7 +10,7 @@ export type MarkovIntentInput = {
 		author: string;
 		content: string;
 	};
-	imageUrl?: string;
+	hasImage: boolean;
 };
 
 export type MarkovIntentResult = {
@@ -18,31 +18,50 @@ export type MarkovIntentResult = {
 	shouldReact: boolean;
 };
 
+/** Which judgments the model must answer for this message. */
+export type MarkovIntentJudgmentRequest = {
+	addressed: boolean;
+	continuation: boolean;
+	react: boolean;
+};
+
+/** Yes-probabilities for each requested judgment. */
+export type MarkovIntentJudgments = {
+	addressed?: number;
+	continuation?: number;
+	react?: number;
+};
+
 export type MarkovIntentModel = (
 	input: MarkovIntentInput,
-	routingKey: string,
-) => Promise<string | null>;
+	request: MarkovIntentJudgmentRequest,
+) => Promise<MarkovIntentJudgments>;
+
+export type MarkovIntentThresholds = {
+	reply: number;
+	react: number;
+};
+
+// Tuned on evals/dataset.jsonl with jev-1.13.0: reply scores split at 0.14/0.69, react needs 0.8 to skip borderline chatter.
+export const DEFAULT_MARKOV_INTENT_THRESHOLDS: MarkovIntentThresholds = {
+	reply: 0.5,
+	react: 0.8,
+};
 
 /**
  * Applies the intent model as a fail-closed gate before Markov replies or reacts.
  */
 export class MarkovIntentService {
-	public constructor(private readonly classify: MarkovIntentModel) {}
+	public constructor(
+		private readonly classify: MarkovIntentModel,
+		private readonly thresholds: MarkovIntentThresholds = DEFAULT_MARKOV_INTENT_THRESHOLDS,
+	) {}
 
-	private namesMarkov(content: string): boolean {
-		return /\bmarkov\b/i.test(content);
+	private passes(probability: number | undefined, threshold: number): boolean {
+		return probability !== undefined && probability >= threshold;
 	}
 
-	private isIntentResult(value: unknown): value is MarkovIntentResult {
-		return typeof value === 'object'
-			&& value !== null
-			&& 'shouldReply' in value
-			&& typeof value.shouldReply === 'boolean'
-			&& 'shouldReact' in value
-			&& typeof value.shouldReact === 'boolean';
-	}
-
-	public async decide(input: MarkovIntentInput, routingKey: string): Promise<MarkovIntentResult> {
+	public async decide(input: MarkovIntentInput): Promise<MarkovIntentResult> {
 		// Reactions are intentionally guild-only. DMs keep their authoritative reply
 		// behavior without paying for a classifier that cannot enable another action.
 		if (input.isDirectMessage) {
@@ -50,25 +69,31 @@ export class MarkovIntentService {
 		}
 
 		const authoritativeReply = input.botMentioned || input.isReplyToMarkov;
-		try {
-			const output = await this.classify(input, routingKey);
-			if (!output) {
-				return { shouldReply: authoritativeReply, shouldReact: false };
-			}
+		// Jev is text-only, so image messages go straight to the image-aware reaction selector, which can still decline.
+		const deferReactionToSelector = input.hasImage;
+		// Optional replies need the name or an open turn, so skip judgments code would ignore.
+		const request: MarkovIntentJudgmentRequest = {
+			addressed: !authoritativeReply && /\bmarkov\b/i.test(input.content),
+			continuation: !authoritativeReply && input.isConversationFollowUp,
+			react: !deferReactionToSelector,
+		};
+		if (!request.addressed && !request.continuation && !request.react) {
+			return { shouldReply: authoritativeReply, shouldReact: deferReactionToSelector };
+		}
 
-			const parsed: unknown = JSON.parse(output);
-			if (!this.isIntentResult(parsed)) {
-				return { shouldReply: authoritativeReply, shouldReact: false };
-			}
+		try {
+			const judgments = await this.classify(input, request);
+			const addressed = request.addressed && this.passes(judgments.addressed, this.thresholds.reply);
+			const continuation = request.continuation && this.passes(judgments.continuation, this.thresholds.reply);
+			const react = request.react && this.passes(judgments.react, this.thresholds.react);
 
 			return {
-				shouldReply: authoritativeReply
-					|| ((this.namesMarkov(input.content) || input.isConversationFollowUp) && parsed.shouldReply),
-				shouldReact: parsed.shouldReact,
+				shouldReply: authoritativeReply || addressed || continuation,
+				shouldReact: deferReactionToSelector || react,
 			};
 		} catch (error) {
 			Logger.warn('Markov intent detection failed; skipping optional AI actions:', error);
-			return { shouldReply: authoritativeReply, shouldReact: false };
+			return { shouldReply: authoritativeReply, shouldReact: deferReactionToSelector };
 		}
 	}
 }

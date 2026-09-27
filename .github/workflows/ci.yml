@@ -46,4 +46,4 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository)
         run: npm run eval:live
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}

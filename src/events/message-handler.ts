@@ -12,11 +12,12 @@ import {
 import { ChannelContextService } from '../services/channel-context.service.js';
 import { ConversationTurnService } from '../services/conversation-turn.service.js';
 import { Logger } from '../services/logger.js';
-import { MarkovIntentService } from '../services/markov-intent.service.js';
+import { DEFAULT_MARKOV_INTENT_THRESHOLDS, MarkovIntentService } from '../services/markov-intent.service.js';
 import { MarkovReactionService } from '../services/markov-reaction.service.js';
 import { ModerationService } from '../services/moderation.service.js';
 import { OpenAIService } from '../services/openai.js';
 import { resolveReplyBudget } from '../services/reply-budget.js';
+import { createTypeSafeIntentModel } from '../services/typesafe-intent.js';
 import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
 import { assembleReply } from '../utils/web-source-utils.js';
 
@@ -52,10 +53,10 @@ export type MessageHandlerOptions = {
 export class MessageHandler implements EventHandler {
 	private readonly configuredOpenAI?: OpenAIService;
 	private readonly moderationService?: ModerationService;
-	private readonly markovIntentService = new MarkovIntentService(async (input, routingKey) => {
-		const openAI = this.configuredOpenAI ?? await OpenAIService.getInstance();
-		return openAI.classifyMarkovIntent(input, routingKey);
-	});
+	private readonly markovIntentService = new MarkovIntentService(
+		createTypeSafeIntentModel(Config.typesafe),
+		{ ...DEFAULT_MARKOV_INTENT_THRESHOLDS, ...Config.typesafe?.intentThresholds },
+	);
 	private readonly channelContextService = new ChannelContextService({
 		summarizer: async (transcript, routingKey) => {
 			const openAI = this.configuredOpenAI ?? await OpenAIService.getInstance();
@@ -154,8 +155,8 @@ export class MessageHandler implements EventHandler {
 					content: referencedMessage.content,
 				}
 				: undefined,
-			imageUrl: reactionImageUrl,
-		}, channelID);
+			hasImage: Boolean(reactionImageUrl),
+		});
 		let persistedRecentMessages: RecentChannelMessage[] = [];
 		if (msg.guildId) {
 			try {
