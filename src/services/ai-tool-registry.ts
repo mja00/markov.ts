@@ -1,3 +1,5 @@
+import { rm } from 'node:fs/promises';
+
 import {
 	and,
 	asc,
@@ -346,7 +348,7 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: 
 	if (options.songs) {
 		const songs = options.songs;
 		registry.register({
-			definition: functionTool('compose_song', COMPOSE_SONG_DESCRIPTION, COMPOSE_SONG_PROPERTIES, ['title', 'bpm', 'tracks']),
+			definition: functionTool('compose_song', COMPOSE_SONG_DESCRIPTION, COMPOSE_SONG_PROPERTIES, ['title', 'bpm', 'swing', 'humanize', 'tracks', 'sections', 'arrangement']),
 			timeoutMs: 30000,
 			handler: async (arguments_, context) => {
 				if (!context.attachments) {
@@ -356,12 +358,19 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: 
 					// Strict function schemas guarantee the shape; SongService validates the note notation and limits.
 					const song = arguments_ as Song;
 					const rendered = await songs.render(song, context.signal);
+					// Songs are the only audio and MIDI attachments, and a revised call should replace the draft rather than attach both.
+					const previous = context.attachments.filter(file => file.kind === 'audio' || file.kind === 'midi');
+					await Promise.all(previous.map(file => rm(file.filePath, { force: true })));
+					for (const file of previous) {
+						context.attachments.splice(context.attachments.indexOf(file), 1);
+					}
 					context.attachments.push(...rendered.attachments);
 					return {
 						success: true,
 						title: song.title,
 						durationSeconds: Math.round(rendered.durationSeconds),
 						attached: rendered.attachments.map(file => file.filename),
+						warnings: rendered.warnings,
 					};
 				} catch (error) {
 					if (error instanceof SongError) {
