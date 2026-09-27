@@ -220,6 +220,16 @@ describe('buildSongMidi', () => {
 		]);
 	});
 
+	it('handles a rest-only part with a tiny rest without looping it', () => {
+		const { durationSeconds } = buildSongMidi(song(
+			[track(), track({ name: 'pad' })],
+			[section('verse', 256, [part('lead', 'C4:256'), part('pad', 'R:0.0000001')])],
+			{ bpm: 240 },
+		));
+
+		expect(durationSeconds).toBe(64);
+	});
+
 	it('warns when a part does not divide its section', () => {
 		const { warnings } = buildSongMidi(song([track()], [section('verse', 4, [part('lead', 'C4:3')])]));
 

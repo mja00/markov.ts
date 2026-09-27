@@ -467,6 +467,10 @@ export function buildSongMidi(song: Song): BuiltSong {
 				continue;
 			}
 			used = true;
+			// A rest-only part never reaches the note cap, so looping a tiny rest could spin for billions of iterations.
+			if (part.notes.length === 0) {
+				continue;
+			}
 			const sectionEnd = section.startBeat + section.beats;
 			for (let loopStart = section.startBeat; loopStart < sectionEnd - BEAT_EPSILON; loopStart += part.beats) {
 				for (const note of part.notes) {

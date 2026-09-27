@@ -360,11 +360,12 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: 
 					const rendered = await songs.render(song, context.signal);
 					// Songs are the only audio and MIDI attachments, and a revised call should replace the draft rather than attach both.
 					const previous = context.attachments.filter(file => file.kind === 'audio' || file.kind === 'midi');
-					await Promise.all(previous.map(file => rm(file.filePath, { force: true })));
 					for (const file of previous) {
 						context.attachments.splice(context.attachments.indexOf(file), 1);
 					}
 					context.attachments.push(...rendered.attachments);
+					// Swap first so a failed delete only orphans the old draft instead of losing the new song.
+					await Promise.allSettled(previous.map(file => rm(file.filePath, { force: true })));
 					return {
 						success: true,
 						title: song.title,
