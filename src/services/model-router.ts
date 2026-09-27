@@ -1,7 +1,6 @@
 import { Logger } from './logger.js';
 
 export const AI_TASK_TYPES = [
-	'intent_detection',
 	'reaction_selection',
 	'memory_extraction',
 	'summarization',

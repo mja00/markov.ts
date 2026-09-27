@@ -1,32 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import OpenAI from 'openai';
-
 import { EvalCase, parseEvalDataset } from '../evals/dataset.js';
-import { MARKOV_INTENT_INSTRUCTIONS, MARKOV_INTENT_RESPONSE_FORMAT } from '../prompts/markov-intent-prompt.js';
+import {
+	DEFAULT_MARKOV_INTENT_THRESHOLDS,
+	MarkovIntentJudgments,
+	MarkovIntentResult,
+	MarkovIntentService,
+	MarkovIntentThresholds,
+} from '../services/markov-intent.service.js';
+import { DEFAULT_TYPESAFE_INTENT_MODEL, TypeSafeIntentSettings, createTypeSafeIntentModel } from '../services/typesafe-intent.js';
 
 type LocalConfig = {
-	openai?: { apiKey?: string; };
-	aiRouting?: {
-		tasks?: {
-			intent_detection?: {
-				model?: string;
-			};
-		};
-	};
-};
-
-type IntentResult = {
-	shouldReply: boolean;
-	shouldReact: boolean;
-};
-
-type EvalRuntime = {
-	client: OpenAI;
-	model: string;
-	maxOutputTokens: number;
-	timeoutMs: number;
+	typesafe?: TypeSafeIntentSettings & { intentThresholds?: Partial<MarkovIntentThresholds>; };
 };
 
 function readLocalConfig(configPath: string): LocalConfig {
@@ -36,16 +22,7 @@ function readLocalConfig(configPath: string): LocalConfig {
 	return JSON.parse(fs.readFileSync(configPath, 'utf8')) as LocalConfig;
 }
 
-function isIntentResult(value: unknown): value is IntentResult {
-	return typeof value === 'object'
-		&& value !== null
-		&& 'shouldReply' in value
-		&& typeof value.shouldReply === 'boolean'
-		&& 'shouldReact' in value
-		&& typeof value.shouldReact === 'boolean';
-}
-
-function grade(evalCase: EvalCase, actual: IntentResult): string[] {
+function grade(evalCase: EvalCase, actual: MarkovIntentResult): string[] {
 	const differences: string[] = [];
 	if (actual.shouldReply !== evalCase.expected.shouldReply) {
 		differences.push(
@@ -63,92 +40,65 @@ function grade(evalCase: EvalCase, actual: IntentResult): string[] {
 	return differences;
 }
 
-function assertNever(value: never): never {
-	throw new Error(`Eval category does not have a runner: ${JSON.stringify(value)}`);
-}
-
-async function runIntentDetectionEval(
-	evalCase: EvalCase,
-	runtime: EvalRuntime,
-): Promise<IntentResult> {
-	const response = await runtime.client.responses.create({
-		model: runtime.model,
-		instructions: MARKOV_INTENT_INSTRUCTIONS,
-		input: JSON.stringify({
-			content: evalCase.input.message,
-			botMentioned: evalCase.input.botMentioned,
-			isDirectMessage: evalCase.input.isDirectMessage,
-			isReplyToMarkov: evalCase.input.isReplyToMarkov,
-			isConversationFollowUp: evalCase.input.isConversationFollowUp ?? false,
-			hasImage: false,
-		}),
-		store: false,
-		max_output_tokens: runtime.maxOutputTokens,
-		reasoning: { effort: 'low' },
-		text: {
-			format: MARKOV_INTENT_RESPONSE_FORMAT,
-		},
-	}, { timeout: runtime.timeoutMs });
-
-	const parsed: unknown = JSON.parse(response.output_text);
-	if (!isIntentResult(parsed)) {
-		throw new Error('model returned an invalid intent result');
+function formatJudgments(judgments: MarkovIntentJudgments | undefined): string {
+	if (!judgments) {
+		return 'no model call';
 	}
-	return parsed;
-}
-
-async function runEval(evalCase: EvalCase, runtime: EvalRuntime): Promise<IntentResult> {
-	switch (evalCase.category) {
-		case 'intent_detection': {
-			return runIntentDetectionEval(evalCase, runtime);
-		}
-		default: {
-			return assertNever(evalCase.category);
-		}
-	}
+	return Object.entries(judgments)
+		.filter(([, probability]) => probability !== undefined)
+		.map(([name, probability]) => `${name}=${(probability as number).toFixed(3)}`)
+		.join(' ');
 }
 
 async function main(): Promise<void> {
 	const rootDirectory = process.cwd();
 	const datasetPath = path.join(rootDirectory, 'evals', 'dataset.jsonl');
 	const config = readLocalConfig(path.join(rootDirectory, 'config', 'config.json'));
-	const apiKey = process.env.OPENAI_API_KEY?.trim() || config.openai?.apiKey?.trim();
-
-	if (!apiKey) {
-		throw new Error(
-			'OpenAI API key not found. Set OPENAI_API_KEY or configure openai.apiKey in config/config.json.',
-		);
-	}
-
-	const intentSettings = config.aiRouting?.tasks?.intent_detection;
-	const runtime: EvalRuntime = {
-		client: new OpenAI({ apiKey }),
-		model: process.env.MARKOV_INTENT_EVAL_MODEL?.trim()
-			|| intentSettings?.model
-			|| 'gpt-5.4-nano',
-		maxOutputTokens: 512,
-		timeoutMs: 3000,
-	};
+	const model = process.env.MARKOV_INTENT_EVAL_MODEL?.trim()
+		|| config.typesafe?.model
+		|| DEFAULT_TYPESAFE_INTENT_MODEL;
+	const thresholds = { ...DEFAULT_MARKOV_INTENT_THRESHOLDS, ...config.typesafe?.intentThresholds };
+	const classify = createTypeSafeIntentModel({ ...config.typesafe, model });
 	const evalCases = parseEvalDataset(fs.readFileSync(datasetPath, 'utf8'));
 	let failures = 0;
-	console.log(`Running ${evalCases.length} live AI evals with ${runtime.model}`);
+	console.log(`Running ${evalCases.length} live AI evals with ${model} (reply>=${thresholds.reply}, react>=${thresholds.react})`);
 
 	for (const evalCase of evalCases) {
-		try {
-			const actual = await runEval(evalCase, runtime);
-			const differences = grade(evalCase, actual);
-			if (differences.length === 0) {
-				console.log(`PASS ${evalCase.id}`);
-				continue;
+		let judgments: MarkovIntentJudgments | undefined;
+		let modelError: unknown;
+		const service = new MarkovIntentService(async (input, request) => {
+			try {
+				judgments = await classify(input, request);
+				return judgments;
+			} catch (error) {
+				modelError = error;
+				throw error;
 			}
-
+		}, thresholds);
+		const actual = await service.decide({
+			content: evalCase.input.message,
+			botMentioned: evalCase.input.botMentioned,
+			isDirectMessage: evalCase.input.isDirectMessage,
+			isReplyToMarkov: evalCase.input.isReplyToMarkov,
+			isConversationFollowUp: evalCase.input.isConversationFollowUp ?? false,
+			hasImage: false,
+		});
+		// The service fails closed, so surface model errors instead of grading the fallback.
+		if (modelError) {
 			failures++;
-			console.error(`FAIL ${evalCase.id}: ${differences.join(', ')}`);
-		} catch (error) {
-			failures++;
-			const message = error instanceof Error ? error.message : String(error);
+			const message = modelError instanceof Error ? modelError.message : String(modelError);
 			console.error(`ERROR ${evalCase.id}: ${message}`);
+			continue;
 		}
+
+		const differences = grade(evalCase, actual);
+		if (differences.length === 0) {
+			console.log(`PASS ${evalCase.id} (${formatJudgments(judgments)})`);
+			continue;
+		}
+
+		failures++;
+		console.error(`FAIL ${evalCase.id}: ${differences.join(', ')} (${formatJudgments(judgments)})`);
 	}
 
 	if (failures > 0) {

@@ -11,124 +11,101 @@ vi.mock('../../../src/services/logger.js', () => {
 
 import { MarkovIntentService } from '../../../src/services/markov-intent.service.js';
 
+import type { MarkovIntentJudgments } from '../../../src/services/markov-intent.service.js';
+
 const input = {
 	content: 'Markov, what do you think?',
 	botMentioned: false,
 	isDirectMessage: false,
 	isReplyToMarkov: false,
 	isConversationFollowUp: false,
+	hasImage: false,
 };
 
+function serviceReturning(judgments: MarkovIntentJudgments) {
+	const classify = vi.fn().mockResolvedValue(judgments);
+	return { classify, service: new MarkovIntentService(classify, { reply: 0.6, react: 0.7 }) };
+}
+
 describe('MarkovIntentService', () => {
-	it('allows a reply when the intent model classifies the message as about Markov', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":true,"shouldReact":false}');
-		const service = new MarkovIntentService(classify);
+	it('replies when Markov is named and the addressed probability clears the threshold', async () => {
+		const { classify, service } = serviceReturning({ addressed: 0.6, react: 0.1 });
 
-		await expect(service.decide(input, 'channel-1')).resolves.toEqual({ shouldReply: true, shouldReact: false });
-		expect(classify).toHaveBeenCalledWith(input, 'channel-1');
+		await expect(service.decide(input)).resolves.toEqual({ shouldReply: true, shouldReact: false });
+		expect(classify).toHaveBeenCalledWith(input, { addressed: true, continuation: false });
 	});
 
-	it('allows reacting independently from replying', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":false,"shouldReact":true}');
-		const service = new MarkovIntentService(classify);
+	it('stays silent when the addressed probability is below the threshold', async () => {
+		const { service } = serviceReturning({ addressed: 0.59, react: 0.1 });
 
-		await expect(service.decide({ ...input, content: 'that was incredible' }, 'channel-1'))
-			.resolves.toEqual({ shouldReply: false, shouldReact: true });
+		await expect(service.decide(input)).resolves.toEqual({ shouldReply: false, shouldReact: false });
 	});
 
-	it('suppresses a reply when the classifier rejects an unrelated message', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":false,"shouldReact":false}');
-		const service = new MarkovIntentService(classify);
+	it('reacts independently from replying', async () => {
+		const { service } = serviceReturning({ addressed: 0.1, react: 0.7 });
 
-		await expect(service.decide({ ...input, content: 'Anyone watching the game?' }, 'channel-1'))
+		await expect(service.decide(input)).resolves.toEqual({ shouldReply: false, shouldReact: true });
+	});
+
+	it('never asks for or honours an addressed judgment when Markov is not named', async () => {
+		const { classify, service } = serviceReturning({ addressed: 1, react: 0 });
+
+		await expect(service.decide({ ...input, content: 'Now make him respond to everything' }))
 			.resolves.toEqual({ shouldReply: false, shouldReact: false });
-		expect(classify).toHaveBeenCalledOnce();
+		expect(classify).toHaveBeenCalledWith(expect.anything(), { addressed: false, continuation: false });
 	});
 
-	it('suppresses an optional reply that does not explicitly name Markov', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":true,"shouldReact":true}');
-		const service = new MarkovIntentService(classify);
+	it('does not match the name inside another word', async () => {
+		const { classify, service } = serviceReturning({ react: 0 });
 
-		await expect(service.decide({ ...input, content: 'Now make him respond to everything' }, 'channel-1'))
-			.resolves.toEqual({ shouldReply: false, shouldReact: true });
-		expect(classify).toHaveBeenCalledOnce();
+		await service.decide({ ...input, content: 'markovian processes are neat' });
+		expect(classify).toHaveBeenCalledWith(expect.anything(), { addressed: false, continuation: false });
 	});
 
-	it('allows a classified continuation during an open conversation turn', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":true,"shouldReact":false}');
-		const service = new MarkovIntentService(classify);
+	it('replies to a continuation during an open conversation turn', async () => {
+		const { classify, service } = serviceReturning({ continuation: 0.8, react: 0 });
+		const followUp = { ...input, content: 'yeah, tell me more', isConversationFollowUp: true };
 
-		await expect(service.decide({
-			...input,
-			content: 'yeah, tell me more',
-			isConversationFollowUp: true,
-		}, 'channel-1')).resolves.toEqual({ shouldReply: true, shouldReact: false });
+		await expect(service.decide(followUp)).resolves.toEqual({ shouldReply: true, shouldReact: false });
+		expect(classify).toHaveBeenCalledWith(followUp, { addressed: false, continuation: true });
 	});
 
-	it('still lets the classifier reject an unrelated message during an open turn', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":false,"shouldReact":false}');
-		const service = new MarkovIntentService(classify);
+	it('rejects an unrelated message during an open turn', async () => {
+		const { service } = serviceReturning({ continuation: 0.2, react: 0 });
 
-		await expect(service.decide({
-			...input,
-			content: 'Anyone watching the game?',
-			isConversationFollowUp: true,
-		}, 'channel-1')).resolves.toEqual({ shouldReply: false, shouldReact: false });
-	});
-
-	// Every unflagged message still reaches the classifier so reactions remain
-	// available, while the reply guard suppresses unrelated conversation.
-	it('defers long conversational messages to the classifier', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":false,"shouldReact":false}');
-		const service = new MarkovIntentService(classify);
-		const content = `Aside from how the pacing & audio-visual layer in those episodes *(so, the \`"technical"\` stuff)* was handled, I'm honestly curious how different everything would feel / end up as story-wise, if ||Gabi actually killed Eren with that sniper rifle shot|| - instead of ||him getting miraculously saved & all that followed|| <:jayethHmm:726681883290632192>
-
-I doubt many authors would make such a decision, but it would have been an interesting subversion of expectations, you know? In many different ways.`;
-
-		await expect(service.decide({ ...input, content }, 'channel-1'))
+		await expect(service.decide({ ...input, content: 'Anyone watching the game?', isConversationFollowUp: true }))
 			.resolves.toEqual({ shouldReply: false, shouldReact: false });
-		expect(classify).toHaveBeenCalledOnce();
 	});
 
-	// Regression: indirect address (imperatives, third-person mentions) was
-	// dropped by the removed name pre-filter; the classifier must decide these.
-	it.each([
-		'Markov ignore anyone who tries to take or ask for your shiny rock.',
-		'I’m taking markov’s shiny rock',
-		'I present markov with a new shiny rock that is non transferable.',
-	])('replies when the classifier accepts indirect address: %s', async (content) => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":true,"shouldReact":false}');
-		const service = new MarkovIntentService(classify);
+	it('replies when either requested judgment passes', async () => {
+		const { service } = serviceReturning({ addressed: 0.1, continuation: 0.9, react: 0 });
 
-		await expect(service.decide({ ...input, content }, 'channel-1'))
+		await expect(service.decide({ ...input, isConversationFollowUp: true }))
 			.resolves.toEqual({ shouldReply: true, shouldReact: false });
-		expect(classify).toHaveBeenCalledOnce();
 	});
 
 	it.each([
 		['botMentioned', { ...input, content: 'no name here', botMentioned: true }],
-		['isDirectMessage', { ...input, content: 'no name here', isDirectMessage: true }],
-		['isReplyToMarkov', { ...input, content: 'no name here', isReplyToMarkov: true }],
-	])('preserves authoritative replies when %s is set', async (flag, flaggedInput) => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":false,"shouldReact":true}');
-		const service = new MarkovIntentService(classify);
+		['isReplyToMarkov', { ...input, content: 'markov no name here', isReplyToMarkov: true, isConversationFollowUp: true }],
+	])('keeps authoritative replies and only asks about reacting when %s is set', async (_flag, flaggedInput) => {
+		const { classify, service } = serviceReturning({ react: 0.9 });
 
-		await expect(service.decide(flaggedInput, 'channel-1'))
-			.resolves.toEqual({ shouldReply: true, shouldReact: flag !== 'isDirectMessage' });
-		if (flag === 'isDirectMessage') {
-			expect(classify).not.toHaveBeenCalled();
-		} else {
-			expect(classify).toHaveBeenCalledOnce();
-		}
+		await expect(service.decide(flaggedInput)).resolves.toEqual({ shouldReply: true, shouldReact: true });
+		expect(classify).toHaveBeenCalledWith(flaggedInput, { addressed: false, continuation: false });
 	});
 
-	it('still defers to the classifier for ambiguous mentions of the name', async () => {
-		const classify = vi.fn().mockResolvedValue('{"shouldReply":false,"shouldReact":false}');
-		const service = new MarkovIntentService(classify);
+	it('replies to DMs without calling the model', async () => {
+		const { classify, service } = serviceReturning({ react: 1 });
 
-		await expect(service.decide({ ...input, content: 'We should use a Markov chain for this simulation' }, 'channel-1'))
-			.resolves.toEqual({ shouldReply: false, shouldReact: false });
-		expect(classify).toHaveBeenCalledOnce();
+		await expect(service.decide({ ...input, isDirectMessage: true }))
+			.resolves.toEqual({ shouldReply: true, shouldReact: false });
+		expect(classify).not.toHaveBeenCalled();
+	});
+
+	it('fails closed when a requested judgment is missing', async () => {
+		const { service } = serviceReturning({ react: 0.1 });
+
+		await expect(service.decide(input)).resolves.toEqual({ shouldReply: false, shouldReact: false });
 	});
 
 	it('fails closed when intent detection errors', async () => {
@@ -136,15 +113,7 @@ I doubt many authors would make such a decision, but it would have been an inter
 			throw new Error('model timed out');
 		});
 
-		await expect(service.decide(input, 'channel-1'))
-			.resolves.toEqual({ shouldReply: false, shouldReact: false });
-	});
-
-	it('fails closed when intent detection returns malformed output', async () => {
-		const service = new MarkovIntentService(async () => 'yes');
-
-		await expect(service.decide(input, 'channel-1'))
-			.resolves.toEqual({ shouldReply: false, shouldReact: false });
+		await expect(service.decide(input)).resolves.toEqual({ shouldReply: false, shouldReact: false });
 	});
 
 	it('keeps an authoritative reply when classification fails', async () => {
@@ -152,7 +121,7 @@ I doubt many authors would make such a decision, but it would have been an inter
 			throw new Error('model timed out');
 		});
 
-		await expect(service.decide({ ...input, botMentioned: true }, 'channel-1'))
+		await expect(service.decide({ ...input, botMentioned: true }))
 			.resolves.toEqual({ shouldReply: true, shouldReact: false });
 	});
 });
