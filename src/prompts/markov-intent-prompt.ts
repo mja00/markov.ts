@@ -25,10 +25,15 @@ export const MARKOV_CONTINUATION_QUESTION = noul(
 	},
 );
 
+// Jokes and banter about Markov scored as praise under a broader question, so only celebratory moments count.
 export const MARKOV_REACT_QUESTION = noul(
-	'Would a single emoji reaction from Markov, a Discord bot, clearly add a fitting emotional response, acknowledgment, or joke to `message.content` without Markov joining the conversation?',
+	'Is `message.content` a clear moment worth celebrating or acknowledging, such that a single emoji reaction from Markov, a Discord bot, would be welcome without Markov joining the conversation?',
 	{
-		true: 'The message has a clear emotional beat or punchline that invites a reaction: good news, a celebration, an obvious joke, an excited announcement, or thanks or praise aimed at Markov.',
-		false: 'Routine chatter, logistics, plain questions, ambiguous context, or serious or sensitive subjects where a reaction could seem insensitive.',
+		true: 'Good news, a milestone or achievement, a celebration such as a birthday, or an excited announcement shared with the channel.',
+		false: [
+			'Jokes, banter, memes, teasing, or comments about Markov, even when funny or complimentary.',
+			'Routine chatter, reactions like "lol" or "lmao", logistics, plain questions, and ambiguous context.',
+			'Serious or sensitive subjects where a reaction could seem insensitive.',
+		],
 	},
 );

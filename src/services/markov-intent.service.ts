@@ -41,7 +41,7 @@ export type MarkovIntentThresholds = {
 	react: number;
 };
 
-// Tuned on evals/dataset.jsonl with jev-1.13.0: reply scores split at 0.14/0.69, react needs 0.8 to skip borderline chatter.
+// Tuned on evals/dataset.jsonl and live chatter with jev-1.13.0: reply scores split at 0.14/0.69, react needs 0.8 to skip borderline chatter.
 export const DEFAULT_MARKOV_INTENT_THRESHOLDS: MarkovIntentThresholds = {
 	reply: 0.5,
 	react: 0.8,
