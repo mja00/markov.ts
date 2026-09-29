@@ -19,7 +19,6 @@ const input = {
 	isDirectMessage: false,
 	isReplyToMarkov: false,
 	isConversationFollowUp: false,
-	hasImage: false,
 };
 
 function serviceReturning(judgments: MarkovIntentJudgments) {
@@ -94,29 +93,12 @@ describe('MarkovIntentService', () => {
 		expect(classify).toHaveBeenCalledWith(flaggedInput, { addressed: false, continuation: false, react: true });
 	});
 
-	it('defers image reactions to the image-aware selector without asking Jev', async () => {
-		const { classify, service } = serviceReturning({ addressed: 0.9 });
-		const withImage = { ...input, hasImage: true };
+	it('skips the model and never reacts to a message with no text', async () => {
+		const { classify, service } = serviceReturning({ react: 1 });
 
-		await expect(service.decide(withImage)).resolves.toEqual({ shouldReply: true, shouldReact: true });
-		expect(classify).toHaveBeenCalledWith(withImage, { addressed: true, continuation: false, react: false });
-	});
-
-	it('skips the model entirely when an image message needs no reply judgment', async () => {
-		const { classify, service } = serviceReturning({});
-
-		await expect(service.decide({ ...input, content: 'look at this', hasImage: true }))
-			.resolves.toEqual({ shouldReply: false, shouldReact: true });
+		await expect(service.decide({ ...input, content: '  ' }))
+			.resolves.toEqual({ shouldReply: false, shouldReact: false });
 		expect(classify).not.toHaveBeenCalled();
-	});
-
-	it('still defers image reactions when the model fails', async () => {
-		const service = new MarkovIntentService(async () => {
-			throw new Error('model timed out');
-		});
-
-		await expect(service.decide({ ...input, hasImage: true }))
-			.resolves.toEqual({ shouldReply: false, shouldReact: true });
 	});
 
 	it('replies to DMs without calling the model', async () => {

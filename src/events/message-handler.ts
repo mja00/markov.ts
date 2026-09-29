@@ -155,7 +155,6 @@ export class MessageHandler implements EventHandler {
 					content: referencedMessage.content,
 				}
 				: undefined,
-			hasImage: Boolean(reactionImageUrl),
 		});
 		let persistedRecentMessages: RecentChannelMessage[] = [];
 		if (msg.guildId) {

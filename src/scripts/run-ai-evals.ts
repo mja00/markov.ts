@@ -81,7 +81,6 @@ async function main(): Promise<void> {
 			isDirectMessage: evalCase.input.isDirectMessage,
 			isReplyToMarkov: evalCase.input.isReplyToMarkov,
 			isConversationFollowUp: evalCase.input.isConversationFollowUp ?? false,
-			hasImage: false,
 		});
 		// The service fails closed, so surface model errors instead of grading the fallback.
 		if (modelError) {

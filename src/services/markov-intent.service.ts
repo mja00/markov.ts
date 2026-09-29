@@ -10,7 +10,6 @@ export type MarkovIntentInput = {
 		author: string;
 		content: string;
 	};
-	hasImage: boolean;
 };
 
 export type MarkovIntentResult = {
@@ -69,16 +68,15 @@ export class MarkovIntentService {
 		}
 
 		const authoritativeReply = input.botMentioned || input.isReplyToMarkov;
-		// Jev is text-only, so image messages go straight to the image-aware reaction selector, which can still decline.
-		const deferReactionToSelector = input.hasImage;
 		// Optional replies need the name or an open turn, so skip judgments code would ignore.
+		// Jev is text-only, so caption-less image posts get no reaction rather than bypassing the gate.
 		const request: MarkovIntentJudgmentRequest = {
 			addressed: !authoritativeReply && /\bmarkov\b/i.test(input.content),
 			continuation: !authoritativeReply && input.isConversationFollowUp,
-			react: !deferReactionToSelector,
+			react: input.content.trim() !== '',
 		};
 		if (!request.addressed && !request.continuation && !request.react) {
-			return { shouldReply: authoritativeReply, shouldReact: deferReactionToSelector };
+			return { shouldReply: authoritativeReply, shouldReact: false };
 		}
 
 		try {
@@ -89,11 +87,11 @@ export class MarkovIntentService {
 
 			return {
 				shouldReply: authoritativeReply || addressed || continuation,
-				shouldReact: deferReactionToSelector || react,
+				shouldReact: react,
 			};
 		} catch (error) {
 			Logger.warn('Markov intent detection failed; skipping optional AI actions:', error);
-			return { shouldReply: authoritativeReply, shouldReact: deferReactionToSelector };
+			return { shouldReply: authoritativeReply, shouldReact: false };
 		}
 	}
 }

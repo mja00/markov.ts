@@ -35,7 +35,6 @@ const input = {
 	isDirectMessage: false,
 	isReplyToMarkov: false,
 	isConversationFollowUp: true,
-	hasImage: false,
 };
 
 describe('createTypeSafeIntentModel', () => {
