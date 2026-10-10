@@ -106,9 +106,22 @@ export type RequestContext = {
 	// Wall-clock start of the whole reply, so the tool loop can wrap up before the handler's hard timeout.
 	startedAt: number;
 	signal?: AbortSignal;
+	// False when Markov is invoked as a user-installed app and can't post in the channel later.
+	canPostInChannel?: boolean;
 	web?: WebRequestState;
 	// Tools push files here so they are uploaded with the final reply.
 	attachments?: GeneratedAttachment[];
+};
+
+export type ChatRequestOptions = {
+	signal?: AbortSignal;
+	canPostInChannel?: boolean;
+};
+
+const CHANNEL_ACTION_TOOLS: Record<string, true> = {
+	schedule_message: true,
+	list_scheduled_messages: true,
+	cancel_scheduled_message: true,
 };
 
 export type OpenAIServiceOptions = {
@@ -432,6 +445,13 @@ export class OpenAIService {
 		return currentResponse;
 	}
 
+	private getBaseTools(ctx: RequestContext): OpenAI.Responses.Tool[] {
+		if (ctx.canPostInChannel === false) {
+			return this.baseTools.filter(tool => !('name' in tool && CHANNEL_ACTION_TOOLS[tool.name]));
+		}
+		return this.baseTools;
+	}
+
 	// Web results are untrusted, so once any reach the model later rounds may only request more web data.
 	// A failed or empty web call adds no sources, so it leaves the action tools available.
 	private getFollowUpTools(ctx: RequestContext, webRounds: number): OpenAI.Responses.Tool[] {
@@ -440,7 +460,7 @@ export class OpenAIService {
 		if (ctx.web?.successful) {
 			return webTools;
 		}
-		return [...this.baseTools, ...webTools];
+		return [...this.getBaseTools(ctx), ...webTools];
 	}
 
 	private responseHasToolCalls(response: OpenAI.Responses.Response): boolean {
@@ -747,8 +767,9 @@ export class OpenAIService {
 		];
 	}
 
-	private getChatTools(memoryActive: boolean, webEnabled: boolean): OpenAI.Responses.Tool[] {
-		const tools = webEnabled ? [...this.baseTools, ...this.webTools] : this.baseTools;
+	private getChatTools(memoryActive: boolean, ctx: RequestContext): OpenAI.Responses.Tool[] {
+		const baseTools = this.getBaseTools(ctx);
+		const tools = ctx.web ? [...baseTools, ...this.webTools] : baseTools;
 		return memoryActive ? [...tools, ...this.memoryTools] : tools;
 	}
 
@@ -758,8 +779,9 @@ export class OpenAIService {
 		guildSnowflake: string | null | undefined,
 		username: string,
 		messageSnowflake: string | undefined,
-		signal?: AbortSignal,
+		requestOptions: ChatRequestOptions = {},
 	): RequestContext {
+		const { signal, canPostInChannel } = requestOptions;
 		const ctx: RequestContext = {
 			channelId,
 			userSnowflake: userSnowflake ?? '',
@@ -768,6 +790,7 @@ export class OpenAIService {
 			messageSnowflake,
 			startedAt: Date.now(),
 			signal,
+			canPostInChannel,
 		};
 		if (ctx.userSnowflake && this.options.kagiService) {
 			const limits = this.options.kagiService.requestLimits;
@@ -1010,9 +1033,9 @@ export class OpenAIService {
 		referencedImageUrl?: string,
 		recentMessages: RecentChannelMessage[] = [],
 		messageSnowflake?: string,
-		requestOptions?: { signal?: AbortSignal; },
+		requestOptions?: ChatRequestOptions,
 	): Promise<OpenAI.Responses.Response> {
-		const ctx = this.createRequestContext(channelId, userSnowflake, guildSnowflake, username, messageSnowflake, requestOptions?.signal);
+		const ctx = this.createRequestContext(channelId, userSnowflake, guildSnowflake, username, messageSnowflake, requestOptions);
 		if (!ctx.userSnowflake) {
 			throw new Error('A user identity is required for a private conversation context.');
 		}
@@ -1027,7 +1050,7 @@ export class OpenAIService {
 			}
 		}
 		const preamble = this.buildMemoryPreamble(recalled);
-		const tools = this.getChatTools(memoryActive, Boolean(ctx.web));
+		const tools = this.getChatTools(memoryActive, ctx);
 
 		const promptConfig = await this.getPromptConfig({ web: Boolean(ctx.web) });
 
@@ -1079,11 +1102,11 @@ export class OpenAIService {
 		guildSnowflake?: string | null,
 		recentMessages: RecentChannelMessage[] = [],
 		messageSnowflake?: string,
-		requestOptions?: { signal?: AbortSignal; },
+		requestOptions?: ChatRequestOptions,
 	): Promise<OpenAI.Responses.Response> {
 		const userInput = `${username}: ${message}`;
 
-		const ctx = this.createRequestContext(channelId, userSnowflake, guildSnowflake, username, messageSnowflake, requestOptions?.signal);
+		const ctx = this.createRequestContext(channelId, userSnowflake, guildSnowflake, username, messageSnowflake, requestOptions);
 		if (!ctx.userSnowflake) {
 			throw new Error('A user identity is required for a private conversation context.');
 		}
@@ -1098,7 +1121,7 @@ export class OpenAIService {
 			}
 		}
 		const preamble = this.buildMemoryPreamble(recalled);
-		const tools = this.getChatTools(memoryActive, Boolean(ctx.web));
+		const tools = this.getChatTools(memoryActive, ctx);
 
 		const promptConfig = await this.getPromptConfig({ web: Boolean(ctx.web) });
 
@@ -1146,9 +1169,9 @@ export class OpenAIService {
 		guildSnowflake?: string | null,
 		recentMessages: RecentChannelMessage[] = [],
 		messageSnowflake?: string,
-		requestOptions?: { signal?: AbortSignal; },
+		requestOptions?: ChatRequestOptions,
 	): Promise<OpenAI.Responses.Response> {
-		const ctx = this.createRequestContext(channelId, userSnowflake, guildSnowflake, username, messageSnowflake, requestOptions?.signal);
+		const ctx = this.createRequestContext(channelId, userSnowflake, guildSnowflake, username, messageSnowflake, requestOptions);
 		if (!ctx.userSnowflake) {
 			throw new Error('A user identity is required for a private conversation context.');
 		}
@@ -1163,7 +1186,7 @@ export class OpenAIService {
 			}
 		}
 		const preamble = this.buildMemoryPreamble(recalled);
-		const tools = this.getChatTools(memoryActive, Boolean(ctx.web));
+		const tools = this.getChatTools(memoryActive, ctx);
 
 		const promptConfig = await this.getPromptConfig({ web: Boolean(ctx.web) });
 

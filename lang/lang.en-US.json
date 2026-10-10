@@ -207,7 +207,8 @@
             "viewDateJoined": "View Date Joined"
         },
         "messageCommands": {
-            "viewDateSent": "View Date Sent"
+            "viewDateSent": "View Date Sent",
+            "askMarkov": "Ask Markov"
         },
         "arguments": {
             "command": "command",

@@ -62,7 +62,7 @@ npm run commands:delete                # Delete a specific command
 
 - **Commands** (`src/commands/`): Discord slash commands
   - **Chat Commands**: `/fish`, `/fishing`, `/shop`, `/buy`, `/inventory`, `/generate-image`, `/help`, `/info`, `/test`, `/dev`
-  - **Context Menu Commands**: View date sent (message), View date joined (user)
+  - **Context Menu Commands**: View date sent (message), View date joined (user), Ask Markov (message; the only user-installable command, asks Markov about one message without channel context)
   - Command metadata and argument definitions in `metadata.ts` and `args.ts`
 
 - **Services** (`src/services/`): Business logic layer

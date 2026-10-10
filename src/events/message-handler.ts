@@ -1,12 +1,6 @@
-import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 
-import {
-	AttachmentBuilder,
-	Message,
-	MessageReferenceType,
-	PartialGroupDMChannel,
-} from 'discord.js';
+import { Message, MessageReferenceType, PartialGroupDMChannel } from 'discord.js';
 
 
 import { ChannelContextService } from '../services/channel-context.service.js';
@@ -18,8 +12,8 @@ import { ModerationService } from '../services/moderation.service.js';
 import { OpenAIService } from '../services/openai.js';
 import { resolveReplyBudget } from '../services/reply-budget.js';
 import { createTypeSafeIntentModel } from '../services/typesafe-intent.js';
+import { prepareMarkovReply, settleGeneratedAttachments } from '../utils/markov-reply.js';
 import { RECENT_CHANNEL_MESSAGE_LIMIT, RecentChannelMessage } from '../utils/recent-channel-context.js';
-import { assembleReply } from '../utils/web-source-utils.js';
 
 import { EventHandler, TriggerHandler } from './index.js';
 
@@ -28,22 +22,6 @@ import type { GeneratedAttachment } from '../models/internal-models.js';
 const require = createRequire(import.meta.url);
 const Config = require('../../config/config.json');
 const REPLY_TIMEOUT_MS = resolveReplyBudget(Config.replyBudget).timeoutMs;
-
-function prettyMs(ms: number): string {
-	const seconds = Math.floor(ms / 1000);
-	const minutes = Math.floor(seconds / 60);
-	const hours = Math.floor(minutes / 60);
-
-	if (hours > 0) {
-		return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-	}
-	if (minutes > 0) {
-		return `${minutes}m ${seconds % 60}s`;
-	}
-	return `${seconds}s`;
-}
-
-const SAFE_WEB_NOTICE = 'I couldn\'t safely deliver that web-assisted response. Please try again later.';
 
 export type MessageHandlerOptions = {
 	openAI?: OpenAIService;
@@ -271,73 +249,26 @@ export class MessageHandler implements EventHandler {
 				}
 
 				clearInterval(typingInterval);
-				const endTime = Date.now();
-				const computationTime = endTime - startTime;
-
-				// Get the response content with generated files (function calls are already handled in the service)
-				const responseData = openAI.getResponseContentWithAttachments(response);
-				let responseContent = responseData.text;
-				let generated = responseData.attachments;
-				generatedToCleanup = responseData.attachments;
-				let backupGenerated = true;
-
-				if (!responseContent && generated.length === 0) {
-					if (responseData.web?.fallback) {
-						responseContent = 'I couldn\'t complete the web research right now. Please try again later.';
-					} else {
-						Logger.error('No response content or attachments generated');
-						clearTimeout(requestTimeout);
-						await msg.reply({ content: 'An error occurred while processing your request. Please try again later.', allowedMentions: { parse: [] } });
-						return;
-					}
-				}
-
-				// Send the response
-				Logger.debug(`[OpenAI Response]: ${responseContent.length} characters`);
-				Logger.debug(`[OpenAI Attachments]: ${generated.length} file(s) to send`);
-
-				const footer = `-# This is an AI response. The computation took ${prettyMs(computationTime)}.`;
-				let replyMessage = assembleReply({
-					modelText: responseContent,
-					sources: responseData.web?.used ? responseData.web.sources : [],
-					footer,
+				const prepared = await prepareMarkovReply(openAI, response, {
+					computationMs: Date.now() - startTime,
+					moderationService: this.moderationService,
+					signal: requestController.signal,
 				});
-
-				if (responseData.web?.used) {
-					const moderation = this.moderationService
-						? await this.moderationService.moderate(replyMessage, requestController.signal)
-						: { status: 'unavailable' as const };
-					if (moderation.status !== 'allowed') {
-						responseContent = '';
-						generated = [];
-						backupGenerated = false;
-						replyMessage = SAFE_WEB_NOTICE;
-					}
+				if (!prepared) {
+					Logger.error('No response content or attachments generated');
+					clearTimeout(requestTimeout);
+					await msg.reply({ content: 'An error occurred while processing your request. Please try again later.', allowedMentions: { parse: [] } });
+					return;
 				}
+				generatedToCleanup = prepared.generated;
 
-				const attachments: AttachmentBuilder[] = [];
-				for (const file of generated) {
-					try {
-						attachments.push(new AttachmentBuilder(await readFile(file.filePath), {
-							name: file.filename,
-							description: file.description,
-						}));
-					} catch (error) {
-						Logger.error(`Failed to prepare ${file.filePath} for Discord`, error);
-					}
-				}
-
-				// Send the response with attachments if any
-				let sentReply: Message;
-				if (attachments.length > 0) {
-					sentReply = await msg.reply({
-						content: replyMessage,
-						files: attachments,
-						allowedMentions: { parse: [] },
-					});
-					Logger.info(`Sent response with ${attachments.length} attachment(s) to Discord`);
-				} else {
-					sentReply = await msg.reply({ content: replyMessage, allowedMentions: { parse: [] } });
+				const sentReply = await msg.reply({
+					content: prepared.content,
+					files: prepared.files,
+					allowedMentions: { parse: [] },
+				});
+				if (prepared.files.length > 0) {
+					Logger.info(`Sent response with ${prepared.files.length} attachment(s) to Discord`);
 				}
 
 				if (sentReply.guildId) {
@@ -363,21 +294,8 @@ export class MessageHandler implements EventHandler {
 					}
 				}
 
-				if (generatedToCleanup.length > 0) {
-					Logger.info('Finalizing generated attachments');
-					const finalizing = generatedToCleanup;
-					generatedToCleanup = [];
-					try {
-						if (backupGenerated) {
-							await openAI.finalizeAttachments(finalizing);
-						} else {
-							// Moderation failures should not upload an image that will never be delivered.
-							await openAI.cleanupGeneratedAttachments(finalizing);
-						}
-					} catch (error) {
-						Logger.error('Failed to finalize generated attachments:', error);
-					}
-				}
+				generatedToCleanup = [];
+				await settleGeneratedAttachments(openAI, prepared);
 				clearTimeout(requestTimeout);
 			} catch (err) {
 				clearInterval(typingInterval);

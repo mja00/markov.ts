@@ -1,5 +1,7 @@
 import {
 	ApplicationCommandType,
+	ApplicationIntegrationType,
+	InteractionContextType,
 	PermissionFlagsBits,
 	PermissionsBitField,
 	RESTPostAPIChatInputApplicationCommandsJSONBody,
@@ -217,6 +219,15 @@ export const MessageCommandMetadata: {
 		name_localizations: Lang.getRefLocalizationMap('messageCommands.viewDateSent'),
 		default_member_permissions: undefined,
 		dm_permission: true,
+	},
+	// The only user-installable command: it works from a message the interaction resolves, so Markov needn't be in the server.
+	ASK_MARKOV: {
+		type: ApplicationCommandType.Message,
+		name: Lang.getRef('messageCommands.askMarkov', Language.Default),
+		name_localizations: Lang.getRefLocalizationMap('messageCommands.askMarkov'),
+		default_member_permissions: undefined,
+		integration_types: [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
+		contexts: [InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel],
 	},
 };
 

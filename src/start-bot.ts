@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { createRequire } from 'node:module';
 
 import { REST } from '@discordjs/rest';
-import { Options, Partials } from 'discord.js';
+import { ApplicationIntegrationType, Options, Partials } from 'discord.js';
 
 import { Button, MemoriesButton, ShopButton } from './buttons/index.js';
 import {
@@ -28,7 +28,7 @@ import {
 	MessageCommandMetadata,
 	UserCommandMetadata,
 } from './commands/index.js';
-import { ViewDateSent } from './commands/message/index.js';
+import { AskMarkovCommand, ViewDateSent } from './commands/message/index.js';
 import { ViewDateJoined } from './commands/user/index.js';
 import {
 	ButtonHandler,
@@ -78,6 +78,18 @@ async function start(): Promise<void> {
 		}),
 	});
 
+	const webConfig = resolveWebConfig(Config);
+	const moderationService = webConfig.moderation.enabled
+		? new ModerationService({ config: webConfig.moderation })
+		: undefined;
+	const kagiService = webConfig.kagi && moderationService
+		? new KagiService({ config: webConfig.kagi })
+		: undefined;
+	const songService = Config.music?.enabled
+		? new SongService({ config: Config.music })
+		: undefined;
+	const openAI = await OpenAIService.getInstance({ kagiService, songService });
+
 	// Commands
 	const commands: Command[] = [
 		// Chat Commands
@@ -98,6 +110,7 @@ async function start(): Promise<void> {
 
 		// Message Context Commands
 		new ViewDateSent(),
+		new AskMarkovCommand(openAI, moderationService),
 
 		// User Context Commands
 		new ViewDateJoined(),
@@ -129,17 +142,6 @@ async function start(): Promise<void> {
 	const buttonHandler = new ButtonHandler(buttons, eventDataService);
 	const modalHandler = new ModalHandler(eventDataService);
 	const triggerHandler = new TriggerHandler(triggers, eventDataService);
-	const webConfig = resolveWebConfig(Config);
-	const moderationService = webConfig.moderation.enabled
-		? new ModerationService({ config: webConfig.moderation })
-		: undefined;
-	const kagiService = webConfig.kagi && moderationService
-		? new KagiService({ config: webConfig.kagi })
-		: undefined;
-	const songService = Config.music?.enabled
-		? new SongService({ config: Config.music })
-		: undefined;
-	const openAI = await OpenAIService.getInstance({ kagiService, songService });
 	const messageHandler = new MessageHandler(triggerHandler, {
 		openAI,
 		moderationService,
@@ -179,7 +181,10 @@ async function start(): Promise<void> {
 				...Object.values(ChatCommandMetadata).toSorted((first, second) => first.name.localeCompare(second.name)),
 				...Object.values(MessageCommandMetadata).toSorted((first, second) => first.name.localeCompare(second.name)),
 				...Object.values(UserCommandMetadata).toSorted((first, second) => first.name.localeCompare(second.name)),
-			];
+			].map((cmd) => {
+				// Omitted integration types default to every install type the app enables, which would leak guild-only commands into user installs.
+				return { integration_types: [ApplicationIntegrationType.GuildInstall], ...cmd };
+			});
 			await commandRegistrationService.process(localCmds, process.argv);
 		} catch (error) {
 			Logger.error(Logs.error.commandAction, error);

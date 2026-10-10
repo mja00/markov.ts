@@ -128,6 +128,19 @@ describe('OpenAI reply budget', () => {
 		expect(names).toContain('search_web');
 	});
 
+	it('withholds scheduling tools when Markov cannot post in the channel', async () => {
+		const responseCreate = vi.fn().mockResolvedValueOnce(answer('final', 'Rolled a die.'));
+		const service = OpenAIService.createForTest({ responseCreate, replyBudget: budget() });
+
+		await runLoop(service, response('initial', [rollCall('call-1')]), context({ canPostInChannel: false }));
+
+		const names = toolNames(responseCreate.mock.calls[0][0]);
+		expect(names).toContain('random_number_generator');
+		expect(names).not.toContain('schedule_message');
+		expect(names).not.toContain('list_scheduled_messages');
+		expect(names).not.toContain('cancel_scheduled_message');
+	});
+
 	it('keeps action tools after a web call that returned no content', async () => {
 		const search = vi.fn(async (_query: string, requestState?: WebRequestState) => {
 			requestState?.blockWeb();
