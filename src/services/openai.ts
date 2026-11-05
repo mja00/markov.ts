@@ -759,7 +759,7 @@ export class OpenAIService {
 			// Pinned to 2.5-flare: the tool default drifts over time, and input_fidelity
 			// (used by earlier revisions of this codebase) is unsupported outside gpt-image-1/1.5.
 				type: 'image_generation',
-				model: 'gpt-image-2.5-flare',
+				model: 'gpt-image-2.6-flare',
 				background: 'opaque',
 				quality: 'medium',
 				size: '1024x1024',
