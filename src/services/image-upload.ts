@@ -153,7 +153,7 @@ export class ImageUpload {
 		return await this.uploadImage(imageUrl, attempt + 1);
 	}
 
-	public async uploadImageBuffer(imageBuffer: Buffer): Promise<string> {
+	public async uploadImageBuffer(imageBuffer: Buffer, extension: 'png' | 'gif' = 'png'): Promise<string> {
 		// Ensure we have a token
 		if (!this.ziplineToken) {
 			Logger.warn('No zipline token, getting a new one');
@@ -169,8 +169,8 @@ export class ImageUpload {
 		bufferStream.end(imageBuffer);
 
 		formData.append('file', bufferStream, {
-			filename: `${hash}.png`,
-			contentType: 'image/png',
+			filename: `${hash}.${extension}`,
+			contentType: `image/${extension}`,
 		});
 
 		const headers = {

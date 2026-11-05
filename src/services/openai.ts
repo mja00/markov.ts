@@ -8,7 +8,7 @@ import { DateTime } from 'luxon';
 import fetch from 'node-fetch';
 import OpenAI from 'openai';
 
-import { createDomainToolRegistry } from './ai-tool-registry.js';
+import { GifRequest, createDomainToolRegistry } from './ai-tool-registry.js';
 import { ConversationContextService, PrivateContextIdentity } from './conversation-context.service.js';
 import { ImageUpload } from './image-upload.js';
 import { KagiService } from './kagi.service.js';
@@ -32,6 +32,11 @@ const Config = require('../../config/config.json');
 const openai = new OpenAI({
 	apiKey: Config.openai.apiKey,
 });
+
+// Pinned because the tool default drifts over time; shared so stills and GIFs come from the same model.
+const IMAGE_MODEL = 'gpt-image-2.6-flare';
+// Fixed frame size keeps multi-frame GIFs well under Discord's upload limit.
+const GIF_FRAME_SIZE = '512x512';
 
 const SUMMARIZATION_INSTRUCTIONS = `You summarize Discord channel transcripts into short topical digests for later context retrieval.
 Rules:
@@ -216,7 +221,11 @@ export class OpenAIService {
 
 	private constructor(options: OpenAIServiceOptions = {}) {
 		this.options = options;
-		this.domainToolRegistry = createDomainToolRegistry({ kagi: this.options.kagiService, songs: this.options.songService });
+		this.domainToolRegistry = createDomainToolRegistry({
+			kagi: this.options.kagiService,
+			songs: this.options.songService,
+			gifs: (request, signal) => this.generateGif(request, signal),
+		});
 		this.responseCreate = this.options.responseCreate ?? ((params: OpenAI.Responses.ResponseCreateParams, requestOptions?: OpenAI.RequestOptions) => (
 			openai.responses.create(params, requestOptions) as Promise<OpenAI.Responses.Response>
 		));
@@ -642,7 +651,7 @@ export class OpenAIService {
 	}
 
 	// Save base64 image data locally and prepare for Discord upload
-	private async saveGeneratedImage(base64Data: string): Promise<GeneratedAttachment> {
+	private async saveGeneratedImage(base64Data: string, extension: 'png' | 'gif' = 'png'): Promise<GeneratedAttachment> {
 		// Create temp directory if it doesn't exist
 		const tempDir = path.join(os.tmpdir(), 'markov-images');
 		if (!fs.existsSync(tempDir)) {
@@ -652,7 +661,7 @@ export class OpenAIService {
 
 		// Generate unique filename with timestamp
 		const timestamp = Date.now();
-		const filename = `generated-image-${timestamp}.png`;
+		const filename = `generated-image-${timestamp}.${extension}`;
 		const tempFilePath = path.join(tempDir, filename);
 
 		try {
@@ -667,13 +676,31 @@ export class OpenAIService {
 			return {
 				filePath: tempFilePath,
 				filename: filename,
-				description: 'AI generated image',
+				description: extension === 'gif' ? 'AI generated GIF' : 'AI generated image',
 				kind: 'image',
 			};
 		} catch (error) {
 			Logger.error('Failed to save generated image locally:', error);
 			throw error;
 		}
+	}
+
+	// A separate Image API call because the hosted image_generation tool takes one fixed output_format per request, which would animate every still.
+	private async generateGif(request: GifRequest, signal?: AbortSignal): Promise<GeneratedAttachment> {
+		const response = await openai.images.generate({
+			model: IMAGE_MODEL,
+			prompt: request.prompt,
+			output_format: 'gif',
+			frame_count: request.frameCount,
+			frame_duration_ms: request.frameDurationMs,
+			quality: 'medium',
+			size: GIF_FRAME_SIZE,
+		}, { signal });
+		const base64 = response.data?.[0]?.b64_json;
+		if (!base64) {
+			throw new Error('GIF generation returned no image data');
+		}
+		return this.saveGeneratedImage(base64, 'gif');
 	}
 
 	// Tool definitions - Using built-in function format for OpenAI Responses API
@@ -756,10 +783,8 @@ export class OpenAIService {
 				},
 			},
 			{
-			// Pinned to 2.5-flare: the tool default drifts over time, and input_fidelity
-			// (used by earlier revisions of this codebase) is unsupported outside gpt-image-1/1.5.
 				type: 'image_generation',
-				model: 'gpt-image-2.6-flare',
+				model: IMAGE_MODEL,
 				background: 'opaque',
 				quality: 'medium',
 				size: '1024x1024',
@@ -1339,7 +1364,8 @@ export class OpenAIService {
 			try {
 				if (attachment.kind === 'image') {
 					const imageBuffer = await fs.promises.readFile(attachment.filePath);
-					const backupUrl = await this.imageUploadInstance.uploadImageBuffer(imageBuffer);
+					const extension = attachment.filename.endsWith('.gif') ? 'gif' : 'png';
+					const backupUrl = await this.imageUploadInstance.uploadImageBuffer(imageBuffer, extension);
 					Logger.debug(`Backed up generated image to Zipline: ${backupUrl}`);
 				}
 				await fs.promises.unlink(attachment.filePath);

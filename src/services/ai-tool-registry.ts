@@ -48,6 +48,8 @@ export type AIToolContext = {
 	web?: WebRequestState;
 	attachments?: GeneratedAttachment[];
 };
+export type GifRequest = { prompt: string; frameCount: number; frameDurationMs: number; };
+export type GifGenerator = (request: GifRequest, signal?: AbortSignal) => Promise<GeneratedAttachment>;
 type ToolHandler = (arguments_: Record<string, unknown>, context: AIToolContext) => Promise<unknown>;
 
 export type RegisteredTool = {
@@ -132,7 +134,7 @@ const functionTool = (
 	};
 };
 
-export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: SongService; } = {}): AIToolRegistry {
+export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: SongService; gifs?: GifGenerator; } = {}): AIToolRegistry {
 	const registry = new AIToolRegistry();
 	const users = new UserService();
 	const fishing = new FishingService();
@@ -379,6 +381,31 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: 
 					}
 					throw error;
 				}
+			},
+		});
+	}
+
+	if (options.gifs) {
+		const generateGif = options.gifs;
+		registry.register({
+			definition: functionTool('generate_gif', 'Create a short animated, looping GIF and attach it to your reply. Use this whenever someone asks for a GIF, animation, or moving/animated image; use the regular image tool for still images. Describe the subject, the motion, and how it loops back to the first frame.', {
+				prompt: { type: 'string', minLength: 1, maxLength: 4000, description: 'What to animate: subject, style, the motion across frames, and how the loop returns to the start.' },
+				frame_count: { type: 'integer', minimum: 2, maximum: 24, description: 'Number of frames. 6-12 suits most loops.' },
+				frame_duration_ms: { type: 'integer', minimum: 20, maximum: 2000, description: 'Milliseconds each frame is shown. 100-200 is smooth; higher is a slow slideshow.' },
+			}, ['prompt', 'frame_count', 'frame_duration_ms']),
+			// GIF renders can take up to two minutes per OpenAI's docs.
+			timeoutMs: 150000,
+			handler: async (arguments_, context) => {
+				if (!context.attachments) {
+					return { success: false, reason: 'GIFs cannot be attached in this conversation.' };
+				}
+				const attachment = await generateGif({
+					prompt: String(arguments_.prompt),
+					frameCount: Number(arguments_.frame_count),
+					frameDurationMs: Number(arguments_.frame_duration_ms),
+				}, context.signal);
+				context.attachments.push(attachment);
+				return { success: true, attached: attachment.filename };
 			},
 		});
 	}
