@@ -20,5 +20,6 @@ export { ImageUpload } from './image-upload.js';
 export { KagiService } from './kagi.service.js';
 export { ModerationService } from './moderation.service.js';
 export { SongService } from './song.service.js';
+export { createSelfProfileEditor } from './self-profile.service.js';
 export { resolveWebConfig } from './web-config.js';
 export type { KagiConfig, ModerationConfig, WebProvenance, WebRequestState, WebSource } from './web-contracts.js';

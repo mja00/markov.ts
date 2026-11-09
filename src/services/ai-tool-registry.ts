@@ -37,6 +37,8 @@ import {
 } from '../db/schema.js';
 import { GeneratedAttachment } from '../models/internal-models.js';
 
+import type { ModerationService } from './moderation.service.js';
+import type { SelfProfileEdit, SelfProfileEditor } from './self-profile.service.js';
 import type { WebRequestState } from './web-contracts.js';
 
 export type AIToolContext = {
@@ -50,6 +52,14 @@ export type AIToolContext = {
 };
 export type GifRequest = { prompt: string; frameCount: number; frameDurationMs: number; };
 export type GifGenerator = (request: GifRequest, signal?: AbortSignal) => Promise<GeneratedAttachment>;
+export type ProfileImageKind = 'avatar' | 'banner';
+export type SelfProfileTools = {
+	edit: SelfProfileEditor;
+	generateImage: (prompt: string, kind: ProfileImageKind, signal?: AbortSignal) => Promise<Buffer>;
+	moderation?: ModerationService;
+};
+export const SELF_PROFILE_TOOL_NAME = 'update_own_profile';
+const SELF_PROFILE_COOLDOWN_MS = 10 * 60 * 1000;
 type ToolHandler = (arguments_: Record<string, unknown>, context: AIToolContext) => Promise<unknown>;
 
 export type RegisteredTool = {
@@ -134,7 +144,7 @@ const functionTool = (
 	};
 };
 
-export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: SongService; gifs?: GifGenerator; } = {}): AIToolRegistry {
+export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: SongService; gifs?: GifGenerator; selfProfile?: SelfProfileTools; } = {}): AIToolRegistry {
 	const registry = new AIToolRegistry();
 	const users = new UserService();
 	const fishing = new FishingService();
@@ -406,6 +416,72 @@ export function createDomainToolRegistry(options: { kagi?: KagiService; songs?: 
 				}, context.signal);
 				context.attachments.push(attachment);
 				return { success: true, attached: attachment.filename };
+			},
+		});
+	}
+
+	if (options.selfProfile) {
+		const selfProfile = options.selfProfile;
+		// In-memory is enough: a guild always lands on the same shard, and a restart clearing cooldowns is harmless.
+		const lastProfileChange = new Map<string, number>();
+		registry.register({
+			definition: functionTool(SELF_PROFILE_TOOL_NAME, 'Change your own profile in THIS server only: nickname, bio, avatar, and banner. Use it when someone asks you to restyle yourself, or on your own whim; you are free to refuse requests you dislike. Avatars and banners are always newly generated from a prompt you write, never taken from an image a user supplies. You can change your profile once every 10 minutes per server. Set a field to null to leave it unchanged.', {
+				nickname: { type: ['string', 'null'], maxLength: 32, description: 'New server nickname.' },
+				bio: { type: ['string', 'null'], maxLength: 190, description: 'New server bio.' },
+				avatar_prompt: { type: ['string', 'null'], maxLength: 4000, description: 'Image prompt for a new square avatar.' },
+				banner_prompt: { type: ['string', 'null'], maxLength: 4000, description: 'Image prompt for a new wide banner.' },
+				reset: {
+					type: 'array',
+					items: { type: 'string', enum: ['nickname', 'bio', 'avatar', 'banner'] },
+					description: 'Fields to clear back to your default profile. Usually empty.',
+				},
+			}, ['nickname', 'bio', 'avatar_prompt', 'banner_prompt', 'reset']),
+			// Covers generating both an avatar and a banner in one call.
+			timeoutMs: 150000,
+			handler: async (arguments_, context) => {
+				if (!context.guildSnowflake) {
+					return { success: false, reason: 'Your profile can only be changed inside a server.' };
+				}
+				// Checked before generating images so a spammed request costs nothing.
+				const cooldownLeftMs = (lastProfileChange.get(context.guildSnowflake) ?? -Infinity) + SELF_PROFILE_COOLDOWN_MS - Date.now();
+				if (cooldownLeftMs > 0) {
+					return { success: false, reason: `You changed your profile here recently. Try again in ${Math.ceil(cooldownLeftMs / 60000)} minute(s).` };
+				}
+				const edit: SelfProfileEdit = {};
+				if (typeof arguments_.nickname === 'string') {
+					edit.nick = arguments_.nickname;
+				}
+				if (typeof arguments_.bio === 'string') {
+					edit.bio = arguments_.bio;
+				}
+				const text = [edit.nick, edit.bio].filter(Boolean).join('\n');
+				if (text && selfProfile.moderation) {
+					const moderation = await selfProfile.moderation.moderate(text, context.signal);
+					if (moderation.status === 'flagged') {
+						return { success: false, reason: 'That nickname or bio was flagged by moderation.' };
+					}
+				}
+				try {
+					if (typeof arguments_.avatar_prompt === 'string') {
+						edit.avatar = await selfProfile.generateImage(arguments_.avatar_prompt, 'avatar', context.signal);
+					}
+					if (typeof arguments_.banner_prompt === 'string') {
+						edit.banner = await selfProfile.generateImage(arguments_.banner_prompt, 'banner', context.signal);
+					}
+					for (const field of arguments_.reset as string[]) {
+						edit[field === 'nickname' ? 'nick' : field as keyof SelfProfileEdit] = null;
+					}
+					const changed = Object.keys(edit);
+					if (changed.length === 0) {
+						return { success: false, reason: 'No profile fields were provided.' };
+					}
+					await selfProfile.edit(context.guildSnowflake, edit, `Requested by ${context.username}`.slice(0, 512));
+					lastProfileChange.set(context.guildSnowflake, Date.now());
+					return { success: true, changed };
+				} catch (error) {
+					// Missing permissions and image failures go back to the model so it can explain instead of erroring out.
+					return { success: false, reason: error instanceof Error ? error.message : 'Profile update failed.' };
+				}
 			},
 		});
 	}

@@ -8,7 +8,12 @@ import { DateTime } from 'luxon';
 import fetch from 'node-fetch';
 import OpenAI from 'openai';
 
-import { GifRequest, createDomainToolRegistry } from './ai-tool-registry.js';
+import {
+	GifRequest,
+	ProfileImageKind,
+	SELF_PROFILE_TOOL_NAME,
+	createDomainToolRegistry,
+} from './ai-tool-registry.js';
 import { ConversationContextService, PrivateContextIdentity } from './conversation-context.service.js';
 import { ImageUpload } from './image-upload.js';
 import { KagiService } from './kagi.service.js';
@@ -24,6 +29,8 @@ import { GeneratedAttachment } from '../models/internal-models.js';
 import { RecentChannelMessage, formatRecentChannelContext } from '../utils/recent-channel-context.js';
 
 import type { MarkovReactionSelectionInput, ReactionCandidate } from './markov-reaction.service.js';
+import type { ModerationService } from './moderation.service.js';
+import type { SelfProfileEditor } from './self-profile.service.js';
 import type { SongService } from './song.service.js';
 import type { WebProvenance } from './web-contracts.js';
 
@@ -132,6 +139,8 @@ const CHANNEL_ACTION_TOOLS: Record<string, true> = {
 export type OpenAIServiceOptions = {
 	kagiService?: KagiService;
 	songService?: SongService;
+	selfProfileEditor?: SelfProfileEditor;
+	moderationService?: ModerationService;
 	responseCreate?: (params: OpenAI.Responses.ResponseCreateParams, options?: OpenAI.RequestOptions) => Promise<OpenAI.Responses.Response>;
 	replyBudget?: ReplyBudget;
 };
@@ -225,6 +234,13 @@ export class OpenAIService {
 			kagi: this.options.kagiService,
 			songs: this.options.songService,
 			gifs: (request, signal) => this.generateGif(request, signal),
+			...(this.options.selfProfileEditor && {
+				selfProfile: {
+					edit: this.options.selfProfileEditor,
+					generateImage: (prompt, kind, signal) => this.generateProfileImage(prompt, kind, signal),
+					moderation: this.options.moderationService,
+				},
+			}),
 		});
 		this.responseCreate = this.options.responseCreate ?? ((params: OpenAI.Responses.ResponseCreateParams, requestOptions?: OpenAI.RequestOptions) => (
 			openai.responses.create(params, requestOptions) as Promise<OpenAI.Responses.Response>
@@ -455,10 +471,20 @@ export class OpenAIService {
 	}
 
 	private getBaseTools(ctx: RequestContext): OpenAI.Responses.Tool[] {
-		if (ctx.canPostInChannel === false) {
-			return this.baseTools.filter(tool => !('name' in tool && CHANNEL_ACTION_TOOLS[tool.name]));
-		}
-		return this.baseTools;
+		// As a user-installed app Markov is not a member of the server, so he has no profile there to edit.
+		const isGuildMember = ctx.guildSnowflake !== null && ctx.canPostInChannel !== false;
+		return this.baseTools.filter((tool) => {
+			if (!('name' in tool)) {
+				return true;
+			}
+			if (tool.name === SELF_PROFILE_TOOL_NAME) {
+				return isGuildMember;
+			}
+			if (CHANNEL_ACTION_TOOLS[tool.name]) {
+				return ctx.canPostInChannel !== false;
+			}
+			return true;
+		});
 	}
 
 	// Web results are untrusted, so once any reach the model later rounds may only request more web data.
@@ -701,6 +727,21 @@ export class OpenAIService {
 			throw new Error('GIF generation returned no image data');
 		}
 		return this.saveGeneratedImage(base64, 'gif');
+	}
+
+	private async generateProfileImage(prompt: string, kind: ProfileImageKind, signal?: AbortSignal): Promise<Buffer> {
+		const response = await openai.images.generate({
+			model: IMAGE_MODEL,
+			prompt,
+			quality: 'medium',
+			// Discord crops banners to a wide strip, so start from the widest size on offer.
+			size: kind === 'banner' ? '1536x1024' : '1024x1024',
+		}, { signal });
+		const base64 = response.data?.[0]?.b64_json;
+		if (!base64) {
+			throw new Error('Image generation returned no image data');
+		}
+		return Buffer.from(base64, 'base64');
 	}
 
 	// Tool definitions - Using built-in function format for OpenAI Responses API

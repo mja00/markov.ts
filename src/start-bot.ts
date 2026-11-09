@@ -54,6 +54,7 @@ import {
 	ModerationService,
 	OpenAIService,
 	SongService,
+	createSelfProfileEditor,
 	resolveWebConfig,
 } from './services/index.js';
 import { Trigger } from './triggers/index.js';
@@ -88,7 +89,12 @@ async function start(): Promise<void> {
 	const songService = Config.music?.enabled
 		? new SongService({ config: Config.music })
 		: undefined;
-	const openAI = await OpenAIService.getInstance({ kagiService, songService });
+	const openAI = await OpenAIService.getInstance({
+		kagiService,
+		songService,
+		moderationService,
+		selfProfileEditor: createSelfProfileEditor(client),
+	});
 
 	// Commands
 	const commands: Command[] = [

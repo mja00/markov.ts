@@ -70,6 +70,112 @@ vi.mock('../../../src/services/database.service.js', () => {
 	} };
 });
 
+describe('update_own_profile', () => {
+	const guildContext = {
+		userSnowflake: 'user-1', guildSnowflake: 'guild', username: 'Alice', channelId: 'channel',
+	};
+	const unchanged = {
+		nickname: null, bio: null, avatar_prompt: null, banner_prompt: null, reset: [],
+	};
+	const setup = (moderationStatus = 'allowed') => {
+		const edit = vi.fn(async () => {});
+		const generateImage = vi.fn(async (_prompt: string, kind: string) => Buffer.from(kind));
+		const moderation = { moderate: vi.fn(async () => {
+			return { status: moderationStatus };
+		}) };
+		const registry = createDomainToolRegistry({ selfProfile: { edit, generateImage, moderation: moderation as never } });
+		const run = async (arguments_: Record<string, unknown>, context = guildContext) => (
+			JSON.parse(await registry.execute('update_own_profile', { ...unchanged, ...arguments_ }, context))
+		);
+		return { edit, generateImage, run };
+	};
+
+	it('applies only the provided fields, generating images from prompts', async () => {
+		const { edit, generateImage, run } = setup();
+
+		const result = await run({ nickname: 'Sir Markov', avatar_prompt: 'a regal crab' });
+
+		expect(result).toEqual({ success: true, changed: ['nick', 'avatar'] });
+		expect(generateImage).toHaveBeenCalledWith('a regal crab', 'avatar', expect.anything());
+		expect(edit).toHaveBeenCalledWith('guild', { nick: 'Sir Markov', avatar: Buffer.from('avatar') }, 'Requested by Alice');
+	});
+
+	it('clears reset fields back to the default profile', async () => {
+		const { edit, run } = setup();
+
+		await run({ reset: ['nickname', 'banner'] });
+
+		expect(edit).toHaveBeenCalledWith('guild', { nick: null, banner: null }, 'Requested by Alice');
+	});
+
+	it('refuses outside a server', async () => {
+		const { edit, run } = setup();
+
+		const result = await run({ nickname: 'Sir Markov' }, { ...guildContext, guildSnowflake: null as never });
+
+		expect(result.success).toBe(false);
+		expect(edit).not.toHaveBeenCalled();
+	});
+
+	it('refuses text flagged by moderation', async () => {
+		const { edit, run } = setup('flagged');
+
+		const result = await run({ bio: 'something vile' });
+
+		expect(result.success).toBe(false);
+		expect(edit).not.toHaveBeenCalled();
+	});
+
+	it('reports Discord failures to the model instead of throwing', async () => {
+		const { edit, run } = setup();
+		edit.mockRejectedValueOnce(new Error('Missing Permissions'));
+
+		await expect(run({ nickname: 'Sir Markov' })).resolves.toEqual({ success: false, reason: 'Missing Permissions' });
+	});
+
+	it('limits changes to one per server every 10 minutes', async () => {
+		vi.useFakeTimers();
+		try {
+			const { edit, generateImage, run } = setup();
+			await run({ nickname: 'Sir Markov' });
+
+			vi.advanceTimersByTime(9 * 60 * 1000);
+			const blocked = await run({ avatar_prompt: 'a regal crab' });
+			expect(blocked.success).toBe(false);
+			expect(generateImage).not.toHaveBeenCalled();
+
+			// Another server is unaffected by this one's cooldown.
+			const otherServer = await run({ nickname: 'Lord Markov' }, { ...guildContext, guildSnowflake: 'other-guild' });
+			expect(otherServer.success).toBe(true);
+
+			vi.advanceTimersByTime(60 * 1000);
+			const afterCooldown = await run({ nickname: 'Markov III' });
+			expect(afterCooldown.success).toBe(true);
+			expect(edit).toHaveBeenCalledTimes(3);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('does not start the cooldown when the change fails', async () => {
+		const { edit, run } = setup();
+		edit.mockRejectedValueOnce(new Error('Missing Permissions'));
+		await run({ nickname: 'Sir Markov' });
+
+		const retry = await run({ nickname: 'Sir Markov' });
+		expect(retry.success).toBe(true);
+	});
+
+	it('does nothing when no fields are provided', async () => {
+		const { edit, run } = setup();
+
+		const result = await run({});
+
+		expect(result.success).toBe(false);
+		expect(edit).not.toHaveBeenCalled();
+	});
+});
+
 describe('AIToolRegistry', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
