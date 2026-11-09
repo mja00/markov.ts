@@ -87,6 +87,20 @@ export interface SaveMemoryResult {
 	memory: Memory | null;
 }
 
+const SENSITIVE_CONTENT = /password|token|secret|credit card|social security|medical|diagnos/i;
+const MIN_UNPROMPTED_CONFIDENCE = 0.6;
+
+/**
+ * Gate for model-initiated saves. Sensitive content is never stored, even on
+ * request; unprompted saves only need the model to be reasonably sure.
+ */
+export function isMemorySaveAllowed(candidate: { content: string; confidence: number; explicitlyRequested: boolean; }): boolean {
+	if (SENSITIVE_CONTENT.test(candidate.content)) {
+		return false;
+	}
+	return candidate.explicitlyRequested || candidate.confidence >= MIN_UNPROMPTED_CONFIDENCE;
+}
+
 /**
  * Build the privacy-critical scope filter for recall queries.
  *

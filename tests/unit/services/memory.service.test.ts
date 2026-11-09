@@ -53,7 +53,7 @@ vi.mock('../../../src/services/database.service.js', () => {
 	};
 });
 
-import { MemoryService, buildMemoryScopeFilter } from '../../../src/services/memory.service.js';
+import { MemoryService, buildMemoryScopeFilter, isMemorySaveAllowed } from '../../../src/services/memory.service.js';
 
 const dialect = new PgDialect();
 
@@ -104,6 +104,24 @@ describe('buildMemoryScopeFilter (privacy-critical scope isolation)', () => {
 		// A DM filter must not embed any guild value, so guild A can never match.
 		expect(dm.params).not.toContain('GUILD_A');
 		expect(dm.params).not.toContain('GUILD_B');
+	});
+});
+
+describe('isMemorySaveAllowed', () => {
+	it('allows an unprompted save the model is reasonably sure of', () => {
+		expect(isMemorySaveAllowed({ content: 'Jaye said: "croissants are just bread hugs"', confidence: 0.7, explicitlyRequested: false })).toBe(true);
+	});
+
+	it('rejects an unprompted low-confidence guess', () => {
+		expect(isMemorySaveAllowed({ content: 'Alice might like jazz', confidence: 0.4, explicitlyRequested: false })).toBe(false);
+	});
+
+	it('allows an explicit request regardless of confidence', () => {
+		expect(isMemorySaveAllowed({ content: 'Alice wants to be called captain', confidence: 0.2, explicitlyRequested: true })).toBe(true);
+	});
+
+	it('never stores sensitive content, even when explicitly requested', () => {
+		expect(isMemorySaveAllowed({ content: 'My password is hunter2', confidence: 1, explicitlyRequested: true })).toBe(false);
 	});
 });
 
