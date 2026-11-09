@@ -141,6 +141,19 @@ describe('OpenAI reply budget', () => {
 		expect(names).not.toContain('cancel_scheduled_message');
 	});
 
+	it('offers the profile tool only where Markov is a server member', async () => {
+		const offered = async (overrides: Partial<RequestContext>): Promise<string[]> => {
+			const responseCreate = vi.fn().mockResolvedValueOnce(answer('final', 'Done.'));
+			const service = OpenAIService.createForTest({ responseCreate, replyBudget: budget(), selfProfileEditor: vi.fn() });
+			await runLoop(service, response('initial', [rollCall('call-1')]), context(overrides));
+			return toolNames(responseCreate.mock.calls[0][0]);
+		};
+
+		expect(await offered({})).toContain('update_own_profile');
+		expect(await offered({ guildSnowflake: null })).not.toContain('update_own_profile');
+		expect(await offered({ canPostInChannel: false })).not.toContain('update_own_profile');
+	});
+
 	it('keeps action tools after a web call that returned no content', async () => {
 		const search = vi.fn(async (_query: string, requestState?: WebRequestState) => {
 			requestState?.blockWeb();
