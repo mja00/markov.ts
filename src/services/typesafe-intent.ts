@@ -1,5 +1,6 @@
 import { TypeSafeClient } from '@typesafe-ai/sdk';
 
+import { resolveBotNames } from './markov-intent.service.js';
 import { MARKOV_ADDRESSED_QUESTION, MARKOV_CONTINUATION_QUESTION, MARKOV_REACT_QUESTION } from '../prompts/markov-intent-prompt.js';
 
 import type { MarkovIntentModel } from './markov-intent.service.js';
@@ -41,6 +42,7 @@ export function createTypeSafeIntentModel(settings: TypeSafeIntentSettings = {})
 		const { answers } = await client.systemOne({
 			state: {
 				message: { content: input.content },
+				...(request.addressed && { botNames: resolveBotNames(input.botNames) }),
 				...(input.referencedMessage && { repliedToMessage: input.referencedMessage }),
 			},
 			questions,

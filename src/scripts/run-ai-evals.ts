@@ -78,6 +78,7 @@ async function main(): Promise<void> {
 		const actual = await service.decide({
 			content: evalCase.input.message,
 			botMentioned: evalCase.input.botMentioned,
+			botNames: evalCase.input.botNames ?? [],
 			isDirectMessage: evalCase.input.isDirectMessage,
 			isReplyToMarkov: evalCase.input.isReplyToMarkov,
 			isConversationFollowUp: evalCase.input.isConversationFollowUp ?? false,

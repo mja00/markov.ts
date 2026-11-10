@@ -84,6 +84,16 @@ export class MessageHandler implements EventHandler {
 			?.url;
 	}
 
+	/** The names a member can actually address the bot by in this channel. */
+	private botNames(msg: Message): string[] {
+		const names = [
+			msg.client.user?.username,
+			msg.client.user?.globalName,
+			msg.guild?.members.me?.nickname,
+		];
+		return names.filter((name): name is string => typeof name === 'string' && name.trim() !== '');
+	}
+
 	public async delete(messageSnowflake: string): Promise<void> {
 		await this.channelContextService.deleteMessage(messageSnowflake);
 	}
@@ -124,6 +134,7 @@ export class MessageHandler implements EventHandler {
 		const { shouldReply, shouldReact } = await this.markovIntentService.decide({
 			content: message,
 			botMentioned,
+			botNames: this.botNames(msg),
 			isDirectMessage: !msg.guildId,
 			isReplyToMarkov: referencedMessage?.author.id === msg.client.user?.id,
 			isConversationFollowUp,

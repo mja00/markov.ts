@@ -32,6 +32,7 @@ import type * as TypeSafeSdk from '@typesafe-ai/sdk';
 const input = {
 	content: 'markov what now',
 	botMentioned: false,
+	botNames: ['Markov'],
 	isDirectMessage: false,
 	isReplyToMarkov: false,
 	isConversationFollowUp: true,
@@ -56,7 +57,7 @@ describe('createTypeSafeIntentModel', () => {
 		await expect(classify(input, { addressed: true, continuation: true, react: true }))
 			.resolves.toEqual({ addressed: 0.91, continuation: 0.12, react: 0.34 });
 		expect(systemOne).toHaveBeenCalledWith({
-			state: { message: { content: 'markov what now' } },
+			state: { message: { content: 'markov what now' }, botNames: ['Markov'] },
 			questions: {
 				addressed: MARKOV_ADDRESSED_QUESTION,
 				continuation: MARKOV_CONTINUATION_QUESTION,
@@ -84,6 +85,14 @@ describe('createTypeSafeIntentModel', () => {
 			message: { content: 'markov what now' },
 			repliedToMessage: referencedMessage,
 		});
+	});
+
+	it('tells the model every name the bot answers to when asking about an address', async () => {
+		systemOne.mockResolvedValue({ answers: { addressed: { type: 'noul', noul: 0.8 } } });
+		const classify = createTypeSafeIntentModel({ apiKey: 'test-key' });
+
+		await classify({ ...input, botNames: ['Gronk'] }, { addressed: true, continuation: false, react: false });
+		expect(systemOne.mock.calls[0][0].state.botNames).toEqual(['Markov', 'Gronk']);
 	});
 
 	it('pins the default model and reuses one client across calls', async () => {

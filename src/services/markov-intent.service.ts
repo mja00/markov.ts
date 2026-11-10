@@ -6,6 +6,8 @@ export type MarkovIntentInput = {
 	isDirectMessage: boolean;
 	isReplyToMarkov: boolean;
 	isConversationFollowUp: boolean;
+	/** Names the bot answers to here: username, global name, and any server nickname. */
+	botNames: string[];
 	referencedMessage?: {
 		author: string;
 		content: string;
@@ -47,6 +49,50 @@ export const DEFAULT_MARKOV_INTENT_THRESHOLDS: MarkovIntentThresholds = {
 	react: 0.8,
 };
 
+// The prompt and thresholds are tuned against this name, so it stays an alias even after a server rename.
+const CANONICAL_BOT_NAME = 'Markov';
+
+/** Case-insensitively dedupes names, always keeping the canonical name first. */
+export function resolveBotNames(names: string[]): string[] {
+	const resolved: string[] = [];
+	const seen = new Set<string>();
+	for (const name of [CANONICAL_BOT_NAME, ...names]) {
+		const trimmed = name.trim();
+		const key = trimmed.toLowerCase();
+		if (trimmed === '' || seen.has(key)) {
+			continue;
+		}
+		seen.add(key);
+		resolved.push(trimmed);
+	}
+	return resolved;
+}
+
+// Only regex syntax needs escaping; the unicode flag rejects identity escapes such as `\ `.
+function escapeRegExp(value: string): string {
+	return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+}
+
+/**
+ * Matches any name as a whole word so "markovian" and "gronkled" do not count,
+ * while still allowing names that start or end with punctuation.
+ */
+function mentionsBotName(content: string, names: string[]): boolean {
+	const patterns = names
+		.map(name => name.trim())
+		.filter(name => name !== '')
+		.map((name) => {
+			const escaped = escapeRegExp(name);
+			const prefix = /^[\p{L}\p{N}_]/u.test(name) ? String.raw`(?<![\p{L}\p{N}_])` : '';
+			const suffix = /[\p{L}\p{N}_]$/u.test(name) ? String.raw`(?![\p{L}\p{N}_])` : '';
+			return `${prefix}${escaped}${suffix}`;
+		});
+	if (patterns.length === 0) {
+		return false;
+	}
+	return new RegExp(patterns.join('|'), 'iu').test(content);
+}
+
 /**
  * Applies the intent model as a fail-closed gate before Markov replies or reacts.
  */
@@ -68,10 +114,12 @@ export class MarkovIntentService {
 		}
 
 		const authoritativeReply = input.botMentioned || input.isReplyToMarkov;
+		const botNames = resolveBotNames(input.botNames);
+		const classifiedInput: MarkovIntentInput = { ...input, botNames };
 		// Optional replies need the name or an open turn, so skip judgments code would ignore.
 		// Jev is text-only, so caption-less image posts get no reaction rather than bypassing the gate.
 		const request: MarkovIntentJudgmentRequest = {
-			addressed: !authoritativeReply && /\bmarkov\b/i.test(input.content),
+			addressed: !authoritativeReply && mentionsBotName(input.content, botNames),
 			continuation: !authoritativeReply && input.isConversationFollowUp,
 			react: input.content.trim() !== '',
 		};
@@ -80,7 +128,7 @@ export class MarkovIntentService {
 		}
 
 		try {
-			const judgments = await this.classify(input, request);
+			const judgments = await this.classify(classifiedInput, request);
 			const addressed = request.addressed && this.passes(judgments.addressed, this.thresholds.reply);
 			const continuation = request.continuation && this.passes(judgments.continuation, this.thresholds.reply);
 			const react = request.react && this.passes(judgments.react, this.thresholds.react);

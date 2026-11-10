@@ -16,6 +16,7 @@ import type { MarkovIntentJudgments } from '../../../src/services/markov-intent.
 const input = {
 	content: 'Markov, what do you think?',
 	botMentioned: false,
+	botNames: ['Markov'],
 	isDirectMessage: false,
 	isReplyToMarkov: false,
 	isConversationFollowUp: false,
@@ -59,6 +60,41 @@ describe('MarkovIntentService', () => {
 
 		await service.decide({ ...input, content: 'markovian processes are neat' });
 		expect(classify).toHaveBeenCalledWith(expect.anything(), { addressed: false, continuation: false, react: true });
+	});
+
+	it('asks about an addressed message when the bot is called by a server nickname', async () => {
+		const { classify, service } = serviceReturning({ addressed: 0.8, react: 0 });
+		const nicknamed = { ...input, content: 'gronk what do you think?', botNames: ['Markov', 'Gronk'] };
+
+		await expect(service.decide(nicknamed)).resolves.toEqual({ shouldReply: true, shouldReact: false });
+		expect(classify).toHaveBeenCalledWith(nicknamed, { addressed: true, continuation: false, react: true });
+	});
+
+	it('does not match a nickname inside another word', async () => {
+		const { classify, service } = serviceReturning({ react: 0 });
+
+		await service.decide({ ...input, content: 'the gronkled machine hums', botNames: ['Gronk'] });
+		expect(classify).toHaveBeenCalledWith(expect.anything(), { addressed: false, continuation: false, react: true });
+	});
+
+	it('keeps the canonical name when a server nickname replaces it', async () => {
+		const { classify, service } = serviceReturning({ addressed: 0.9, react: 0 });
+
+		await service.decide({ ...input, content: 'markov?', botNames: ['Gronk'] });
+		expect(classify).toHaveBeenCalledWith(
+			{ ...input, content: 'markov?', botNames: ['Markov', 'Gronk'] },
+			{ addressed: true, continuation: false, react: true },
+		);
+	});
+
+	it('matches nicknames that contain spaces or regex characters', async () => {
+		const { classify, service } = serviceReturning({ addressed: 0.8, react: 0 });
+
+		await service.decide({ ...input, content: 'hey gronk bot, you there?', botNames: ['Gronk Bot'] });
+		expect(classify).toHaveBeenLastCalledWith(expect.anything(), { addressed: true, continuation: false, react: true });
+
+		await service.decide({ ...input, content: 'gronk (bot) hello', botNames: ['Gronk (Bot)'] });
+		expect(classify).toHaveBeenLastCalledWith(expect.anything(), { addressed: true, continuation: false, react: true });
 	});
 
 	it('replies to a continuation during an open conversation turn', async () => {
