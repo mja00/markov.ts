@@ -62,4 +62,23 @@ describe('eval dataset', () => {
 		expect(() => parseEvalDataset(evalCase))
 			.toThrow('input.isConversationFollowUp must be a boolean when provided');
 	});
+
+	it('rejects invalid bot names', () => {
+		const evalCase = JSON.stringify({
+			id: 'invalid-bot-names',
+			category: 'intent_detection',
+			input: {
+				message: 'gronk?',
+				botMentioned: false,
+				isDirectMessage: false,
+				isReplyToMarkov: false,
+				botNames: ['Gronk', ''],
+			},
+			expected: { shouldReply: true },
+			tags: [],
+		});
+
+		expect(() => parseEvalDataset(evalCase))
+			.toThrow('input.botNames must be an array of non-empty strings when provided');
+	});
 });

@@ -2,17 +2,18 @@ import { noul } from '@typesafe-ai/sdk';
 
 // Jev reads questions literally, so each Noul spells out its boundary cases instead of relying on a shared preamble.
 export const MARKOV_ADDRESSED_QUESTION = noul(
-	'Is the author of `message.content` speaking directly to Markov, a Discord bot, as the intended listener of the message?',
+	'Markov, a Discord bot, is also known by these names in this server: `botNames`. Every name in `botNames` refers to Markov. Is the author of `message.content` speaking directly to Markov as the intended listener of the message?',
 	{
 		true: [
-			'The message talks to Markov by name, for example asking Markov a question, giving Markov a request or command, or greeting Markov.',
+			'The message talks to Markov by one of the names in `botNames`, for example asking Markov a question, giving Markov a request or command, or greeting Markov.',
 			'Examples: "markov what should I eat tonight", "Markov stop hiding the cookies", "yo markov".',
 		],
 		false: [
 			'The message talks about Markov to other people instead of to Markov: third-person comments, jokes, criticism, or questions such as "is markov broken again?".',
 			'Statements about what Markov can do or owns, or what someone will change about Markov, such as "markov can see images now".',
 			'Requests to another person to change, control, or provoke Markov.',
-			'The recipient is ambiguous, or "markov" refers to Markov chains, Markov models, or is used incidentally.',
+			'Laughter, a one-word reaction, or banter that only mentions a name without asking, telling, or greeting Markov.',
+			'The recipient is ambiguous, or a name refers to something else, such as Markov chains, Markov models, or an unrelated person or thing with the same nickname.',
 		],
 	},
 );

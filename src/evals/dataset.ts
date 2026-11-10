@@ -11,6 +11,7 @@ export type IntentDetectionEvalCase = {
 		isDirectMessage: boolean;
 		isReplyToMarkov: boolean;
 		isConversationFollowUp?: boolean;
+		botNames?: string[];
 	};
 	expected: {
 		shouldReply: boolean;
@@ -49,6 +50,15 @@ function validateIntentDetectionCase(
 		&& typeof value.input.isConversationFollowUp !== 'boolean'
 	) {
 		throw invalidCase(lineNumber, 'input.isConversationFollowUp must be a boolean when provided');
+	}
+	if (
+		value.input.botNames !== undefined
+		&& (
+			!Array.isArray(value.input.botNames)
+			|| !value.input.botNames.every(name => typeof name === 'string' && name.trim() !== '')
+		)
+	) {
+		throw invalidCase(lineNumber, 'input.botNames must be an array of non-empty strings when provided');
 	}
 	if (!isRecord(value.expected) || typeof value.expected.shouldReply !== 'boolean') {
 		throw invalidCase(lineNumber, 'expected.shouldReply must be a boolean');
